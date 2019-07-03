@@ -141,33 +141,44 @@ def mcmc_sampler(r,N_samp,ndim_x,labels_test,sigma,usepars,n_burnin=2000):
             cnt += 1
     return samples
 
-def overlap(x,y):
+def overlap(x,y,cnt=0,nxt_cnt=False):
     """
     compute the overlap between samples from 2 differnt distributions
     """
-    if x.shape[1]==1:
-        X = np.mgrid[0:1:100j] 
-        positions = np.vstack([X.ravel()])
+    priors = [30.47,43.53,0.0,np.pi,0.49,0.51]
+    priors_min=[priors[0],priors[2],priors[4]]
+    priors_max=[priors[1],priors[3],priors[5]]
 
-    elif x.shape[1]==2:
-        X, Y = np.mgrid[0:1:20j, 0:1:20j]
+    if x.shape[1]==1:
+        if cnt==0:
+            priors = [priors[0],priors[1]]
+        elif cnt==1:
+            priors=[priors[2],priors[3]]
+        elif cnt==2:
+            priors=[priors[4],priors[5]]
+        X = np.mgrid[priors[0]:priors[1]:100j]
+        positions = np.vstack([X.ravel()])
+    elif nxt_cnt != False:
+        X, Y = np.mgrid[priors_min[cnt]:priors_max[cnt]:100j, priors_min[nxt_cnt]:priors_max[nxt_cnt]:100j]
         positions = np.vstack([X.ravel(), Y.ravel()])
+        x = np.vstack((x[:,cnt],x[:,nxt_cnt])).T
+        y = np.vstack((y[:,cnt],y[:,nxt_cnt])).T
     elif x.shape[1]==3:
-        X, Y, Z = np.mgrid[0:1:20j, 0:1:20j, 0:1:20j]
+        X, Y, Z = np.mgrid[priors[0]:priors[1]:20j, priors[2]:priors[3]:20j, priors[4]:priors[5]:20j]
         positions = np.vstack([X.ravel(), Y.ravel(), Z.ravel()])
     elif x.shape[1]==4:
-        X, Y, Z, H = np.mgrid[0:1:20j, 0:1:20j, 0:1:20j, 0:1:20j]
+        X, Y, Z, H = np.mgrid[priors[0]:priors[1]:20j, priors[2]:priors[3]:20j, priors[4]:priors[5]:20j, priors[6]:priors[7]:20j]
         positions = np.vstack([X.ravel(), Y.ravel(), Z.ravel(), H.ravel()])
     elif x.shape[1]==5:
         X, Y, Z, H, J = np.mgrid[0:1:20j, 0:1:20j, 0:1:20j, 0:1:20j, 0:1:20j]
         positions = np.vstack([X.ravel(), Y.ravel(), Z.ravel(), H.ravel(), J.ravel()])
+
     kernel_x = gaussian_kde(x.T)
     Z_x = np.reshape(kernel_x(positions).T, X.shape)
     kernel_y = gaussian_kde(y.T)
     Z_y = np.reshape(kernel_y(positions).T, X.shape)
     n_x = 1.0/np.sum(Z_x)
     n_y = 1.0/np.sum(Z_y)
-    print('Computed overlap ...')
 
     return (np.sum(Z_x*Z_y) / np.sqrt( np.sum(Z_x**2) * np.sum(Z_y**2) ))
     #return (n_y/n_x)*np.sum(Z_x*Z_y)/np.sum(Z_x*Z_x)

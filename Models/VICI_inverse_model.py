@@ -50,6 +50,9 @@
 
 import numpy as np
 import tensorflow as tf
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 from Neural_Networks import OELBO_decoder_difference
 from Neural_Networks import OELBO_encoder
@@ -58,6 +61,7 @@ from Neural_Networks import VICI_decoder
 from Neural_Networks import VICI_encoder
 from Neural_Networks import VICI_VAE_encoder
 from Neural_Networks import batch_manager
+
 
 # NORMALISE DATASET FUNCTION
 def tf_normalise_dataset(xp):
@@ -234,6 +238,30 @@ def train(params, x_data, y_data_l, siz_high_res, load_dir, save_dir, plotter, y
                 KL_PLOT[ni] = KL_VAE
                 COST_PLOT[ni] = cost_value_vae
                 
+                # make log loss plot
+                fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
+                axes_loss.grid()
+                axes_loss.set_ylabel('Loss')
+                axes_loss.set_xlabel('Iterations elapsed: %s' % i)
+                axes_loss.semilogy(np.arange(len(KL_PLOT)), np.abs(KL_PLOT), label='KL')
+                axes_loss.semilogy(np.arange(len(COST_PLOT)), np.abs(COST_PLOT), label='COST')
+                axes_loss.legend(loc='upper left')
+                plt.savefig('%s/latest/losses_logscale.png' % params['plot_dir'])
+                plt.close(fig_loss)
+
+                # make non-log scale loss plot
+                fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
+                axes_loss.grid()
+                axes_loss.set_ylabel('Loss')
+                axes_loss.set_xlabel('Iterations elapsed: %s' % i)
+                axes_loss.plot(np.arange(len(KL_PLOT)), KL_PLOT, label='KL')
+                axes_loss.plot(np.arange(len(COST_PLOT)), COST_PLOT, label='COST')
+                axes_loss.set_xscale('log')
+                axes_loss.set_yscale('log')
+                axes_loss.legend(loc='upper left')
+                plt.savefig('%s/latest/losses.png' % params['plot_dir'])
+                plt.close(fig_loss)
+                                
                 if params['print_values']==True:
                     print('--------------------------------------------------------------')
                     print('Iteration:',i)
@@ -241,37 +269,6 @@ def train(params, x_data, y_data_l, siz_high_res, load_dir, save_dir, plotter, y
                     print('KL Divergence:',KL_VAE)
        
         if i % params['save_interval'] == 0:
-
-            """
-            # ESTIMATE TEST SET RECONSTRUCTION PER-PIXEL APPROXIMATE MARGINAL LIKELIHOOD and draw from q(x|y)
-            n_ex_s = params['n_samples'] # number of samples to save per reconstruction
-            ns = np.maximum(100,n_ex_s) # number of samples to use to estimate per-pixel marginal
-
-            XM = np.zeros((np.shape(y_data_test)[0],params['ndim_x'],ns))
-            XSX = np.zeros((np.shape(y_data_test)[0],params['ndim_x'],ns))
-            XSA = np.zeros((np.shape(y_data_test)[0],params['ndim_x'],ns))
-
-            for i in range(ns):
-                rec_x_m = session.run(x_mean,feed_dict={y_ph:y_data_test})
-                rec_x_mx = session.run(qx_samp,feed_dict={y_ph:y_data_test})
-                rec_x_s = session.run(x_mean,feed_dict={y_ph:y_data_test})
-                XM[:,:,i] = rec_x_m
-                XSX[:,:,i] = rec_x_mx
-                XSA[:,:,i] = rec_x_s
-
-            pmax = session.run(x_pmax,feed_dict={y_ph:y_data_test})
-
-            xm = np.mean(XM,axis=2)
-            xsx = np.std(XSX,axis=2)
-            xs = np.std(XM,axis=2)
-            #XS = XSX[:,:,0:n_ex_s]
-            XS = XSA[:,:,0:n_ex_s]
-                
-            # Generate overlap scatter plots
-            plotter.rev_x = XS
-            plotter.make_overlap_plot()
-            """
-
             # Save model 
             save_path = saver.save(session,save_dir)
                 
@@ -440,7 +437,33 @@ def resume_training(params, x_data, y_data_l, siz_high_res, load_dir, save_dir):
                 cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], y_ph:ynt, lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
                 KL_PLOT[ni] = KL_VAE
                 COST_PLOT[ni] = cost_value_vae
+
+                               
+                # make log loss plot
+                fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
+                axes_loss.grid()
+                axes_loss.set_ylabel('Loss')
+                axes_loss.set_xlabel('Iterations elapsed: %s' % i)
+                axes_loss.semilogy(np.arange(len(KL_PLOT)), np.abs(KL_PLOT), label='KL')
+                axes_loss.semilogy(np.arange(len(COST_PLOT)), np.abs(COST_PLOT), label='COST')
+                axes_loss.legend(loc='upper left')
+                plt.savefig('%s/latest/losses_logscale.png' % params['plot_dir'])
+                plt.close(fig_loss)
+
+                # make non-log scale loss plot
+                fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
+                axes_loss.grid()
+                axes_loss.set_ylabel('Loss')
+                axes_loss.set_xlabel('Iterations elapsed: %s' % i)
+                axes_loss.plot(np.arange(len(KL_PLOT)), KL_PLOT, label='KL')
+                axes_loss.plot(np.arange(len(COST_PLOT)), COST_PLOT, label='COST')
+                axes_loss.set_xscale('log')
+                axes_loss.set_yscale('log')
+                axes_loss.legend(loc='upper left')
+                plt.savefig('%s/latest/losses.png' % params['plot_dir'])
+                plt.close(fig_loss)
                 
+
                 if params['print_values']==True:
                     print('--------------------------------------------------------------')
                     print('Iteration:',i)

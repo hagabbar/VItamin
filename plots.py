@@ -48,6 +48,37 @@ class make_plots:
         self.rev_x = rev_x
         self.pos_test = pos_test
 
+        def ad_ks_test(parnames,inn_samps,mcmc_samps,cnt):
+            """
+            Record and print ks and AD test statistics
+            """
+    
+            ks_mcmc_arr = []
+            ks_inn_arr = []
+            ad_mcmc_arr = []
+            ad_inn_arr = []
+
+            # iterate through each parameter
+            for i in range(inn_samps.shape[0]):
+                # get ideal bayesian number. We want the 2 tailed p value from the KS test FYI
+                ks_mcmc_result = ks_2samp(mcmc_samps[:int(mcmc_samps.shape[0]/2.0), i], mcmc_samps[int(mcmc_samps.shape[0]/2.0):, i])
+                ad_mcmc_result = anderson_ksamp([mcmc_samps[:int(mcmc_samps.shape[0]/2.0), i], mcmc_samps[int(mcmc_samps.shape[0]/2.0):, i]])
+
+                # get predicted vs. true number
+                ks_inn_result = ks_2samp(inn_samps[i,:],mcmc_samps[:,i])
+                ad_inn_result = anderson_ksamp([inn_samps[i,:],mcmc_samps[:,i]])
+                print('Test Case %d, Parameter(%s) k-s result: [Ideal(%.6f), Predicted(%.6f)]' % (int(cnt),parnames[i],np.array(ks_mcmc_result[1]),np.array(ks_inn_result[1])))
+                print('Test Case %d, Parameter(%s) A-D result: [Ideal(%.6f), Predicted(%.6f)]' % (int(cnt),parnames[i],np.array(ad_mcmc_result[0]),np.array(ad_inn_result[0])))
+
+                # store result stats
+                ks_mcmc_arr.append(ks_mcmc_result[1])
+                ks_inn_arr.append(ks_inn_result[1])
+                ad_mcmc_arr.append(ad_mcmc_result[0])
+                ad_inn_arr.append(ad_inn_result[0])
+
+            return ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr
+
+        self.ad_ks_test = ad_ks_test
     def plot_y_test(self,i_epoch):
         """
         Plot examples of test y-data generation
@@ -71,7 +102,7 @@ class make_plots:
         sig_test = sig_test[:params['r']*params['r'],:]
 
         # apply forward model to the x data
-        _,_,y = VICI_forward_model.run(params, x, y_test, np.shape(y_test)[1], "forward_model_dir/forward_model.ckpt")
+        _,_,y = VICI_forward_model.run(params, x, y_test, np.shape(y_test)[1], "forward_model_dir_%s/forward_model.ckpt" % params['run_label'])
 
         cnt = 0
         for i in range(params['r']):
@@ -117,7 +148,7 @@ class make_plots:
         sig_test = sig_test
 
         # apply forward model to the x data
-        _,_,y = VICI_forward_model.run(params, x, y_test, np.shape(y_test)[1], "forward_model_dir/forward_model.ckpt")
+        _,_,y = VICI_forward_model.run(params, x, y_test, np.shape(y_test)[1], "forward_model_dir_%s/forward_model.ckpt" % params['run_label'])
 
         sig_test = sig_test
         dy = y - y_test
@@ -361,9 +392,37 @@ class make_plots:
     plot_z_dist(model,ndim_x,ndim_y,ndim_z,ndim_tot,usepars,sigma,out_dir,epoch,conv=False)
     """
 
+    def make_loss_plot(self,KL_PLOT,COST_PLOT,i):
+        # make log loss plot
+        fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
+        axes_loss.grid()
+        axes_loss.set_ylabel('Loss')
+        axes_loss.set_xlabel('Iterations elapsed: %s' % i)
+        axes_loss.semilogy(np.arange(len(KL_PLOT)), np.abs(KL_PLOT), label='KL')
+        axes_loss.semilogy(np.arange(len(COST_PLOT)), np.abs(COST_PLOT), label='COST')
+        axes_loss.legend(loc='upper left')
+        plt.savefig('%s/latest/losses_logscale.png' % self.params['plot_dir'])
+        plt.close(fig_loss)
+
+        # make non-log scale loss plot
+        fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
+        axes_loss.grid()
+        axes_loss.set_ylabel('Loss')
+        axes_loss.set_xlabel('Iterations elapsed: %s' % i)
+        axes_loss.plot(np.arange(len(KL_PLOT)), KL_PLOT, label='KL')
+        axes_loss.plot(np.arange(len(COST_PLOT)), COST_PLOT, label='COST')
+        axes_loss.set_xscale('log')
+        axes_loss.set_yscale('log')
+        axes_loss.legend(loc='upper left')
+        plt.savefig('%s/latest/losses.png' % self.params['plot_dir'])
+        plt.close(fig_loss)
+
+
     def make_overlap_plot(self):
         olvec = np.zeros((self.params['r'],self.params['r'],1))
+        adksVec = np.zeros((self.params['r'],self.params['r'],self.params['ndim_x'],4,1))
         olvec_1d = np.zeros((self.params['r'],self.params['r'],self.params['ndim_x']))
+        fig, axes = plt.subplots(1,1,figsize=(6,6))
 
         # Make 2D scatter plots of posteriors
         for k in range(self.params['ndim_x']):
@@ -390,12 +449,19 @@ class make_plots:
                                 ol = data_maker.overlap(self.samples[cnt,:,:],self.rev_x[cnt,:,:].T)
                                 olvec[i,j,0] = ol
 
+                                # print A-D and K-S test
+                                ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr = self.ad_ks_test(self.params['parnames'],self.rev_x[cnt,self.params['usepars'],:], self.samples[cnt,:,:self.params['ndim_x']], cnt)
+                                for p in self.params['usepars']:
+                                    for c in range(4):
+                                        adksVec[i,j,p,c] = np.array([ks_mcmc_arr,ks_inn_arr,ad_mcmc_arr,ad_inn_arr])[c,p] 
+
+
                             # plot the samples and the true contours
                             axes[i,j].clear()
                             axes[i,j].scatter(self.samples[cnt,:,k], self.samples[cnt,:,nextk],c='b',s=0.2,alpha=0.5, label='MCMC')
                             axes[i,j].scatter(self.rev_x[cnt,k,:], self.rev_x[cnt,nextk,:],c='r',s=0.2,alpha=0.5, label='INN')
-                            axes[i,j].set_xlim([0,1])
-                            axes[i,j].set_ylim([0,1])
+                            #axes[i,j].set_xlim([0,1])
+                            #axes[i,j].set_ylim([0,1])
                             axes[i,j].plot(self.pos_test[cnt,k],self.pos_test[cnt,nextk],'+c',markersize=8, label='Truth')
                             oltxt = '%.2f' % olvec[i,j,0]
                             axes[i,j].text(0.90, 0.95, oltxt,
@@ -425,13 +491,13 @@ class make_plots:
                                 return [cf_bd_sum_lidx, cf_bd_sum_ridx]
 
                             # plot the 1D samples and the 5% confidence bounds
-                            ol_hist = data_maker.overlap(self.samples[cnt,:,k].reshape(self.params['n_samples'],1),self.rev_x[cnt,k,:].reshape(self.params['n_samples'],1))
+                            ol_hist = data_maker.overlap(self.samples[cnt,:,k].reshape(self.params['n_samples'],1),self.rev_x[cnt,k,:].reshape(self.params['n_samples'],1),k)
                             olvec_1d[i,j,k] = ol_hist
                             n_hist_bins=30
                             axes_1d[i,j].clear()
                             axes_1d[i,j].hist(self.samples[cnt,:,k],color='b',bins=n_hist_bins,range=(0,1),alpha=0.5,normed=True)
                             axes_1d[i,j].hist(self.rev_x[cnt,k,:],color='r',bins=n_hist_bins,range=(0,1),alpha=0.5,normed=True)
-                            axes_1d[i,j].set_xlim([0,1])
+                            #axes_1d[i,j].set_xlim([0,1])
                             axes_1d[i,j].axvline(x=self.pos_test[cnt,k], linewidth=0.5, color='black')
                             axes_1d[i,j].axvline(x=confidence_bd(self.samples[cnt,:,k])[0], linewidth=0.5, color='b')
                             axes_1d[i,j].axvline(x=confidence_bd(self.samples[cnt,:,k])[1], linewidth=0.5, color='b')
@@ -448,12 +514,12 @@ class make_plots:
 
                             if k == (self.params['ndim_x']-2):
                                 # plot the 1D samples and the 5% confidence bounds
-                                ol_hist = data_maker.overlap(self.samples[cnt,:,k+1].reshape(self.params['n_samples'],1),self.rev_x[cnt,k+1,:].reshape(self.params['n_samples'],1))
+                                ol_hist = data_maker.overlap(self.samples[cnt,:,k+1].reshape(self.params['n_samples'],1),self.rev_x[cnt,k+1,:].reshape(self.params['n_samples'],1),k)
                                 olvec_1d[i,j,k+1] = ol_hist
                                 axes_1d_last[i,j].clear()
                                 axes_1d_last[i,j].hist(self.samples[cnt,:,k+1],color='b',bins=n_hist_bins,range=(0,1),alpha=0.5,normed=True)
                                 axes_1d_last[i,j].hist(self.rev_x[cnt,k+1,:],color='r',bins=n_hist_bins,range=(0,1),alpha=0.5,normed=True)
-                                axes_1d_last[i,j].set_xlim([0,1])
+                                #axes_1d_last[i,j].set_xlim([0,1])
                                 axes_1d_last[i,j].axvline(x=self.pos_test[cnt,k+1], linewidth=0.5, color='black')
                                 axes_1d_last[i,j].axvline(x=confidence_bd(self.samples[cnt,:,k+1])[0], linewidth=0.5, color='b')
                                 axes_1d_last[i,j].axvline(x=confidence_bd(self.samples[cnt,:,k+1])[1], linewidth=0.5, color='b')
