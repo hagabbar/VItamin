@@ -145,7 +145,7 @@ def overlap(x,y,cnt=0,nxt_cnt=False):
     """
     compute the overlap between samples from 2 differnt distributions
     """
-    priors = [30.47,43.53,0.0,np.pi,0.49,0.51]
+    priors = [30.47,43.53,0.0,np.pi,0.0,0.1]
     priors_min=[priors[0],priors[2],priors[4]]
     priors_max=[priors[1],priors[3],priors[5]]
 
@@ -158,11 +158,11 @@ def overlap(x,y,cnt=0,nxt_cnt=False):
             priors=[priors[4],priors[5]]
         X = np.mgrid[priors[0]:priors[1]:100j]
         positions = np.vstack([X.ravel()])
-    elif nxt_cnt != False:
-        X, Y = np.mgrid[priors_min[cnt]:priors_max[cnt]:100j, priors_min[nxt_cnt]:priors_max[nxt_cnt]:100j]
+    elif x.shape[1]==2:
+        X, Y = np.mgrid[np.min([x[:,0],y[:,0]]):np.max([x[:,0],y[:,0]]):100j, np.min([x[:,1],y[:,1]]):np.max([x[:,1],y[:,1]]):100j]
         positions = np.vstack([X.ravel(), Y.ravel()])
-        x = np.vstack((x[:,cnt],x[:,nxt_cnt])).T
-        y = np.vstack((y[:,cnt],y[:,nxt_cnt])).T
+        #x = np.vstack((x[:,cnt],x[:,nxt_cnt])).T
+        #y = np.vstack((y[:,cnt],y[:,nxt_cnt])).T
     elif x.shape[1]==3:
         X, Y, Z = np.mgrid[priors[0]:priors[1]:20j, priors[2]:priors[3]:20j, priors[4]:priors[5]:20j]
         positions = np.vstack([X.ravel(), Y.ravel(), Z.ravel()])

@@ -25,7 +25,7 @@ class VariationalAutoencoder(object):
         network_weights = self._create_weights()
         self.weights = network_weights
 
-        self.nonlinearity = tf.nn.relu
+        self.nonlinearity = tf.nn.leaky_relu
 
     def calc_reconstruction(self, z):
         with tf.name_scope("VICI_decoder"):
@@ -59,14 +59,14 @@ class VariationalAutoencoder(object):
 #                hidden1e_pre = tf.add(tf.matmul(hidden1d_post, self.weights['decoder']['W3e_to_hiddenG']), self.weights['decoder']['b3e_to_hiddenG'])
 #                hidden1e_post = self.nonlinearity(hidden1e_pre)
                 
-#                hidden1b_pre = tf.add(tf.matmul(hidden1_post, self.weights['decoder']['W3b_to_hiddenG']), self.weights['decoder']['b3b_to_hiddenG'])
-#                hidden1b_post = self.nonlinearity(hidden1b_pre)
+                hidden1b_pre = tf.add(tf.matmul(hidden1_post, self.weights['VICI_decoder']['W3b_to_hiddenG']), self.weights['VICI_decoder']['b3b_to_hiddenG'])
+                hidden1b_post = self.nonlinearity(hidden1b_pre)
 #                hidden1b_post = hidden1_post
 
-                mu = tf.add(tf.matmul(hidden1_post, self.weights['VICI_decoder']['W4_to_muG']), self.weights['VICI_decoder']['b4_to_muG'])
+                mu = tf.add(tf.matmul(hidden1b_post, self.weights['VICI_decoder']['W4_to_muG']), self.weights['VICI_decoder']['b4_to_muG'])
                 mu = tf.sigmoid(mu)  # see paper
 #                mu = tf.sigmoid(mu+0.5)-0.5  # see paper
-                log_sigma_sq = tf.add(tf.matmul(hidden1_post, self.weights['VICI_decoder']['W5_to_log_sigmaG']), self.weights['VICI_decoder']['b5_to_log_sigmaG'])
+                log_sigma_sq = tf.add(tf.matmul(hidden1b_post, self.weights['VICI_decoder']['W5_to_log_sigmaG']), self.weights['VICI_decoder']['b5_to_log_sigmaG'])
 #                log_sigma_sq = self.nonlinearity(log_sigma_sq+20)-20
 #                log_sigma_sq = self.nonlinearity(log_sigma_sq+6)-6
                 return mu, log_sigma_sq
@@ -88,8 +88,8 @@ class VariationalAutoencoder(object):
     #            all_weights['decoder']['W3_to_hiddenGS'] = tf.Variable(vae_utils.xavier_init(self.n_hidden, hidden_number_decoder), dtype=tf.float32)
     #            all_weights['decoder']['b3_to_hiddenGS'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)
                 
-    #            all_weights['decoder']['W3b_to_hiddenG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, hidden_number_decoder), dtype=tf.float32)
-    #            all_weights['decoder']['b3b_to_hiddenG'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)
+                all_weights['VICI_decoder']['W3b_to_hiddenG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, hidden_number_decoder), dtype=tf.float32)
+                all_weights['VICI_decoder']['b3b_to_hiddenG'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)
     #            
     #            all_weights['decoder']['W3c_to_hiddenG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, hidden_number_decoder), dtype=tf.float32)
     #            all_weights['decoder']['b3c_to_hiddenG'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)

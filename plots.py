@@ -79,22 +79,23 @@ class make_plots:
             return ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr
 
         self.ad_ks_test = ad_ks_test
-    def plot_y_test(self,i_epoch):
+    def plot_y_test(self,i_epoch,x_test,y_test,sig_test):
         """
         Plot examples of test y-data generation
         """
         params = self.params
 
         # generate test data
-        x_test, y_test, x, sig_test, parnames = data_maker.generate(
-            tot_dataset_size=params['n_samples'],
-            ndata=params['ndata'],
-            usepars=params['usepars'],
-            sigma=params['sigma'],
-            seed=params['seed']
-        )
+        #x_test, y_test, x, sig_test, parnames = data_maker.generate(
+        #    tot_dataset_size=params['n_samples'],
+        #    ndata=params['ndata'],
+        #    usepars=params['usepars'],
+        #    sigma=params['sigma'],
+        #    seed=params['seed']
+        #)
 
         fig, axes = plt.subplots(params['r'],params['r'],figsize=(6,6),sharex='col',sharey='row')
+        fig_zoom, axes_zoom = plt.subplots(params['r'],params['r'],figsize=(6,6),sharex='col',sharey='row')
 
         # run the x test data through the model
         x = x_test[:params['r']*params['r'],:]
@@ -111,36 +112,50 @@ class make_plots:
                 axes[i,j].clear()
                 axes[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),y[cnt,:],'b-')
                 axes[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),y_test[cnt,:],'k',alpha=0.5)
+                axes[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),sig_test[cnt,:],'cyan',alpha=0.5)
                 axes[i,j].set_xlim([0,1])
-                #matplotlib.rc('xtick', labelsize=5)
-                #matplotlib.rc('ytick', labelsize=5)
                 axes[i,j].set_xlabel('t') if i==params['r']-1 else axes[i,j].set_xlabel('')
                 axes[i,j].set_ylabel('y') if j==0 else axes[i,j].set_ylabel('')
                 if i==0 and j==0:
                     axes[i,j].legend(('pred y','y'))
+
+                axes_zoom[i,j].clear()
+                axes_zoom[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),y[cnt,:],'b-')
+                axes_zoom[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),y_test[cnt,:],'k',alpha=0.5)
+                axes_zoom[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),sig_test[cnt,:],'cyan',alpha=0.5)
+                axes_zoom[i,j].set_xlim([0.4,0.6])
+                axes_zoom[i,j].set_xlabel('t') if i==params['r']-1 else axes_zoom[i,j].set_xlabel('')
+                axes_zoom[i,j].set_ylabel('y') if j==0 else axes_zoom[i,j].set_ylabel('')
+                if i==0 and j==0:
+                    axes_zoom[i,j].legend(('pred y','y'))
                 cnt += 1
 
         fig.canvas.draw()
-        plt.savefig('%s/ytest_%04d.png' % (params['plot_dir'][0],i_epoch),dpi=360)
+        fig.savefig('%s/ytest_%04d.png' % (params['plot_dir'][0],i_epoch),dpi=360)
         fig.savefig('%s/latest/latest_ytest.png' % params['plot_dir'],dpi=360)
         plt.close(fig)
+
+        fig_zoom.canvas.draw()
+        fig_zoom.savefig('%s/ytestZoom_%04d.png' % (params['plot_dir'][0],i_epoch),dpi=360)
+        fig_zoom.savefig('%s/latest/latest_ytestZoom.png' % params['plot_dir'],dpi=360)
+        plt.close(fig_zoom)
         return
 
-    def plot_y_dist(self,i_epoch):
+    def plot_y_dist(self,i_epoch,x_test,y_test,sig_test):
         """
         Plots the joint distributions of y variables
         """
         params=self.params
-        Nsamp = 1000
+        Nsamp = params['r']*params['r']
 
         # generate test data
-        x_test, y_test, x, sig_test, parnames = data_maker.generate(
-            tot_dataset_size=Nsamp,
-            ndata=params['ndata'],
-            usepars=params['usepars'],
-            sigma=params['sigma'],
-            seed=params['seed']
-        )
+        #x_test, y_test, x, sig_test, parnames = data_maker.generate(
+        #    tot_dataset_size=Nsamp,
+        #    ndata=params['ndata'],
+        #    usepars=params['usepars'],
+        #    sigma=params['sigma'],
+        #    seed=params['seed']
+        #)
 
         # run the x test data through the model
         x = x_test
@@ -184,7 +199,7 @@ class make_plots:
         for d in delta:
             plt.hist(np.array(d).flatten(),25,density=True,histtype='stepfilled',alpha=0.5)
         plt.hist(np.array(delta).flatten(),25,density=True,histtype='step',linestyle='dashed')
-        plt.plot(dyvec,norm.pdf(dyvec,loc=0,scale=np.sqrt(2.0)*params['sigma']),'k-')
+        #plt.plot(dyvec,norm.pdf(dyvec,loc=0,scale=np.sqrt(2.0)*params['sigma']),'k-')
         plt.xlabel('y-y_pred')
         plt.ylabel('p(y-y_pred)')
         plt.savefig('%s/y_dist_%04d.png' % (params['plot_dir'][0],i_epoch),dpi=360)
@@ -418,8 +433,7 @@ class make_plots:
         plt.close(fig_loss)
 
 
-    def make_overlap_plot(self):
-        olvec = np.zeros((self.params['r'],self.params['r'],1))
+    def make_overlap_plot(self,epoch,iterations,s,olvec):
         adksVec = np.zeros((self.params['r'],self.params['r'],self.params['ndim_x'],4,1))
         olvec_1d = np.zeros((self.params['r'],self.params['r'],self.params['ndim_x']))
         fig, axes = plt.subplots(1,1,figsize=(6,6))
@@ -447,7 +461,7 @@ class make_plots:
                             # compute the n-d overlap
                             if k==0 and nextk==1:
                                 ol = data_maker.overlap(self.samples[cnt,:,:],self.rev_x[cnt,:,:].T)
-                                olvec[i,j,0] = ol
+                                olvec[i,j,s] = ol
 
                                 # print A-D and K-S test
                                 ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr = self.ad_ks_test(self.params['parnames'],self.rev_x[cnt,self.params['usepars'],:], self.samples[cnt,:,:self.params['ndim_x']], cnt)
@@ -463,7 +477,7 @@ class make_plots:
                             #axes[i,j].set_xlim([0,1])
                             #axes[i,j].set_ylim([0,1])
                             axes[i,j].plot(self.pos_test[cnt,k],self.pos_test[cnt,nextk],'+c',markersize=8, label='Truth')
-                            oltxt = '%.2f' % olvec[i,j,0]
+                            oltxt = '%.2f' % olvec[i,j,s]
                             axes[i,j].text(0.90, 0.95, oltxt,
                                 horizontalalignment='right',
                                 verticalalignment='top',
@@ -533,6 +547,7 @@ class make_plots:
                                 axes_1d_last[i,j].set_xlabel(self.params['parnames'][k+1]) if i==self.params['r']-1 else axes_1d_last[i,j].set_xlabel('')
 
                             cnt += 1
+
                         # save the results to file
                         fig_1d.canvas.draw()
                         fig_1d.savefig('%s/latest/latest-1d_%d.png' % (self.params['plot_dir'][0],k),dpi=360)
@@ -547,3 +562,61 @@ class make_plots:
                         fig.savefig('%s/latest/posteriors_%d%d.png' % (self.params['plot_dir'][0],k,nextk),dpi=360)
                         plt.close(fig)
 
+        s+=1
+        # plot overlap results
+        fig, axes = plt.subplots(1,figsize=(6,6))
+        plot_cadence=(self.params['num_iterations']-1)
+        for i in range(self.params['r']):
+            for j in range(self.params['r']):
+                color = next(axes._get_lines.prop_cycler)['color']
+                axes.semilogx(np.arange(epoch, step=plot_cadence),olvec[i,j,:int((epoch)/plot_cadence)],alpha=0.5, color=color)
+                axes.plot([int(epoch)],[olvec[i,j,int(epoch/plot_cadence)]],'.', color=color)
+        axes.grid()
+        axes.set_ylabel('overlap')
+        axes.set_xlabel('epoch')
+        axes.set_ylim([0,1])
+        plt.savefig('%s/latest/overlap_logscale.png' % self.params['plot_dir'], dpi=360)
+        plt.close(fig)      
+
+        fig, axes = plt.subplots(1,figsize=(6,6))
+        for i in range(self.params['r']):
+            for j in range(self.params['r']):
+                color = next(axes._get_lines.prop_cycler)['color']
+                axes.plot(np.arange(epoch, step=plot_cadence),olvec[i,j,:int((epoch)/plot_cadence)],alpha=0.5, color=color)
+                axes.plot([int(epoch)],[olvec[i,j,int(epoch/plot_cadence)]],'.', color=color)
+        axes.grid()
+        axes.set_ylabel('overlap')
+        axes.set_xlabel('epoch')
+        axes.set_ylim([0,1])
+        plt.savefig('%s/latest/overlap.png' % self.params['plot_dir'], dpi=360)
+        plt.close(fig)
+
+        # plot ad and ks results [ks_mcmc_arr,ks_inn_arr,ad_mcmc_arr,ad_inn_arr]
+        """
+        for p in range(self.params['ndim_x']):
+            fig_ks, axis_ks = plt.subplots(1,figsize=(6,6)) 
+            fig_ad, axis_ad = plt.subplots(1,figsize=(6,6))
+            for i in range(self.params['r']):
+                for j in range(self.params['r']):
+                    color_ks = next(axis_ks._get_lines.prop_cycler)['color'] 
+                    axis_ks.semilogx(np.arange(epoch, step=plot_cadence),adksVec[i,j,p,0,:],'--',alpha=0.5,color=color_ks)
+                    axis_ks.semilogx(np.arange(epoch, step=plot_cadence),adksVec[i,j,p,1,:],alpha=0.5,color=color_ks)
+                    axis_ks.plot([int(epoch)],[adksVec[i,j,p,1,int(epoch/plot_cadence)]],'.', color=color_ks) 
+                    axis_ks.set_yscale('log')
+
+                    color_ad = next(axis_ad._get_lines.prop_cycler)['color']
+                    axis_ad.semilogx(np.arange(epoch, step=plot_cadence),adksVec[i,j,p,2,:],'--',alpha=0.5,color=color_ad)
+                    axis_ad.semilogx(np.arange(epoch, step=plot_cadence),adksVec[i,j,p,3,:],alpha=0.5,color=color_ad)
+                    axis_ad.plot([int(epoch)],[adksVec[i,j,p,3,int(epoch/plot_cadence)]],'.',color=color_ad)
+                    axis_ad.set_yscale('log')
+
+            axis_ks.set_xlabel('Epoch')
+            axis_ad.set_xlabel('Epoch')
+            axis_ks.set_ylabel('KS Statistic')
+            axis_ad.set_ylabel('AD Statistic')
+            fig_ks.savefig('%s/latest/ks_%s_stat.png' % (self.params['plot_dir'],self.params['parnames'][p]), dpi=360)
+            fig_ad.savefig('%s/latest/ad_%s_stat.png' % (self.params['plot_dir'],self.params['parnames'][p]), dpi=360)
+            plt.close(fig_ks)
+            plt.close(fig_ad)
+        """
+        return s, olvec

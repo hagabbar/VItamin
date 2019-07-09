@@ -53,6 +53,7 @@ import tensorflow as tf
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+#import horovod.tensorflow as hvd
 
 from Neural_Networks import OELBO_decoder_difference
 from Neural_Networks import OELBO_encoder
@@ -93,9 +94,18 @@ def train(params, x_data, y_data_l, siz_high_res, load_dir, save_dir, plotter, y
     bs = params['batch_size']
     n_weights = params['n_weights']
     lam = 1
-    
+
+    # Initialize Horovod
+    #hvd.init()
+
+    # Allow GPU growth 
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    #config.gpu_options.visible_device_list = str(hvd.local_rank())
+
+    # Start session
     graph = tf.Graph()
-    session = tf.Session(graph=graph)
+    session = tf.Session(config=config,graph=graph)
     with graph.as_default():
         tf.set_random_seed(np.random.randint(0,10))
         SMALL_CONSTANT = 1e-6
@@ -202,10 +212,21 @@ def train(params, x_data, y_data_l, siz_high_res, load_dir, save_dir, plotter, y
         
         # DEFINE OPTIMISER (using ADAM here)
         optimizer = tf.train.AdamOptimizer(params['initial_training_rate']) 
+
+        # Add Horovod Distributed Optimizer
+        #optimizer = hvd.DistributedOptimizer(optimizer)
+
+        # Add hook to broadcast variables from rank 0 to all other processes during
+        # initialization.
+        #hooks = [hvd.BroadcastGlobalVariablesHook(0)]
+
         minimize = optimizer.minimize(COST,var_list = var_list_VICI)
         
         # DRAW FROM q(x|y)
         qx_samp = autoencoder_ENC._sample_from_gaussian_dist(bs_ph, xsh[1], x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
+
+        # Save checkpoints only on worker 0 to prevent other workers from corrupting them.
+        #checkpoint_dir = load_dir if hvd.rank() == 0 else None
         
         # INITIALISE AND RUN SESSION
 #        init = tf.variables_initializer(var_list_VICI)
@@ -486,8 +507,11 @@ def run(params, y_data_test, siz_x_data, load_dir):
     z_dimension = params['z_dimension']
     n_weights = params['n_weights']
     
+    # Allow GPU memory growth
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
     graph = tf.Graph()
-    session = tf.Session(graph=graph)
+    session = tf.Session(config=config,graph=graph)
     with graph.as_default():
         tf.set_random_seed(np.random.randint(0,10))
         SMALL_CONSTANT = 1e-6
