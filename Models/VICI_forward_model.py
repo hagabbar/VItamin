@@ -74,7 +74,7 @@ def tf_normalise_dataset(xp):
     x_data=xp
     return x_data
 
-def train(params, x_data, y_data_h, y_data_l, save_dir, plotter,pos_test,y_data_test_h,sig_test):
+def train(params, x_data, y_data_h, y_data_l, save_dir, plotter,pos_test,y_data_test_h,sig_test,y_normscale):
     
     # LOAD DATA
     x_data = x_data[0:np.shape(y_data_h)[0],:]
@@ -197,9 +197,10 @@ def train(params, x_data, y_data_h, y_data_l, save_dir, plotter,pos_test,y_data_
         if i % params['save_interval_fw'] == 0:
             save_path = saver.save(session,save_dir)
 
-            # Generate forward estimation results
-            plotter.plot_y_test(i,pos_test,y_data_test_h,sig_test)
-            plotter.plot_y_dist(i,pos_test,y_data_test_h,sig_test)
+            if i > 0:
+                # Generate forward estimation results
+                plotter.plot_y_test(i,pos_test,y_data_test_h,sig_test,y_normscale)
+                plotter.plot_y_dist(i,pos_test,y_data_test_h,sig_test,y_normscale)
     
     return COST_PLOT_MF, KL_PLOT_MF
     

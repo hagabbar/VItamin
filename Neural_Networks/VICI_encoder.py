@@ -33,10 +33,16 @@ class VariationalAutoencoder(object):
         with tf.name_scope("VICI_encoder"):
             hidden1_pre = tf.add(tf.matmul(x, self.weights['VICI_encoder']['W3_to_hidden']), self.weights['VICI_encoder']['b3_to_hidden'])
             hidden1_post = self.nonlinearity(hidden1_pre)
+            hidden1_dropout = tf.layers.dropout(hidden1_post,rate=0.5)
 #            hidden1_post = tf.nn.batch_normalization(hidden1_post,tf.Variable(tf.zeros([400], dtype=tf.float32)),tf.Variable(tf.ones([400], dtype=tf.float32)),None,None,0.000001,name="e_b_norm_1")
 
-#            hidden3_pre = tf.add(tf.matmul(hidden1_post, self.weights['IVA_encoder']['W3b_hth']), self.weights['IVA_encoder']['b3b_hth'])
-#            hidden3_post = self.nonlinearity(hidden3_pre)
+            hidden2_pre = tf.add(tf.matmul(hidden1_dropout, self.weights['VICI_encoder']['W3_hth']), self.weights['VICI_encoder']['b3_hth'])
+            hidden2_post = self.nonlinearity(hidden2_pre)
+            hidden2_dropout = tf.layers.dropout(hidden2_post,rate=0.5)
+
+            hidden3_pre = tf.add(tf.matmul(hidden2_dropout, self.weights['VICI_encoder']['W3b_hth']), self.weights['VICI_encoder']['b3b_hth'])
+            hidden3_post = self.nonlinearity(hidden3_pre)
+            hidden3_dropout = tf.layers.dropout(hidden3_post,rate=0.5)
 ##            
 #            hidden4_pre = tf.add(tf.matmul(hidden3_post, self.weights['IVA_encoder']['W3c_hth']), self.weights['IVA_encoder']['b3c_hth'])
 #            hidden4_post = self.nonlinearity(hidden4_pre)
@@ -44,14 +50,12 @@ class VariationalAutoencoder(object):
 #            hidden5_pre = tf.add(tf.matmul(hidden4_post, self.weights['encoder']['W3d_hth']), self.weights['encoder']['b3d_hth'])
 #            hidden5_post = self.nonlinearity(hidden5_pre)
             
-            hidden2_pre = tf.add(tf.matmul(hidden1_post, self.weights['VICI_encoder']['W3_hth']), self.weights['VICI_encoder']['b3_hth'])
-            hidden2_post = self.nonlinearity(hidden2_pre)
 #            hidden2_post = hidden1_post
 
-            z_mean = tf.add(tf.matmul(hidden2_post, self.weights['VICI_encoder']['W4_to_mu']), self.weights['VICI_encoder']['b4_to_mu'])
+            z_mean = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_encoder']['W4_to_mu']), self.weights['VICI_encoder']['b4_to_mu'])
 #            z_mean = self.nonlinearity2(z_mean)
 #            z_mean = tf.exp(z_mean)
-            z_log_sigma_sq = tf.add(tf.matmul(hidden2_post, self.weights['VICI_encoder']['W5_to_log_sigma']), self.weights['VICI_encoder']['b5_to_log_sigma'])
+            z_log_sigma_sq = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_encoder']['W5_to_log_sigma']), self.weights['VICI_encoder']['b5_to_log_sigma'])
 #            z_log_sigma_sq = self.nonlinearity(z_log_sigma_sq+3)-3
             tf.summary.histogram("z_mean", z_mean)
             tf.summary.histogram("z_log_sigma_sq", z_log_sigma_sq)
@@ -93,8 +97,8 @@ class VariationalAutoencoder(object):
             all_weights['VICI_encoder']['W3_hth'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, hidden_number_encoder), dtype=tf.float32)
             tf.summary.histogram("W3_hth", all_weights['VICI_encoder']['W3_hth'])
             
-#            all_weights['IVA_encoder']['W3b_hth'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, hidden_number_encoder), dtype=tf.float32)
-#            tf.summary.histogram("W3b_hth", all_weights['IVA_encoder']['W3b_hth'])
+            all_weights['VICI_encoder']['W3b_hth'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, hidden_number_encoder), dtype=tf.float32)
+            tf.summary.histogram("W3b_hth", all_weights['VICI_encoder']['W3b_hth'])
 ##    #        
 #            all_weights['IVA_encoder']['W3c_hth'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, hidden_number_encoder), dtype=tf.float32)
 #            tf.summary.histogram("W3c_hth", all_weights['IVA_encoder']['W3c_hth'])
