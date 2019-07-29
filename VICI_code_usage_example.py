@@ -87,7 +87,8 @@ def get_params():
         do_adkskl_test=True,        # if True, do statistic tests
         do_m1_m2_cut=False,         # if True, make a cut on all m1 and m2 values    
         do_extra_noise=True,         # add extra noise realizations during training
-        do_load_in_chunks=False      # if True, load training samples in random file chucnks every 25000 epochs
+        do_load_in_chunks=False,      # if True, load training samples in random file chucnks every 25000 epochs
+        Npp = 100                    # number of test signals per pp-plot
     )
     return params
 
@@ -807,11 +808,11 @@ if params['do_normscale']:
     for m in range(params['ndim_x']):
         XS[:,m,:] = XS[:,m,:]*normscales[m]
 
-# shrink t0 results back to original scale
-#XS[:,1,:] /= 1000.0
-
 # Generate final results plots
 plotter = plots.make_plots(params,samples,XS,pos_test)
+
+# Make pp plot
+plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)
 
 # Geneerate overlap scatter plots
 plotter.make_overlap_plot(0,iterations,s,olvec,olvec_2d,adksVec)

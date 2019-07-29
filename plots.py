@@ -128,6 +128,58 @@ class make_plots:
             return ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr, kl_mcmc_arr, kl_inn_arr
 
         self.ad_ks_test = ad_ks_test
+
+    def pp_plot(self,truth,samples):
+        """
+        generates the pp plot data given samples and truth values
+        """
+        Nsamp = samples.shape[0]
+        kernel = gaussian_kde(samples.transpose())
+        v = kernel.pdf(truth)
+        x = kernel.pdf(samples.transpose())
+        r = np.sum(x>v)/float(Nsamp)
+
+        return r
+
+    def plot_pp(self,model,sig_test,par_test,i_epoch,normscales):
+        """
+        make p-p plots
+        """
+        Npp = self.params['Npp']
+        Nsamp = 1#self.params['n_samples']
+        ndim_y = self.params['ndata']
+        outdir = self.params['plot_dir'][0]
+        
+        
+        plt.figure()
+        pp = np.zeros(Npp+2)
+        pp[0] = 0.0
+        pp[1] = 1.0
+        for cnt in range(Npp):
+
+            y = np.tile(np.array(sig_test[cnt,:]),Nsamp).reshape(Nsamp,ndim_y)
+
+            # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+            _, _, x, _ = model.run(self.params, y, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label']) # This runs the trained model using the weights stored in inverse_model_dir/inverse_model.ckpt
+
+            # Convert XS back to unnormalized version
+            if self.params['do_normscale']:
+                for m in range(self.params['ndim_x']):
+                    x[:,m,:] = x[:,m,:]*normscales[m]
+
+            x = x.reshape(x.shape[2],x.shape[1])
+            pp[cnt+2] = self.pp_plot(par_test[cnt,:],x[:,:])
+            print('Computed p-p plot iteration %d/%d' % (int(cnt),int(Npp)))
+
+        plt.plot(np.arange(Npp+2)/(Npp+1.0),np.sort(pp),'-')
+        plt.plot([0,1],[0,1],'--k')
+        plt.xlim([0,1])
+        plt.ylim([0,1])
+        plt.savefig('%s/pp_plot_%04d.png' % (outdir,i_epoch),dpi=360)
+        plt.savefig('%s/latest/latest_pp_plot.png' % outdir,dpi=360)
+        plt.close()
+        return
+
     def plot_y_test(self,i_epoch,x_test,y_test,sig_test,y_normscale):
         """
         Plot examples of test y-data generation
@@ -512,14 +564,14 @@ class make_plots:
                     fig_1d_last, axes_1d_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
 
                     # initialize 1D plots for showing testing results
-                    fig_kl, axis_kl = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
-                    fig_ad, axis_ad = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
-                    fig_ks, axis_ks = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
+                    fig_kl, axis_kl = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    fig_ad, axis_ad = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    fig_ks, axis_ks = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
 
                     # initialize 1D plots for showing testing results for last 1d hist
-                    fig_kl_last, axis_kl_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
-                    fig_ad_last, axis_ad_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
-                    fig_ks_last, axis_ks_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
+                    fig_kl_last, axis_kl_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    fig_ad_last, axis_ad_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    fig_ks_last, axis_ks_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
 
                     # Iterate over test cases
                     for i in range(self.params['r']):
@@ -611,9 +663,15 @@ class make_plots:
                             try:
                                 axis_ks[i,j].hist(adksVec[i,j,k,0,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True,label='Bilby')
                                 axis_ks[i,j].hist(adksVec[i,j,k,1,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True,label='VICI')
+                                for xtick,ytick in zip(axis_ks[i,j].xaxis.get_major_ticks(),axis_ks[i,j].yaxis.get_major_ticks()):
+                                    xtick.label.set_fontsize(4)
+                                    ytick.label.set_fontsize(4)
 
                                 axis_ad[i,j].hist(adksVec[i,j,k,2,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True,label='Bilby')
                                 axis_ad[i,j].hist(adksVec[i,j,k,3,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True,label='VICI')
+                                for xtick,ytick in zip(axis_ad[i,j].xaxis.get_major_ticks(),axis_ad[i,j].yaxis.get_major_ticks()):
+                                    xtick.label.set_fontsize(4)
+                                    ytick.label.set_fontsize(4)
 
                                 # normalize k-l results
                                 #kl_max = np.max([adksVec[i,j,k,4,:],adksVec[i,j,k,5,:]])
@@ -621,6 +679,9 @@ class make_plots:
                                 #adksVec[i,j,k,5,:] = adksVec[i,j,k,5,:] / kl_max
                                 axis_kl[i,j].hist(adksVec[i,j,k,4,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True,label='Bilby')
                                 axis_kl[i,j].hist(adksVec[i,j,k,5,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True,label='VICI')
+                                for xtick,ytick in zip(axis_kl[i,j].xaxis.get_major_ticks(),axis_kl[i,j].yaxis.get_major_ticks()):
+                                    xtick.label.set_fontsize(4)
+                                    ytick.label.set_fontsize(4)
 
                                 axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
                                 axis_ks[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ks[i,j].set_xlabel('')
@@ -660,12 +721,21 @@ class make_plots:
                                     try:
                                         axis_ks_last[i,j].hist(adksVec[i,j,k+1,0,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True)
                                         axis_ks_last[i,j].hist(adksVec[i,j,k+1,1,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True)
+                                        for xtick,ytick in zip(axis_ks_last[i,j].xaxis.get_major_ticks(),axis_ks_last[i,j].yaxis.get_major_ticks()):
+                                            xtick.label.set_fontsize(4)
+                                            ytick.label.set_fontsize(4)
 
                                         axis_ad_last[i,j].hist(adksVec[i,j,k+1,2,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True)
                                         axis_ad_last[i,j].hist(adksVec[i,j,k+1,3,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True)
+                                        for xtick,ytick in zip(axis_ad_last[i,j].xaxis.get_major_ticks(),axis_ad_last[i,j].yaxis.get_major_ticks()):
+                                            xtick.label.set_fontsize(4)
+                                            ytick.label.set_fontsize(4)
 
                                         axis_kl_last[i,j].hist(adksVec[i,j,k+1,4,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True)
                                         axis_kl_last[i,j].hist(adksVec[i,j,k+1,5,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True)
+                                        for xtick,ytick in zip(axis_kl_last[i,j].xaxis.get_major_ticks(),axis_kl_last[i,j].yaxis.get_major_ticks()):
+                                            xtick.label.set_fontsize(4)
+                                            ytick.label.set_fontsize(4)
 
                                         axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
                                         axis_ks[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ks[i,j].set_xlabel('')
