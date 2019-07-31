@@ -17,78 +17,68 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import time
 
-#from Models import VICI_forward_model
 from Models import VICI_inverse_model
 from Models import CVAE
 from Neural_Networks import batch_manager
-#from Observation_Models import simulate_observations
 from data import chris_data
 import plots
-#import bilby_pe
 
 run_label='gpu1',            # label for run
 plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
-load_train_set = True      # if True, load previously made train samples.
-load_test_set = True       # if True, load previously made test samples (including bilby posterior)
-T = 1           # length of time series (s)
-dt = T/ndata        # sampling time (Sec)
-fnyq = 0.5/dt   # Nyquist frequency (Hz)
-tot_dataset_size=int(5e4)
-tset_split=int(5e4)
-r = 5                      # the grid dimension for the output tests
-iterations=int(1e7)
-n_noise=1
+load_train_set = True        # if True, load previously made train samples.
+load_test_set = True         # if True, load previously made test samples (including bilby posterior)
+T = 1                        # length of time series (s)
+dt = T/ndata                 # sampling time (Sec)
+fnyq = 0.5/dt                # Nyquist frequency (Hz)
+tot_dataset_size=int(5e4)    # total number of training samples to use
+tset_split=int(5e4)          # number of training samples per saved data files
+r = 5                        # the grid dimension for the output tests
+iterations=int(1e7)          # total number of training iterations
+n_noise=1                    # this is a redundant parameter. Needs to be removed TODO
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
     params = dict(
-        image_size = [1,ndata], # Images Size
-        print_values=True, # optionally print values every report interval
-        n_samples = 5000, # number of posterior samples to save per reconstruction upon inference 
-        num_iterations=150001, # number of iterations inference model (inverse reconstruction)
+        image_size = [1,ndata],       # Images Size
+        print_values=True,            # optionally print values every report interval
+        n_samples = 5000,             # number of posterior samples to save per reconstruction upon inference 
+        num_iterations=150001,        # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=128, # batch size inference model (inverse reconstruction)
-        report_interval=500, # interval at which to save objective function values and optionally print info during inference training
-        z_dimension=64, # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights = 2048, # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        save_interval=5000, # interval at which to save inference model weights
-#        num_iterations_fw= 3000001, # number of iterations of multifidelity forward model training
-#        initial_training_rate_fw=0.00002, # initial training rate for ADAM optimiser of multifidelity forward model training
-#        report_interval_fw=5000, # interval at which to save objective function values and optionally print info during multifidelity forward model training
-#        z_dimensions_fw = 100, # latent space dimensionality of forward model
-#        n_weights_fw = 3000, # intermediate layers dimensionality in forward model neural networks
-#        batch_size_fw=128, # batch size of multifidelity forward model training
-#        save_interval_fw=15000, # interval at which to save multi-fidelity forward model weights
+        batch_size=128,               # batch size inference model (inverse reconstruction)
+        report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
+        z_dimension=64,               # number of latent space dimensions inference model (inverse reconstruction)
+        n_weights = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        save_interval=5000,           # interval at which to save inference model weights
 
         
         ndata = ndata,
-        r = r,                      # the grid dimension for the output tests
-        ndim_x=4,                    # number of parameters to PE on
-        sigma=1.0,                   # stadnard deviation of the noise on signal
-        usepars=[0,1,2,3],             # which parameters you want to do PE on
-        tot_dataset_size=tot_dataset_size, # total size of training set
-        tset_split=tset_split,            # n_samples per training set file
-        seed=42,                     # random seed number
-        run_label=run_label,            # label for run
-        plot_dir=plot_dir,                 # plot directory
-        parnames=['m1','t0','m2','lum_dist'],    # parameter names
-        T = T,           # length of time series (s)
-        dt = T/ndata,        # sampling time (Sec)
-        fnyq = 0.5/dt,   # Nyquist frequency (Hz),
+        r = r,                                # the grid dimension for the output tests
+        ndim_x=4,                             # number of parameters to PE on
+        sigma=1.0,                            # stadnard deviation of the noise on signal
+        usepars=[0,1,2,3],                    # which parameters you want to do PE on
+        tot_dataset_size=tot_dataset_size,    # total size of training set
+        tset_split=tset_split,                # n_samples per training set file
+        seed=42,                              # random seed number
+        run_label=run_label,                  # label for run
+        plot_dir=plot_dir,                    # plot directory
+        parnames=['m1','t0','m2','lum_dist'], # parameter names
+        T = T,                                # length of time series (s)
+        dt = T/ndata,                         # sampling time (Sec)
+        fnyq = 0.5/dt,                        # Nyquist frequency (Hz),
         train_set_dir='training_sets_nowin_par4/tset_tot-%d_split-%d_%dNoise' % (tot_dataset_size,tset_split,n_noise), #location of training set
         test_set_dir='test_sets_nowin_par4/tset_tot-%d_freq-%d' % (r*r,ndata), #location of training set
-        add_noise_real=True, # whether or not to add extra noise realizations in training set
-        n_noise=n_noise,          # number of noise realizations
-        ref_gps_time=1126259643.0, # reference gps time + 0.5s (t0 where test samples are injected+0.5s)
-        do_normscale=True,   # if true normalize parameters
-        do_mc_eta_conversion=False, # if True, convert m1 and m2 parameters into mc and eta
-        n_kl_samp=100,              # number of iterations in statistic tests
-        do_adkskl_test=True,        # if True, do statistic tests
-        do_m1_m2_cut=False,         # if True, make a cut on all m1 and m2 values    
-        do_extra_noise=True,         # add extra noise realizations during training
-        do_load_in_chunks=False,      # if True, load training samples in random file chucnks every 25000 epochs
-        Npp = 100                    # number of test signals per pp-plot
+        add_noise_real=True,                  # whether or not to add extra noise realizations in training set
+        n_noise=n_noise,                      # number of noise realizations
+        ref_gps_time=1126259643.0,            # reference gps time + 0.5s (t0 where test samples are injected+0.5s)
+        do_normscale=True,                    # if true normalize parameters
+        do_mc_eta_conversion=False,           # if True, convert m1 and m2 parameters into mc and eta
+        n_kl_samp=100,                        # number of iterations in statistic tests
+        do_adkskl_test=True,                  # if True, do statistic tests
+        do_m1_m2_cut=False,                   # if True, make a cut on all m1 and m2 values    
+        do_extra_noise=True,                  # add extra noise realizations during training
+        do_load_in_chunks=False,              # if True, load training samples in random file chucnks every 25000 epochs
+        Npp = 100                             # number of test signals per pp-plot
     )
     return params
 
@@ -149,9 +139,6 @@ def make_bbh(hp,hc,fs,ra,dec,psi,det,ifos,event_time):
         h-cross version of GW waveform
     """
     # compute antenna response and apply
-    #Fp=ifos.antenna_response(ra,dec,float(event_time),psi,'plus')
-    #Fc=ifos.antenna_response(ra,dec,float(event_time),psi,'cross')
-    #Fp,Fc,_,_ = antenna.response(float(event_time), ra, dec, 0, psi, 'radians', det )
     ht = hp + hc     # overwrite the timeseries vector to reuse it
 
     return ht, hp, hc
@@ -284,8 +271,8 @@ def gen_masses(m_min=5.0,M_max=100.0,mdist='metric'):
         new_m_min = m_min
         new_M_max = M_max
         while not flag:
-            m1 = np.random.uniform(low=35.0,high=50.0)
-            m2 = np.random.uniform(low=35.0,high=50.0)
+            m1 = np.random.uniform(low=20.0,high=50.0)
+            m2 = np.random.uniform(low=20.0,high=50.0)
             m12 = np.array([m1,m2]) 
             flag = True if (np.sum(m12)<new_M_max) and (np.all(m12>new_m_min)) and (m12[0]>=m12[1]) else False
         eta = m12[0]*m12[1]/(m12[0]+m12[1])**2
@@ -340,7 +327,7 @@ def gen_par(fs,T_obs,geocent_time,mdist='metric'):
         class containing parameters of waveform
     """
     # define distribution params
-    m_min = 35.0         # 5 rest frame component masses
+    m_min = 20.0         # 5 rest frame component masses
     M_max = 100.0       # 100 rest frame total mass
 
     m12, mc, eta = gen_masses(m_min,M_max,mdist=mdist)
@@ -359,7 +346,7 @@ def gen_par(fs,T_obs,geocent_time,mdist='metric'):
     geocent_time = np.random.uniform(low=geocent_time-0.1,high=geocent_time+0.1)
     print('{}: selected bbh GPS time = {}'.format(time.asctime(),geocent_time))
 
-    lum_dist = np.random.uniform(low=1e3, high=3e3)
+    lum_dist = np.random.uniform(low=1e2, high=1e3)
     #lum_dist = int(2e3)
     print('{}: selected bbh luminosity distance = {}'.format(time.asctime(),lum_dist))
 
@@ -392,9 +379,6 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     # Specify the output directory and the name of the simulation.
     label = run_label
     bilby.core.utils.setup_logger(outdir=outdir, label=label)
-
-    # Set up a random seed for result reproducibility.  This is optional!
-    #np.random.seed(88170235)
 
     # We are going to inject a binary black hole waveform.  We first establish a
     # dictionary of parameters that includes all of the different waveform
@@ -435,8 +419,12 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
             pars['m1'], pars['m2'], mc, eta, pars['phase'], pars['geocent_time'], pars['lum_dist'], pars['theta_jn']=gen_par(duration,sampling_frequency,geocent_time,mdist='uniform')
             # make gps time to be same as ref time
             pars['geocent_time']=ref_geocent_time
-            #pars['phase'] = pos_test[cnt,1]
-            #mc = pos_test[cnt,0]
+
+            # GW150914 parameters
+            # uncomment to make randomized samples
+            pars['lum_dist'] = 410.0
+            pars['m1'] = 35.8 # source frame mass
+            pars['m2'] = 29.1 # source frame mass
 
             # inject signal
             test_samp_noisefree,test_samp_noisy,injection_parameters,ifos,waveform_generator = gen_template(duration,sampling_frequency,
@@ -461,10 +449,8 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
         maximum=injection_parameters['geocent_time'] + 0.1,#duration/2,
         name='geocent_time', latex_label='$t_c$', unit='$s$')
     # fix the following parameter priors
-    #priors.pop('mass_1')
-    #priors.pop('mass_2')
-    priors['mass_1'] = bilby.gw.prior.Uniform(name='mass_1', minimum=35.0, maximum=50.0,unit='$M_{\odot}$')
-    priors['mass_2'] = bilby.gw.prior.Uniform(name='mass_2', minimum=35.0, maximum=50.0,unit='$M_{\odot}$')
+    priors['mass_1'] = bilby.gw.prior.Uniform(name='mass_1', minimum=20.0, maximum=50.0,unit='$M_{\odot}$')
+    priors['mass_2'] = bilby.gw.prior.Uniform(name='mass_2', minimum=20.0, maximum=50.0,unit='$M_{\odot}$')
     priors['a_1'] = 0
     priors['a_2'] = 0
     priors['tilt_1'] = 0
@@ -480,16 +466,8 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     #priors['chirp_mass'] = bilby.gw.prior.Uniform(name='chirp_mass', minimum=30.469269715364344, maximum=43.527528164806206, latex_label='$mc$', unit='$M_{\\odot}$')
     priors['phase'] = bilby.gw.prior.Uniform(name='phase', minimum=0.0, maximum=2*np.pi)
     #priors['phase'] = 0.0
-    priors['luminosity_distance'] =  bilby.gw.prior.Uniform(name='luminosity_distance', minimum=1e3, maximum=3e3, unit='Mpc')
+    priors['luminosity_distance'] =  bilby.gw.prior.Uniform(name='luminosity_distance', minimum=1e2, maximum=1e3, unit='Mpc')
     #priors['luminosity_distance'] = int(2e3)
-
-    # try only doing pe on 3 pars
-    #priors['phase'] = 1.3
-
-    # all pars not included from list above will have pe done on them
-    #for key in ['a_1', 'a_2', 'tilt_1', 'tilt_2', 'phi_12', 'phi_jl', 'theta_jn', 'psi', 'ra',
-    #            'dec']:
-    #    priors[key] = injection_parameters[key]
 
     # Initialise the likelihood by passing in the interferometer data (ifos) and
     # the waveform generator
@@ -497,28 +475,11 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
         interferometers=ifos, waveform_generator=waveform_generator, phase_marginalization=False,
         priors=priors)
 
-    #likelihood = bilby.gw.GravitationalWaveTransient(
-    #interferometers=ifos, waveform_generator=waveform_generator, priors=priors,
-    #distance_marginalization=False, phase_marginalization=True, time_marginalization=False)
-
     # Run sampler.  In this case we're going to use the `dynesty` sampler
-    #dynesty=bilby.core.sampler.dynesty.Dynesty(likelihood=likelihood,priors=priors,dlogz=100.)
-    #conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
     result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
         likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
         injection_parameters=injection_parameters, outdir=outdir, label=label,
         save='hdf5')
-
-    #converted_results=bilby.gw.conversion.generate_phase_sample_from_marginalized_likelihood(sample=dict(result.posterior),likelihood=likelihood)
-    #converted_result = result.samples_to_posterior(likelihood=likelihood,priors=priors,
-    #                                               conversion_function=bilby.gw.conversion.generate_phase_sample_from_marginalized_likelihood)
-
-    #result = bilby.run_sampler(
-    #likelihood=likelihood, priors=priors, sampler='cpnest', npoints=2000,
-    #injection_parameters=injection_parameters, outdir=outdir,
-    #label=label, maxmcmc=2000,
-    #conversion_function=bilby.gw.conversion.generate_all_bbh_parameters)
-
 
     # Make a corner plot.
     result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance','theta_jn'])
@@ -548,6 +509,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
 
     print('finished running pe')
 
+#####################################################
 # You will need two types of sets to train the model: 
 #
 # 1) High-Fidelity Set. Small set, but with accurate measurements paired to the groundtruths. Will need the following sets:
@@ -564,7 +526,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
 # y_data_test_h - new measurements you want to infer a solution posterior from    
 #
 # All inputs and outputs are in the form of 2D arrays, where different objects are along dimension 0 and elements of the same object are along dimension 1
-
+#####################################################
 
 # Get the training/test data and parameters of run
 params=get_params()
@@ -662,14 +624,6 @@ if type("%s" % params['train_set_dir']) is str:
 for filename in os.listdir(dataLocations[0]):
     train_files.append(filename)
 
-# Make test samples and posteriors
-#for i in range(params['r'] * params['r']):
-#    f = h5py.File('%s/test_samp_%d.h5py' % (params['test_set_dir'],i), 'r+')
-#    bilby_pe.run(cnt=i,pos_test=pos_test,file_test=f,run_label='test_samp_%d' % i,make_test_samp=True,make_train_samp=False,duration=params['T'],sampling_frequency=params['ndata'],outdir=params['test_set_dir'])
-#    f.close()
-#print(pos_test)
-#exit()
-
 if not params['do_load_in_chunks']:
     # load generated samples back in
     if type("%s" % params['train_set_dir']) is str:
@@ -688,9 +642,6 @@ if not params['do_load_in_chunks']:
     data['y_data_train_noisefree'] = np.concatenate(np.array(data['y_data_train_noisefree']), axis=0)
 
     if params['do_normscale']:
-
-    # rescale t0
-#    data['x_data_train_h'][:,2] += 100.5
 
         normscales = [np.max(data['x_data_train_h'][:,0]),np.max(data['x_data_train_h'][:,1]),np.max(data['x_data_train_h'][:,2]),np.max(data['x_data_train_h'][:,3]),np.max(data['x_data_train_h'][:,4])]#,np.max(data['pos'][:,5])]
 
@@ -735,15 +686,8 @@ if params['do_load_in_chunks']:
 # Declare plot class variables
 plotter = plots.make_plots(params,samples,None,pos_test)
 
-# First, we learn a multi-fidelity model that lerns to infer high-fidelity (accurate) observations from trget images/objects and low fidelity simulated observations. for this we use the portion of the training set for which we do have real/high fidelity observations.
-#forward_loss1, forward_loss2 = VICI_forward_model.train(params, x_data_train_h, y_data_train_h, y_data_train_lh, "forward_model_dir_%s/forward_model.ckpt" % params['run_label'], plotter, pos_test, y_data_test_h, sig_test,y_normscale) # This trains the forward model and saves the weights in forward_model_dir/forward_model.ckpt
-
 #loss_inv=[0.0]
 #kl_inv=[0.0]
-
-# We then train the inference model using all training images and associated low-fidelity (inaccurate) observations. Using the previously trained forward model to draw from the observation likelihood.
-#loss_inv, kl_inv = VICI_inverse_model.train(params, x_data_train, y_data_train_l, np.shape(y_data_train_h)[1], "forward_model_dir_%s/forward_model.ckpt" % params['run_label'], "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'], plotter, y_data_test_h) # This trains the inverse model to recover posteriors using the forward model weights stored in forward_model_dir/forward_model.ckpt and saves the inverse model weights in inverse_model_dir/inverse_model.ckpt 
-#inverse_loss1, inverse_loss2 = VICI_inverse_model.resume_training(params, x_data_train, y_data_train_l, np.shape(y_data_train_h)[1], "forward_model_dir_%s/forward_model.ckpt" % params['run_label'], "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
 
 olvec = np.zeros((params['r'],params['r'],int(iterations/(params['num_iterations']-1))))
 s=0
