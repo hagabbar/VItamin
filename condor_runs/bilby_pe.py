@@ -409,7 +409,7 @@ def run(sampling_frequency=256.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     # Run sampler dynesty 1 sampler
     result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
         likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
-        injection_parameters=injection_parameters, outdir=outdir+'_dynesty1', label=label, dlogz=float(150),
+        injection_parameters=injection_parameters, outdir=outdir+'_dynesty1', label=label,
         save='hdf5')
 
     # save test sample waveform
@@ -431,7 +431,7 @@ def run(sampling_frequency=256.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     # Run dynesty 2 sampler.
     result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
         likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
-        injection_parameters=injection_parameters, outdir=outdir+'_dynesty2', label=label, dlogz=float(150),
+        injection_parameters=injection_parameters, outdir=outdir+'_dynesty2', label=label,
         save='hdf5')
 
     # save test sample waveform
@@ -453,7 +453,7 @@ def run(sampling_frequency=256.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     # emcee sampler
     result = bilby.run_sampler(
         likelihood=likelihood, priors=priors, sampler='emcee',
-        nwalkers=100, nsteps=1000, nburn=500,
+        nwalkers=100, nsteps=3000, nburn=1000,
         injection_parameters=injection_parameters, outdir=outdir+'_emcee1', label=label,
         save='hdf5')
 
@@ -479,7 +479,7 @@ def run(sampling_frequency=256.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     # emcee sampler
     result = bilby.run_sampler(
         likelihood=likelihood, priors=priors, sampler='emcee',
-        nwalkers=100, nsteps=1000, nburn=500,
+        nwalkers=100, nsteps=3000, nburn=1000,
         injection_parameters=injection_parameters, outdir=outdir+'_emcee2', label=label,
         save='hdf5')
 
