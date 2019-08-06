@@ -7,9 +7,9 @@ from matplotlib.collections import PatchCollection
 import numpy as np
 from scipy.stats import uniform, norm, gaussian_kde, ks_2samp, anderson_ksamp
 from scipy import stats
+import h5py
 
 from data import chris_data as data_maker
-from Models import VICI_forward_model
 from Models import VICI_inverse_model
 from Models import CVAE
 
@@ -66,7 +66,7 @@ class make_plots:
             c=vici = []
             for i in range(inn_samps.shape[0]):
                 # remove samples outside of the prior mass distribution
-                mask = [(inn_samps[0,:] >= inn_samps[2,:]) & (inn_samps[3,:] >= 1000.0) & (inn_samps[3,:] <= 3000.0) & (inn_samps[1,:] >= 0.4) & (inn_samps[1,:] <= 0.6) & (inn_samps[0,:] >= 35.0) & (inn_samps[0,:] <= 50.0) & (inn_samps[2,:] <= 50.0) & (inn_samps[2,:] >= 35.0)]
+                mask = [(inn_samps[0,:] >= inn_samps[2,:]) & (inn_samps[3,:] >= 1000.0) & (inn_samps[3,:] <= 3000.0) & (inn_samps[1,:] >= 0.4) & (inn_samps[1,:] <= 0.6) & (inn_samps[0,:] >= 35.0) & (inn_samps[0,:] <= 80.0) & (inn_samps[2,:] <= 80.0) & (inn_samps[2,:] >= 35.0)]
                 mask = np.argwhere(mask[0])
                 new_rev = inn_samps[i,mask]
                 new_rev = new_rev.reshape(new_rev.shape[0])
@@ -175,6 +175,8 @@ class make_plots:
         plt.plot([0,1],[0,1],'--k')
         plt.xlim([0,1])
         plt.ylim([0,1])
+        plt.ylabel('Empirical Cummulative Distribution')
+        plt.xlabel('Theoretical Cummulative Distribution')
         plt.savefig('%s/pp_plot_%04d.png' % (outdir,i_epoch),dpi=360)
         plt.savefig('%s/latest/latest_pp_plot.png' % outdir,dpi=360)
         plt.close()
@@ -245,284 +247,15 @@ class make_plots:
         plt.close(fig_zoom)
         return
 
-    def plot_y_dist(self,i_epoch,x_test,y_test,sig_test,y_normscale):
-        """
-        Plots the joint distributions of y variables
-        """
-        params=self.params
-        Nsamp = params['r']*params['r']
-
-        # generate test data
-        #x_test, y_test, x, sig_test, parnames = data_maker.generate(
-        #    tot_dataset_size=Nsamp,
-        #    ndata=params['ndata'],
-        #    usepars=params['usepars'],
-        #    sigma=params['sigma'],
-        #    seed=params['seed']
-        #)
-
-        # run the x test data through the model
-        x = x_test
-        y_test = y_test
-        sig_test = sig_test
-
-        # apply forward model to the x data
-        _,_,y = VICI_forward_model.run(params, x, y_test, np.shape(y_test)[1], "forward_model_dir_%s/forward_model.ckpt" % params['run_label'])
-
-        sig_test = sig_test
-        dy = y - y_test
-
-        y*=y_normscale[0]
-        y_test *= y_normscale[0]
-
-        """
-        C = np.cov(dy.transpose())
-
-        fig, axes = plt.subplots(1,figsize=(5,5))
-
-        im = axes.imshow(C)
-
-        # We want to show all ticks...
-        axes.set_xticks(np.arange(params['ndata']))
-        axes.set_yticks(np.arange(params['ndata']))
-
-        # Rotate the tick labels and set their alignment.
-        plt.setp(axes.get_xticklabels(), rotation=45, ha="right",
-             rotation_mode="anchor")
-
-        # Loop over data dimensions and create text annotations.
-        for i in range(params['ndata']):
-            for j in range(params['ndata']):
-                text = axes.text(j,i,'%.2f' % C[i,j], fontsize=3,
-                           ha="center",va="center",color="w")
-
-        fig.tight_layout()
-        plt.savefig('%s/latest/latest_cov_y.png' % params['plot_dir'],dpi=360)
-        plt.close(fig)
-        """
-
-        fig, axes = plt.subplots(1,figsize=(5,5))
-        delta = np.transpose(y[:,:]-y_test[:,:])
-        dyvec = np.linspace(-10*params['sigma'],10*params['sigma'],50)
-        for d in delta:
-            plt.hist(np.array(d).flatten(),25,density=True,histtype='stepfilled',alpha=0.5)
-        plt.hist(np.array(delta).flatten(),25,density=True,histtype='step',linestyle='dashed')
-        #plt.plot(dyvec,norm.pdf(dyvec,loc=0,scale=np.sqrt(2.0)*params['sigma']),'k-')
-        plt.xlabel('y-y_pred')
-        plt.ylabel('p(y-y_pred)')
-        plt.savefig('%s/y_dist_%04d.png' % (params['plot_dir'][0],i_epoch),dpi=360)
-        plt.savefig('%s/latest/y_dist.png' % params['plot_dir'],dpi=360)
-        plt.close(fig)
-        return
-
-    def plot_x_evolution(self):
-        """
-        Plot examples of test y-data generation
-        """
-        Nsamp = 100
-        out_shape = [-1,ndim_tot]
-        if conv==True:
-            in_shape = [-1,1,ndim_tot]
-        else:
-            in_shape = [-1,ndim_tot]
-        fig, axes = plt.subplots(ndim_x,ndim_x,figsize=(6,6))
-
-        # make a noisy signal in the middle of the space
-        t = np.arange(ndim_y)/float(ndim_y)
-        A,t0,tau,p,w = np.array([0.5,0.5,0.5,0.2,0.2])
-        fnyq = 0.5*len(t)
-        s = A*np.sin(2.0*np.pi*(w*fnyq*(t-t0) + p))*np.exp(-((t-t0)/tau)**2)
-
-        y_orig = s + np.random.normal(loc=0.0,scale=sigma,size=ndim_y)
-        y = torch.tensor(np.tile(np.array(y_orig),Nsamp+1).reshape(Nsamp+1,ndim_y),dtype=torch.float,device=dev)
-
-        # make random colors
-        cols = ['r','b','g']
-
-        # loop over different shells of z
-        for j in range(3):
-
-            # make specific z values
-            temp = np.random.normal(loc=0.0,scale=1.0,size=(Nsamp+1,ndim_z))
-            z = (j+1)*np.array([t/np.linalg.norm(t) for t in temp])
-            z = torch.tensor(z,dtype=torch.float,device=dev)
-            pad_yz = torch.zeros(Nsamp+1,ndim_tot-ndim_y-ndim_z,device=dev)
-            yz_padded = torch.cat((y,z,pad_yz),dim=1)
-
-            # apply backward model to the padded yz data
-            if do_double_nn:
-                if do_cnn:
-                    data = torch.cat((y,z), dim=1)
-                    output = model_r(data.reshape(data.shape[0],1,data.shape[1]))#.reshape(out_shape)
-                    output_x = output[:,:ndim_x]  # extract the model output y
-                else:
-                    output = model_r(torch.cat((y,z), dim=1))#.reshape(out_shape)
-                    output_x = output[:,:ndim_x]  # extract the model output y
-            else:
-                output = model(yz_padded.reshape(in_shape),rev=True)#.reshape(out_shape)
-                output_x = output[:,model.inSchema.amp[0]:model.inSchema.tau[-1]+1]  # extract the model output y
-            x = output_x.cpu().data.numpy()
-
-            # loop over input parameters
-            for i in range(ndim_x):
-                for k in range(ndim_x):
-                    if k<i:
-                        axes[i,k].plot(x[:,i],x[:,k],'.',markersize=0.5,color=cols[j])
-                        axes[i,k].set_xlim([0,1])
-                        axes[i,k].set_ylim([0,1])
-                        matplotlib.rc('xtick', labelsize=8)
-                        matplotlib.rc('ytick', labelsize=8)
-                        axes[i,k].set_xlabel(parnames[i])
-                        axes[i,k].set_ylabel(parnames[k])
-                    elif k==ndim_x-2 and i==ndim_x-2:
-                        axes[i,k].plot(np.arange(ndim_y)/float(ndim_y),y_orig,'b-')
-                        axes[i,k].plot(np.arange(ndim_y)/float(ndim_y),s,'r-')
-                        axes[i,k].set_xlim([0,1])
-                        axes[i,k].set_ylim([-1,1])
-                        matplotlib.rc('xtick', labelsize=8)
-                        matplotlib.rc('ytick', labelsize=8)
-                        axes[i,k].set_xlabel('t')
-                        axes[i,k].set_ylabel('y')
-                    else:
-                        axes[i,k].axis('off')
-
-        fig.canvas.draw()
-        plt.savefig('%s/xevo_%04d.png' % (outdir,i_epoch),dpi=360)
-        plt.savefig('%s/latest/latest_xevo.png' % (outdir),dpi=360)
-        plt.close()
-        return
-
-    def plot_z_dist(self):
-        """
-        Plots the distribution of latent z variables
-        """
-        Nsamp = 250
-        out_shape = [-1,ndim_tot]
-        if conv==True:
-            in_shape = [-1,1,ndim_tot]
-        else:
-            in_shape = [-1,ndim_tot]
-
-        # generate test data
-        x_test, y_test, x, sig_test, parnames = data_maker.generate(
-            tot_dataset_size=Nsamp,
-            ndata=ndim_y,
-            usepars=usepars,
-            sigma=sigma,
-            seed=1
-        )
-
-        # run the x test data through the model
-        x = torch.tensor(x_test,dtype=torch.float,device=dev).clone().detach()
-        y_test = torch.tensor(y_test,dtype=torch.float,device=dev).clone().detach()
-        sig_test = torch.tensor(sig_test,dtype=torch.float,device=dev).clone().detach()
-
-        # make the new padding for the noisy data and latent vector data
-        pad_x = torch.zeros(Nsamp,ndim_tot-ndim_x-ndim_y,device=dev)
-
-        # make a padded zy vector (with all new noise)
-        x_padded = torch.cat((x,pad_x,y_test-sig_test),dim=1)
-
-        # apply forward model to the x data
-        if do_double_nn:
-            if do_cnn:
-                data = torch.cat((x,y_test-sig_test), dim=1)
-                output = model_f(data.reshape(data.shape[0],1,data.shape[1]))#.reshape(out_shape)
-                output_z = output[:,ndim_y:]  # extract the model output y
-            else:
-                output = model_f(torch.cat((x,y_test-sig_test), dim=1))#.reshape(out_shape)
-                output_z = output[:,ndim_y:]  # extract the model output y
-        else:
-            output = model(x_padded.reshape(in_shape))#.reshape(out_shape)
-            output_z = output[:,model.outSchema.LatentSpace]  # extract the model output y
-        z = output_z.cpu().data.numpy()
-        C = np.cov(z.transpose())
-
-        fig, axes = plt.subplots(1,figsize=(5,5))
-        im = axes.imshow(np.abs(C))
-
-        # We want to show all ticks...
-        axes.set_xticks(np.arange(ndim_z))
-        axes.set_yticks(np.arange(ndim_z))
-
-        # Rotate the tick labels and set their alignment.
-        plt.setp(axes.get_xticklabels(), rotation=45, ha="right",
-             rotation_mode="anchor")
-
-        # Loop over data dimensions and create text annotations.
-        for i in range(ndim_z):
-            for j in range(ndim_z):
-                text = axes.text(j,i,'%.2f' % C[i,j], fontsize=3,
-                           ha="center",va="center",color="w")
-
-        fig.tight_layout()
-        fig.savefig('%s/cov_z_%04d.png' % (outdir,i_epoch),dpi=360)
-        fig.savefig('%s/latest/latest_cov_z.png' % outdir,dpi=360)
-        plt.close(fig)
-
-        fig, axes = plt.subplots(ndim_z,ndim_z,figsize=(5,5))
-        for c in range(ndim_z):
-            for d in range(ndim_z):
-                if d<c:
-                    patches = []
-                    axes[c,d].clear()
-                    matplotlib.rc('xtick', labelsize=8)
-                    matplotlib.rc('ytick', labelsize=8)
-                    axes[c,d].plot(z[:,c],z[:,d],'.r',markersize=0.5)
-                    circle1 = Circle((0.0, 0.0), 1.0,fill=False,linestyle='--')
-                    patches.append(circle1)
-                    circle2 = Circle((0.0, 0.0), 2.0,fill=False,linestyle='--')
-                    patches.append(circle2)
-                    circle3 = Circle((0.0, 0.0), 3.0,fill=False,linestyle='--')
-                    patches.append(circle3)
-                    p = PatchCollection(patches, alpha=0.2)
-                    axes[c,d].add_collection(p)
-                    axes[c,d].set_yticklabels([])
-                    axes[c,d].set_xticklabels([])
-                    axes[c,d].set_xlim([-3,3])
-                    axes[c,d].set_ylim([-3,3])
-                else:
-                    axes[c,d].axis('off')
-                axes[c,d].set_xlabel('')
-                axes[c,d].set_ylabel('')
-
-        fig.savefig('%s/scatter_z_%04d.png' % (outdir,i_epoch),dpi=360)
-        fig.savefig('%s/latest/latest_scatter_z.png' % outdir,dpi=360)
-        plt.close(fig)
-
-        fig, axes = plt.subplots(1,figsize=(5,5))
-        delta = np.transpose(z[:,:])
-        dyvec = np.linspace(-10*1.0,10*1.0,250)
-        for d in delta:
-            plt.hist(np.array(d).flatten(),25,density=True,histtype='stepfilled',alpha=0.5)
-        plt.hist(np.array(delta).flatten(),25,density=True,histtype='step',linestyle='dashed')
-        plt.plot(dyvec,norm.pdf(dyvec,loc=0,scale=1.0),'k-')
-        plt.xlabel('predicted z')
-        plt.ylabel('p(z)')
-
-        fig.savefig('%s/dist_z_%04d.png' % (outdir,i_epoch),dpi=360)
-        fig.savefig('%s/latest/latest_dist_z.png' % outdir,dpi=360)
-        plt.close(fig)
-
-        return
-
-
-    # Plot predicted time series vs. actually time series examples
-    """
-    # Make x evolution plot
-    plot_x_evolution(model,ndim_x,ndim_y,ndim_z,ndim_tot,sigma,parnames,out_dir,epoch,conv=False)
-    # Make z distribution plots
-    plot_z_dist(model,ndim_x,ndim_y,ndim_z,ndim_tot,usepars,sigma,out_dir,epoch,conv=False)
-    """
-
     def make_loss_plot(self,KL_PLOT,COST_PLOT,i):
         # make log loss plot
         fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
         axes_loss.grid()
         axes_loss.set_ylabel('Loss')
         axes_loss.set_xlabel('Iterations elapsed: %s' % i)
-        axes_loss.semilogy(np.arange(len(KL_PLOT)), np.abs(KL_PLOT), label='KL')
-        axes_loss.semilogy(np.arange(len(COST_PLOT)), np.abs(COST_PLOT), label='COST')
+        axes_loss.semilogx(np.arange(len(KL_PLOT)), KL_PLOT, label='KL')
+        axes_loss.semilogx(np.arange(len(COST_PLOT)), COST_PLOT, label='COST')
+        axes_loss.semilogx(np.arange(len(COST_PLOT)), (KL_PLOT+COST_PLOT), label='Total')
         axes_loss.legend(loc='upper left')
         plt.savefig('%s/latest/losses_logscale.png' % self.params['plot_dir'])
         plt.close(fig_loss)
@@ -534,12 +267,175 @@ class make_plots:
         axes_loss.set_xlabel('Iterations elapsed: %s' % i)
         axes_loss.plot(np.arange(len(KL_PLOT)), KL_PLOT, label='KL')
         axes_loss.plot(np.arange(len(COST_PLOT)), COST_PLOT, label='COST')
+        axes_loss.plot(np.arange(len(COST_PLOT)), (KL_PLOT+COST_PLOT), label='Total')
         axes_loss.set_xscale('log')
         axes_loss.set_yscale('log')
         axes_loss.legend(loc='upper left')
         plt.savefig('%s/latest/losses.png' % self.params['plot_dir'])
         plt.close(fig_loss)
 
+
+    def gen_kl_plots(self,model,sig_test,par_test,normscales):
+
+
+        """
+        Make kl corner histogram plots. Currently writing such that we 
+        still bootstrap a split between samplers with themselves, but 
+        will rewrite that once I find a way to run condor on 
+        Bilby sampler runs.
+        """
+
+        def load_test_set(model,sig_test,par_test,normscales,sampler='dynesty1'):
+            """
+            load requested test set
+            """
+
+            if sampler=='vitamin1' or sampler=='vitamin2':
+                # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+                _, _, x, _ = model.run(self.params, sig_test, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
+
+                # Convert XS back to unnormalized version
+                if self.params['do_normscale']:
+                    for m in range(self.params['ndim_x']):
+                        x[:,m,:] = x[:,m,:]*normscales[m] 
+                return x               
+
+            # Define variables
+            pos_test = []
+            samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndim_x']+1))
+            cnt=0
+            test_set_dir = params['kl_set_dir'] + '_' + sampler
+
+            # Load test set
+            for i in range(params['r']):
+                for j in range(params['r']):
+                    # TODO: remove this bandaged phase file calc
+                    f = h5py.File('%s/test_samp_%d.h5py' % (test_set_dir,cnt), 'r+')
+
+                    # select samples from posterior randomly
+                    shuffling = np.random.permutation(f['phase_post'][:].shape[0])
+                    phase = f['phase_post'][:][shuffling]
+
+                    if params['do_mc_eta_conversion']:
+                        m1 = f['mass_1_post'][:][shuffling]
+                        m2 = f['mass_2_post'][:][shuffling]
+                        eta = (m1*m2)/(m1+m2)**2
+                        mc = np.sum([m1,m2], axis=0)*eta**(3.0/5.0)
+                    else:
+                        m1 = f['mass_1_post'][:][shuffling]
+                        m2 = f['mass_2_post'][:][shuffling]
+                    t0 = params['ref_gps_time'] - f['geocent_time_post'][:][shuffling]
+                    dist=f['luminosity_distance_post'][:][shuffling]
+                    #theta_jn=f['theta_jn_post'][:][shuffling]
+                    if params['do_mc_eta_conversion']:
+                        f_new=np.array([mc,phase,t0,eta]).T
+                    else:
+                        f_new=np.array([m1,phase,t0,m2,dist]).T
+                    f_new=f_new[:params['n_samples'],:]
+                    samples[cnt,:,:]=f_new
+
+                    # get true scalar parameters
+                    if params['do_mc_eta_conversion']:
+                        m1 = np.array(f['mass_1'])
+                        m2 = np.array(f['mass_2'])
+                        eta = (m1*m2)/(m1+m2)**2
+                        mc = np.sum([m1,m2])*eta**(3.0/5.0)
+                        pos_test.append([mc,np.array(f['phase']),params['ref_gps_time']-np.array(f['geocent_time']),eta])
+                    else:
+                        m1 = np.array(f['mass_1'])
+                        m2 = np.array(f['mass_2'])
+                        pos_test.append([m1,np.array(f['phase']),params['ref_gps_time']-np.array(f['geocent_time']),m2,np.array(f['luminosity_distance'])])
+                    cnt += 1
+                    f.close()
+
+            pos_test = np.array(pos_test)
+            
+            pos_test = pos_test[:,[0,2,3,4]]
+            samples = samples[:,:,[0,2,3,4]]
+            samples = samples.reshape(samples.shape[0],samples.shape[2],samples.shape[1])
+
+            return samples
+
+        def compute_kl(sampset_1,sampset_2):
+            """
+            Compute KL for one test case.
+            """
+            # Remove samples outside of the prior mass distribution           
+            cur_max = self.params['n_samples']
+            set1 = []
+            set2 = []
+
+            # Iterate over parameters and remove samples outside of prior
+            for i in range(sampset_1.shape[0]):
+                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                mask = np.argwhere(mask[0])
+                new_rev = sampset_1[i,mask]
+                new_rev = new_rev.reshape(new_rev.shape[0])
+                new_samples = sampset_2[i,mask]
+                new_samples = new_samples.reshape(new_samples.shape[0])
+                tmp_max = new_rev.shape[0]
+                if tmp_max < cur_max: cur_max = tmp_max
+                set1.append(new_rev[:cur_max])
+                set2.append(new_samples[:cur_max])
+
+            set1 = np.array(set1)
+            set2 = np.array(set2)
+
+            kl_samps = []
+            n_samps = self.params['n_samples']
+            n_pars = self.params['ndim_x']
+
+            # Iterate over number of randomized sample slices
+            for j in range(self.params['n_kl_samp']):
+                kl_result = np.sum(set2[:,np.random.randint(0,high=int(set2.shape[1]),size=int(set2.shape[1]/2.0))] * ( np.log(set2[:,np.random.randint(0,high=int(set2.shape[1]),size=int(set2.shape[1]/2.0))])
+                                            - np.log(set1[:,np.random.randint(0,high=int(set2.shape[1]),size=int(set2.shape[1]/2.0))]) ))
+                kl_samps.append(kl_result)
+            kl_arr = kl_samps   
+
+            return kl_arr
+   
+        # Define variables 
+        params = self.params
+        usesamps = params['use_samplers']
+        samplers = params['samplers']
+        fig_kl, axis_kl = plt.subplots(len(usesamps),len(usesamps),figsize=(6,6))
+        
+        # Compute kl divergence on all test cases with preds vs. benchmark
+        # Iterate over samplers
+        tmp_idx=len(usesamps)
+        for i in range(len(usesamps)):
+            for j in range(tmp_idx):
+                # Load appropriate test sets
+                if samplers[usesamps[i]] == samplers[usesamps[::-1][j]]:
+                    set1 = load_test_set(model,sig_test,par_test,normscales,sampler=samplers[usesamps[i]]+'1')
+                    set2 = load_test_set(model,sig_test,par_test,normscales,sampler=samplers[usesamps[::-1][j]]+'2')
+                else:
+                    set1 = load_test_set(model,sig_test,par_test,normscales,sampler=samplers[usesamps[i]]+'1')
+                    set2 = load_test_set(model,sig_test,par_test,normscales,sampler=samplers[usesamps[::-1][j]]+'1')
+
+                # Iterate over test cases
+                tot_kl = []
+                for r in range(self.params['r']**2):
+                    tot_kl.append(compute_kl(set1[r],set2[r]))
+                tot_kl = np.array(tot_kl)
+                tot_kl = tot_kl.flatten()
+
+                # Plot KL results
+                axis_kl[len(usesamps)-1-j,i].hist(tot_kl,bins=100,alpha=0.5,color='blue',normed=True)
+                for xtick,ytick in zip(axis_kl[i,j].xaxis.get_major_ticks(),axis_kl[i,j].yaxis.get_major_ticks()):
+                    xtick.label.set_fontsize(4)
+                    ytick.label.set_fontsize(4)
+
+                #axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
+
+            tmp_idx -= 1 
+
+        # Save KL corner plot
+        fig_kl.canvas.draw()
+        fig_kl.savefig('%s/latest/hist-kl.png' % (self.params['plot_dir'][0]),dpi=360)
+        plt.close(fig_kl)
+
+        return
 
     def make_overlap_plot(self,epoch,iterations,s,olvec,olvec_2d,adksVec):
         olvec_1d = np.zeros((self.params['r'],self.params['r'],self.params['ndim_x']))
@@ -564,12 +460,12 @@ class make_plots:
                     fig_1d_last, axes_1d_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
 
                     # initialize 1D plots for showing testing results
-                    fig_kl, axis_kl = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    #fig_kl, axis_kl = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
                     fig_ad, axis_ad = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
                     fig_ks, axis_ks = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
 
                     # initialize 1D plots for showing testing results for last 1d hist
-                    fig_kl_last, axis_kl_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    #fig_kl_last, axis_kl_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
                     fig_ad_last, axis_ad_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
                     fig_ks_last, axis_ks_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
 
@@ -578,7 +474,7 @@ class make_plots:
                         for j in range(self.params['r']):
 
                             # remove samples outside of the prior mass distribution
-                            mask = [(self.rev_x[cnt,0,:] >= self.rev_x[cnt,2,:]) & (self.rev_x[cnt,3,:] >= 1000.0) & (self.rev_x[cnt,3,:] <= 3000.0) & (self.rev_x[cnt,1,:] >= 0.4) & (self.rev_x[cnt,1,:] <= 0.6) & (self.rev_x[cnt,0,:] >= 35.0) & (self.rev_x[cnt,0,:] <= 50.0) & (self.rev_x[cnt,2,:] <= 50.0) & (self.rev_x[cnt,2,:] >= 35.0)]
+                            mask = [(self.rev_x[cnt,0,:] >= self.rev_x[cnt,2,:]) & (self.rev_x[cnt,3,:] >= 1000.0) & (self.rev_x[cnt,3,:] <= 3000.0) & (self.rev_x[cnt,1,:] >= 0.4) & (self.rev_x[cnt,1,:] <= 0.6) & (self.rev_x[cnt,0,:] >= 35.0) & (self.rev_x[cnt,0,:] <= 80.0) & (self.rev_x[cnt,2,:] <= 80.0) & (self.rev_x[cnt,2,:] >= 35.0)]
                             mask = np.argwhere(mask[0])
                             new_rev = self.rev_x[cnt,nextk,mask]
                             new_rev = new_rev.reshape(new_rev.shape[0])
@@ -596,7 +492,7 @@ class make_plots:
                                     for c in range(6):
                                         for w in range(self.params['n_kl_samp']):
                                             adksVec[i,j,p,c,w] = np.array([ks_mcmc_arr,ks_inn_arr,ad_mcmc_arr,ad_inn_arr,kl_mcmc_arr, kl_inn_arr])[c,p,w]
-                            
+
                             # get 2d overlap values
                             #samples_2d = np.array([self.samples[cnt,:,k],self.samples[cnt,:,nextk]]).T
                             #rev_x_2d = np.array([self.rev_x[cnt,k,:],self.rev_x[cnt,nextk,:]]).T
@@ -620,7 +516,6 @@ class make_plots:
                             axes[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axes[i,j].set_xlabel('')
                             axes[i,j].set_ylabel(parname2) if j==0 else axes[i,j].set_ylabel('')
                             if i == 0 and j == 0: axes[i,j].legend(loc='upper left', fontsize='x-small')
-                            #cnt += 1
 
                             def confidence_bd(samp_array):
                                 """
@@ -677,13 +572,13 @@ class make_plots:
                                 #kl_max = np.max([adksVec[i,j,k,4,:],adksVec[i,j,k,5,:]])
                                 #adksVec[i,j,k,4,:] = adksVec[i,j,k,4,:] / kl_max
                                 #adksVec[i,j,k,5,:] = adksVec[i,j,k,5,:] / kl_max
-                                axis_kl[i,j].hist(adksVec[i,j,k,4,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True,label='Bilby')
-                                axis_kl[i,j].hist(adksVec[i,j,k,5,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True,label='VICI')
-                                for xtick,ytick in zip(axis_kl[i,j].xaxis.get_major_ticks(),axis_kl[i,j].yaxis.get_major_ticks()):
-                                    xtick.label.set_fontsize(4)
-                                    ytick.label.set_fontsize(4)
+                                #axis_kl[i,j].hist(adksVec[i,j,k,4,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True,label='Bilby')
+                                #axis_kl[i,j].hist(adksVec[i,j,k,5,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True,label='VICI')
+                                #for xtick,ytick in zip(axis_kl[i,j].xaxis.get_major_ticks(),axis_kl[i,j].yaxis.get_major_ticks()):
+                                #    xtick.label.set_fontsize(4)
+                                #    ytick.label.set_fontsize(4)
 
-                                axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
+                                #axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
                                 axis_ks[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ks[i,j].set_xlabel('')
                                 axis_ad[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ad[i,j].set_xlabel('')
 
@@ -731,13 +626,13 @@ class make_plots:
                                             xtick.label.set_fontsize(4)
                                             ytick.label.set_fontsize(4)
 
-                                        axis_kl_last[i,j].hist(adksVec[i,j,k+1,4,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True)
-                                        axis_kl_last[i,j].hist(adksVec[i,j,k+1,5,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True)
-                                        for xtick,ytick in zip(axis_kl_last[i,j].xaxis.get_major_ticks(),axis_kl_last[i,j].yaxis.get_major_ticks()):
-                                            xtick.label.set_fontsize(4)
-                                            ytick.label.set_fontsize(4)
+                                        #axis_kl_last[i,j].hist(adksVec[i,j,k+1,4,:],bins=n_hist_bins,alpha=0.5,color='blue',normed=True)
+                                        #axis_kl_last[i,j].hist(adksVec[i,j,k+1,5,:],bins=n_hist_bins,alpha=0.5,color='red',normed=True)
+                                        #for xtick,ytick in zip(axis_kl_last[i,j].xaxis.get_major_ticks(),axis_kl_last[i,j].yaxis.get_major_ticks()):
+                                        #    xtick.label.set_fontsize(4)
+                                        #    ytick.label.set_fontsize(4)
 
-                                        axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
+                                        #axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
                                         axis_ks[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ks[i,j].set_xlabel('')
                                         axis_ad[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ad[i,j].set_xlabel('')
                                     except IndexError:

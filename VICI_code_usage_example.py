@@ -23,16 +23,16 @@ from Neural_Networks import batch_manager
 from data import chris_data
 import plots
 
-run_label='gpu1',            # label for run
+run_label='gpu0',            # label for run
 plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
 load_train_set = True        # if True, load previously made train samples.
-load_test_set = True         # if True, load previously made test samples (including bilby posterior)
+load_test_set = True        # if True, load previously made test samples (including bilby posterior)
 T = 1                        # length of time series (s)
 dt = T/ndata                 # sampling time (Sec)
 fnyq = 0.5/dt                # Nyquist frequency (Hz)
-tot_dataset_size=int(5e4)    # total number of training samples to use
-tset_split=int(5e4)          # number of training samples per saved data files
+tot_dataset_size=int(1e3)    # total number of training samples to use
+tset_split=int(1e3)          # number of training samples per saved data files
 r = 5                        # the grid dimension for the output tests
 iterations=int(1e7)          # total number of training iterations
 n_noise=1                    # this is a redundant parameter. Needs to be removed TODO
@@ -66,8 +66,8 @@ def get_params():
         T = T,                                # length of time series (s)
         dt = T/ndata,                         # sampling time (Sec)
         fnyq = 0.5/dt,                        # Nyquist frequency (Hz),
-        train_set_dir='training_sets_nowin_par4/tset_tot-%d_split-%d_%dNoise' % (tot_dataset_size,tset_split,n_noise), #location of training set
-        test_set_dir='test_sets_nowin_par4/tset_tot-%d_freq-%d' % (r*r,ndata), #location of training set
+        train_set_dir='training_sets_nowin_par4_35-80m_1000-3000d/tset_tot-%d_split-%d_%dNoise' % (tot_dataset_size,tset_split,n_noise), #location of training set
+        test_set_dir='test_sets_nowin_par4_35-80m_1000-3000d/tset_tot-%d_freq-%d_dynesty1' % (r*r,ndata), #location of test set for all plots ecept kl
         add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         n_noise=n_noise,                      # number of noise realizations
         ref_gps_time=1126259643.0,            # reference gps time + 0.5s (t0 where test samples are injected+0.5s)
@@ -78,7 +78,10 @@ def get_params():
         do_m1_m2_cut=False,                   # if True, make a cut on all m1 and m2 values    
         do_extra_noise=True,                  # add extra noise realizations during training
         do_load_in_chunks=False,              # if True, load training samples in random file chucnks every 25000 epochs
-        Npp = 100                             # number of test signals per pp-plot
+        Npp = 100,                             # number of test signals per pp-plot
+        samplers=['vitamin','dynesty','emcee'],          # list of available bilby samplers to use
+        use_samplers = [0,1,2],                  # number of Bilby samplers to use 
+        kl_set_dir='test_sets_nowin_par4_35-80m_1000-3000d/tset_tot-%d_freq-%d' % (r*r,ndata) # location of test set used for kl
     )
     return params
 
@@ -223,16 +226,6 @@ def gen_template(duration,sampling_frequency,pars,ref_geocent_time,wvf_est=False
 
     # combine noise and noise-free signal
     ht_noisy = white_noise_sig 
-    #plt.plot(np.fft.irfft(ifos[0].whitened_frequency_domain_strain))
-    #ht_noisy = (ifos[0].whitened_frequency_domain_strain).reshape(whiten_hp.shape[0]) * win
-    #ht_noisy = np.fft.irfft(ht_noisy)
-    #ht_noisy = shift(ht_noisy, int(injection_parameters['geocent_time']-ref_geocent_time), cval=0.0)
-    #plt.plot(ht_noisy, alpha=0.5)
-    #plt.plot(ht, alpha=0.5)
-    #plt.show()
-    #plt.savefig('/home/hunter.gabbard/public_html/test.png')
-    #plt.close()
-
 
     return ht,ht_noisy,injection_parameters,ifos,waveform_generator
 
@@ -271,8 +264,8 @@ def gen_masses(m_min=5.0,M_max=100.0,mdist='metric'):
         new_m_min = m_min
         new_M_max = M_max
         while not flag:
-            m1 = np.random.uniform(low=20.0,high=50.0)
-            m2 = np.random.uniform(low=20.0,high=50.0)
+            m1 = np.random.uniform(low=35.0,high=80.0)
+            m2 = np.random.uniform(low=35.0,high=80.0)
             m12 = np.array([m1,m2]) 
             flag = True if (np.sum(m12)<new_M_max) and (np.all(m12>new_m_min)) and (m12[0]>=m12[1]) else False
         eta = m12[0]*m12[1]/(m12[0]+m12[1])**2
@@ -327,8 +320,8 @@ def gen_par(fs,T_obs,geocent_time,mdist='metric'):
         class containing parameters of waveform
     """
     # define distribution params
-    m_min = 20.0         # 5 rest frame component masses
-    M_max = 100.0       # 100 rest frame total mass
+    m_min = 35.0         # 5 rest frame component masses
+    M_max = 160.0       # 100 rest frame total mass
 
     m12, mc, eta = gen_masses(m_min,M_max,mdist=mdist)
     M = np.sum(m12)
@@ -346,7 +339,7 @@ def gen_par(fs,T_obs,geocent_time,mdist='metric'):
     geocent_time = np.random.uniform(low=geocent_time-0.1,high=geocent_time+0.1)
     print('{}: selected bbh GPS time = {}'.format(time.asctime(),geocent_time))
 
-    lum_dist = np.random.uniform(low=1e2, high=1e3)
+    lum_dist = np.random.uniform(low=1e3, high=3e3)
     #lum_dist = int(2e3)
     print('{}: selected bbh luminosity distance = {}'.format(time.asctime(),lum_dist))
 
@@ -422,9 +415,9 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
 
             # GW150914 parameters
             # uncomment to make randomized samples
-            pars['lum_dist'] = 410.0
-            pars['m1'] = 35.8 # source frame mass
-            pars['m2'] = 29.1 # source frame mass
+            #pars['lum_dist'] = 410.0
+            #pars['m1'] = 35.8 # source frame mass
+            #pars['m2'] = 29.1 # source frame mass
 
             # inject signal
             test_samp_noisefree,test_samp_noisy,injection_parameters,ifos,waveform_generator = gen_template(duration,sampling_frequency,
@@ -449,8 +442,8 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
         maximum=injection_parameters['geocent_time'] + 0.1,#duration/2,
         name='geocent_time', latex_label='$t_c$', unit='$s$')
     # fix the following parameter priors
-    priors['mass_1'] = bilby.gw.prior.Uniform(name='mass_1', minimum=20.0, maximum=50.0,unit='$M_{\odot}$')
-    priors['mass_2'] = bilby.gw.prior.Uniform(name='mass_2', minimum=20.0, maximum=50.0,unit='$M_{\odot}$')
+    priors['mass_1'] = bilby.gw.prior.Uniform(name='mass_1', minimum=35.0, maximum=80.0,unit='$M_{\odot}$')
+    priors['mass_2'] = bilby.gw.prior.Uniform(name='mass_2', minimum=35.0, maximum=80.0,unit='$M_{\odot}$')
     priors['a_1'] = 0
     priors['a_2'] = 0
     priors['tilt_1'] = 0
@@ -466,7 +459,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     #priors['chirp_mass'] = bilby.gw.prior.Uniform(name='chirp_mass', minimum=30.469269715364344, maximum=43.527528164806206, latex_label='$mc$', unit='$M_{\\odot}$')
     priors['phase'] = bilby.gw.prior.Uniform(name='phase', minimum=0.0, maximum=2*np.pi)
     #priors['phase'] = 0.0
-    priors['luminosity_distance'] =  bilby.gw.prior.Uniform(name='luminosity_distance', minimum=1e2, maximum=1e3, unit='Mpc')
+    priors['luminosity_distance'] =  bilby.gw.prior.Uniform(name='luminosity_distance', minimum=1e3, maximum=3e3, unit='Mpc')
     #priors['luminosity_distance'] = int(2e3)
 
     # Initialise the likelihood by passing in the interferometer data (ifos) and
@@ -476,8 +469,16 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
         priors=priors)
 
     # Run sampler.  In this case we're going to use the `dynesty` sampler
-    result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
-        likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
+    # dynesty sampler
+    #result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
+    #    likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
+    #    injection_parameters=injection_parameters, outdir=outdir, label=label,
+    #    save='hdf5')
+
+    # emcee sampler
+    result = bilby.run_sampler(
+        likelihood=likelihood, priors=priors, sampler='emcee',
+        nwalkers=100, nsteps=1000, nburn=500,
         injection_parameters=injection_parameters, outdir=outdir, label=label,
         save='hdf5')
 
@@ -673,7 +674,7 @@ if not params['do_load_in_chunks']:
 if params['do_load_in_chunks']:
 
     if params['do_normscale']:
-        normscales = [50.0,2*np.pi,0.6,50.0,3000.0]#,np.max(data['pos'][:,5])]
+        normscales = [80.0,2*np.pi,0.6,80.0,3000.0]#,np.max(data['pos'][:,5])]
         normscales = [normscales[0],normscales[2],normscales[3],normscales[4]]#,normscales[5]]
 
     # Remove phase parameter
@@ -736,6 +737,7 @@ for i in range(int(iterations/(params['num_iterations']-1))):
 
         # Geneerate overlap scatter plots
         s,olvec,olvec_2d = plotter.make_overlap_plot((i*int(params['num_iterations']-1)),iterations,s,olvec,olvec_2d,adksVec)
+
 """
 
 
@@ -755,8 +757,11 @@ if params['do_normscale']:
 # Generate final results plots
 plotter = plots.make_plots(params,samples,XS,pos_test)
 
+# Make KL plot
+plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+
 # Make pp plot
-plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)
+#plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)
 
 # Geneerate overlap scatter plots
 plotter.make_overlap_plot(0,iterations,s,olvec,olvec_2d,adksVec)

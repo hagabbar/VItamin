@@ -595,7 +595,7 @@ def run(params, y_data_test, siz_x_data, load_dir):
                 rec_x_m = session.run(x_mean,feed_dict={y_ph:y_data_test})
                 rec_x_mx = session.run(qx_samp,feed_dict={y_ph:y_data_test})
                 rec_x_s = session.run(x_mean,feed_dict={y_ph:y_data_test})
-                if (rec_x_mx[cnt,0] <= 35.0) or (rec_x_mx[cnt,0] >= 50.0) or (rec_x_mx[cnt,2] <= 35.0) or (rec_x_mx[cnt,2] >= 50.0):
+                if (rec_x_mx[cnt,0] <= 35.0) or (rec_x_mx[cnt,0] >= 80.0) or (rec_x_mx[cnt,2] <= 35.0) or (rec_x_mx[cnt,2] >= 80.0):
                     continue
                 else:
                     XSX[cnt,:,i] = rec_x_mx
