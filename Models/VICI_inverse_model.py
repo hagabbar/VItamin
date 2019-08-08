@@ -285,7 +285,7 @@ def train(params, x_data, y_data, siz_high_res, save_dir, plotter, y_data_test,t
             #cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], y_ph:ynt, lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
             cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
             KL_PLOT[ni] = KL_VAE
-            COST_PLOT[ni] = cost_value_vae
+            COST_PLOT[ni] = -cost_value_vae
 
             # make log loss plot
             fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
@@ -314,7 +314,7 @@ def train(params, x_data, y_data, siz_high_res, save_dir, plotter, y_data_test,t
             if params['print_values']==True:
                 print('--------------------------------------------------------------')
                 print('Iteration:',i)
-                print('Training Set -ELBO:',cost_value_vae)
+                print('Training Set -ELBO:',-cost_value_vae)
                 print('KL Divergence:',KL_VAE)
        
         if i % params['save_interval'] == 0 and i > 0:
@@ -512,7 +512,7 @@ def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_file
                 #cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], y_ph:ynt, lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
                 cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
                 KL_PLOT[ni] = KL_VAE
-                COST_PLOT[ni] = cost_value_vae
+                COST_PLOT[ni] = -cost_value_vae
                 
                 if params['print_values']==True:
                     print('--------------------------------------------------------------')
@@ -526,6 +526,7 @@ def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_file
                 
                 
     return COST_PLOT, KL_PLOT, train_files
+
 
 def run(params, y_data_test, siz_x_data, load_dir):
 

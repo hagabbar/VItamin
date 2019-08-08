@@ -21,6 +21,7 @@ class VariationalAutoencoder(object):
         self.name = name
         self.middle = middle
         self.bias_start = 0.0
+        self.drate = 0.0
 
         network_weights = self._create_weights()
         self.weights = network_weights
@@ -46,7 +47,7 @@ class VariationalAutoencoder(object):
             elif self.middle == "gaussian":
                 hidden1_pre = tf.add(tf.matmul(z,self.weights['VICI_decoder']['W3_to_hiddenG']), self.weights['VICI_decoder']['b3_to_hiddenG'])
                 hidden1_post = self.nonlinearity(hidden1_pre)
-                hidden1_dropout = tf.layers.dropout(hidden1_post,rate=0.5)
+                hidden1_dropout = tf.layers.dropout(hidden1_post,rate=self.drate)
 #                hidden1_post = tf.nn.batch_normalization(hidden1_post,tf.Variable(tf.zeros([400], dtype=tf.float32)),tf.Variable(tf.ones([400], dtype=tf.float32)),None,None,0.000001,name="d_b_norm_1")
 
 #                hidden1_pre_s = tf.add(tf.matmul(z,self.weights['decoder']['W3_to_hiddenGS']), self.weights['decoder']['b3_to_hiddenGS'])
@@ -54,11 +55,11 @@ class VariationalAutoencoder(object):
 
                 hidden1b_pre = tf.add(tf.matmul(hidden1_dropout, self.weights['VICI_decoder']['W3b_to_hiddenG']), self.weights['VICI_decoder']['b3b_to_hiddenG'])
                 hidden1b_post = self.nonlinearity(hidden1b_pre)
-                hidden1b_dropout = tf.layers.dropout(hidden1b_post,rate=0.5)
+                hidden1b_dropout = tf.layers.dropout(hidden1b_post,rate=self.drate)
 
                 hidden1c_pre = tf.add(tf.matmul(hidden1b_dropout, self.weights['VICI_decoder']['W3c_to_hiddenG']), self.weights['VICI_decoder']['b3c_to_hiddenG'])
                 hidden1c_post = self.nonlinearity(hidden1c_pre)
-                hidden1c_dropout = tf.layers.dropout(hidden1c_post,rate=0.5)
+                hidden1c_dropout = tf.layers.dropout(hidden1c_post,rate=self.drate)
 ##                
 #                hidden1d_pre = tf.add(tf.matmul(hidden1c_post, self.weights['decoder']['W3d_to_hiddenG']), self.weights['decoder']['b3d_to_hiddenG'])
 #                hidden1d_post = self.nonlinearity(hidden1d_pre)

@@ -7,6 +7,7 @@ from matplotlib.collections import PatchCollection
 import numpy as np
 from scipy.stats import uniform, norm, gaussian_kde, ks_2samp, anderson_ksamp
 from scipy import stats
+import scipy
 import h5py
 
 from data import chris_data as data_maker
@@ -58,9 +59,6 @@ class make_plots:
             ks_inn_arr = []
             ad_mcmc_arr = []
             ad_inn_arr = []
-            kl_mcmc_arr = []
-            kl_inn_arr = []
-
             cur_max = self.params['n_samples']
             mcmc = []
             c=vici = []
@@ -86,8 +84,6 @@ class make_plots:
                 ks_inn_samps = []
                 ad_mcmc_samps = []
                 ad_inn_samps = []
-                kl_mcmc_samps = []
-                kl_inn_samps = []
                 n_samps = self.params['n_samples']
                 n_pars = self.params['ndim_x']
 
@@ -96,38 +92,186 @@ class make_plots:
                     # get ideal bayesian number. We want the 2 tailed p value from the KS test FYI
                     ks_mcmc_result = ks_2samp(np.random.choice(mcmc[i,:],size=int(mcmc.shape[1]/2.0)), np.random.choice(mcmc[i,:],size=int(mcmc.shape[1]/2.0)))
                     ad_mcmc_result = anderson_ksamp([np.random.choice(mcmc[i,:],size=int(mcmc.shape[1]/2.0)), np.random.choice(mcmc[i,:],size=int(mcmc.shape[1]/2.0))])
-                    kl_mcmc_result = np.sum(mcmc[:,np.random.randint(0,high=int(mcmc.shape[1]),size=int(mcmc.shape[1]/2.0))] * ( np.log(mcmc[:,np.random.randint(0,high=int(mcmc.shape[1]),size=int(mcmc.shape[1]/2.0))])
-                                            - np.log(mcmc[:,np.random.randint(0,high=int(mcmc.shape[1]),size=int(mcmc.shape[1]/2.0))]) ))
                 
 
                     # get predicted vs. true number
                     ks_inn_result = ks_2samp(np.random.choice(vici[i,:],size=int(mcmc.shape[1]/2.0)),np.random.choice(mcmc[i,:],size=int(mcmc.shape[1]/2.0)))
                     ad_inn_result = anderson_ksamp([np.random.choice(vici[i,:],size=int(mcmc.shape[1]/2.0)),np.random.choice(mcmc[i,:],size=int(mcmc.shape[1]/2.0))])
-                    kl_inn_result = np.sum(mcmc[:,np.random.randint(0,high=int(mcmc.shape[1]),size=int(mcmc.shape[1]/2.0))] * ( np.log(mcmc[:,np.random.randint(0,high=int(mcmc.shape[1]),size=int(mcmc.shape[1]/2.0))]) 
-                                            - np.log(vici[:,np.random.randint(0,high=int(mcmc.shape[1]),size=int(mcmc.shape[1]/2.0))]) ))
 
                     # store result stats
                     ks_mcmc_samps.append(ks_mcmc_result[1])
                     ks_inn_samps.append(ks_inn_result[1])
                     ad_mcmc_samps.append(ad_mcmc_result[0])
                     ad_inn_samps.append(ad_inn_result[0])
-                    kl_mcmc_samps.append(kl_mcmc_result)
-                    kl_inn_samps.append(kl_inn_result)
                 print('Test Case %d, Parameter(%s) k-s result: [Ideal(%.6f), Predicted(%.6f)]' % (int(cnt),parnames[i],np.array(ks_mcmc_result[1]),np.array(ks_inn_result[1])))
                 print('Test Case %d, Parameter(%s) A-D result: [Ideal(%.6f), Predicted(%.6f)]' % (int(cnt),parnames[i],np.array(ad_mcmc_result[0]),np.array(ad_inn_result[0])))
-                print('Test Case %d, Parameter(%s) K-L result: [Ideal(%.6f), Predicted(%.6f)]' % (int(cnt),parnames[i],np.array(kl_mcmc_result),np.array(kl_inn_result)))
 
                 # store result stats
                 ks_mcmc_arr.append(ks_mcmc_samps)
                 ks_inn_arr.append(ks_inn_samps)
                 ad_mcmc_arr.append(ad_mcmc_samps)
                 ad_inn_arr.append(ad_inn_samps)
-                kl_mcmc_arr.append(kl_mcmc_samps)
-                kl_inn_arr.append(kl_inn_samps)
 
-            return ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr, kl_mcmc_arr, kl_inn_arr
+            return ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr, 0, 0
 
+        def load_test_set(model,sig_test,par_test,normscales,sampler='dynesty1'):
+            """
+            load requested test set
+            """
+
+            if sampler=='vitamin1' or sampler=='vitamin2':
+                # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+                _, _, x, _ = model.run(self.params, sig_test, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
+
+                # Convert XS back to unnormalized version
+                if self.params['do_normscale']:
+                    for m in range(self.params['ndim_x']):
+                        x[:,m,:] = x[:,m,:]*normscales[m]
+                return x
+
+            # Define variables
+            pos_test = []
+            samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndim_x']+1))
+            cnt=0
+            test_set_dir = params['kl_set_dir'] + '_' + sampler
+
+            # Load test set
+            for i in range(params['r']):
+                for j in range(params['r']):
+                    # TODO: remove this bandaged phase file calc
+                    f = h5py.File('%s/test_samp_%d.h5py' % (test_set_dir,cnt), 'r+')
+
+                    # select samples from posterior randomly
+                    shuffling = np.random.permutation(f['phase_post'][:].shape[0])
+                    phase = f['phase_post'][:][shuffling]
+
+                    if params['do_mc_eta_conversion']:
+                        m1 = f['mass_1_post'][:][shuffling]
+                        m2 = f['mass_2_post'][:][shuffling]
+                        eta = (m1*m2)/(m1+m2)**2
+                        mc = np.sum([m1,m2], axis=0)*eta**(3.0/5.0)
+                    else:
+                        m1 = f['mass_1_post'][:][shuffling]
+                        m2 = f['mass_2_post'][:][shuffling]
+                    t0 = params['ref_gps_time'] - f['geocent_time_post'][:][shuffling]
+                    dist=f['luminosity_distance_post'][:][shuffling]
+                    #theta_jn=f['theta_jn_post'][:][shuffling]
+                    if params['do_mc_eta_conversion']:
+                        f_new=np.array([mc,phase,t0,eta]).T
+                    else:
+                        f_new=np.array([m1,phase,t0,m2,dist]).T
+                    f_new=f_new[:params['n_samples'],:]
+                    samples[cnt,:,:]=f_new
+
+                    # get true scalar parameters
+                    if params['do_mc_eta_conversion']:
+                        m1 = np.array(f['mass_1'])
+                        m2 = np.array(f['mass_2'])
+                        eta = (m1*m2)/(m1+m2)**2
+                        mc = np.sum([m1,m2])*eta**(3.0/5.0)
+                        pos_test.append([mc,np.array(f['phase']),params['ref_gps_time']-np.array(f['geocent_time']),eta])
+                    else:
+                        m1 = np.array(f['mass_1'])
+                        m2 = np.array(f['mass_2'])
+                        pos_test.append([m1,np.array(f['phase']),params['ref_gps_time']-np.array(f['geocent_time']),m2,np.array(f['luminosity_distance'])])
+                    cnt += 1
+                    f.close()
+
+            pos_test = np.array(pos_test)
+
+            pos_test = pos_test[:,[0,2,3,4]]
+            samples = samples[:,:,[0,2,3,4]]
+            new_samples = []
+            for i in range(samples.shape[0]):
+                new_samples.append(samples[i].T)
+            #samples = samples.reshape(samples.shape[0],samples.shape[2],samples.shape[1])
+            samples = np.array(new_samples)
+
+            return samples
+
+        def confidence_bd(samp_array):
+            """
+            compute confidence bounds for a given array
+            """
+            cf_bd_sum_lidx = 0
+            cf_bd_sum_ridx = 0
+            cf_bd_sum_left = 0
+            cf_bd_sum_right = 0
+            cf_perc = 0.05
+
+            cf_bd_sum_lidx = np.sort(samp_array)[int(len(samp_array)*cf_perc)]
+            cf_bd_sum_ridx = np.sort(samp_array)[int(len(samp_array)*(1.0-cf_perc))]
+
+            return [cf_bd_sum_lidx, cf_bd_sum_ridx]
+
+        def make_contour_plot(ax,x,y,dataset,color='red'):
+            """ Module used to make contour plots in pe scatter plots.
+
+            Parameters
+            ----------
+            ax: matplotlib figure
+                a matplotlib figure instance
+            x: 1D numpy array
+                pe sample parameters for x-axis
+            y: 1D numpy array
+                pe sample parameters for y-axis
+            dataset: 2D numpy array
+                array containing both parameter estimates
+            color:
+                color of contours in plot
+            Returns
+            -------
+            kernel: scipy kernel
+                gaussian kde of the input dataset
+            """
+            # Make a 2d normed histogram
+            H,xedges,yedges=np.histogram2d(x,y,bins=20,normed=True)
+
+            norm=H.sum() # Find the norm of the sum
+            # Set contour levels
+            contour1=0.95
+            contour2=0.90
+            contour3=0.68
+
+            # Set target levels as percentage of norm
+            target1 = norm*contour1
+            target2 = norm*contour2
+            target3 = norm*contour3
+
+            # Take histogram bin membership as proportional to Likelihood
+            # This is true when data comes from a Markovian process
+            def objective(limit, target):
+                w = np.where(H>limit)
+                count = H[w]
+                return count.sum() - target
+
+            # Find levels by summing histogram to objective
+            level1= scipy.optimize.bisect(objective, H.min(), H.max(), args=(target1,))
+            level2= scipy.optimize.bisect(objective, H.min(), H.max(), args=(target2,))
+            level3= scipy.optimize.bisect(objective, H.min(), H.max(), args=(target3,))
+
+            # For nice contour shading with seaborn, define top level
+            level4=H.max()
+            levels=[level1,level2,level3,level4]
+
+            # Pass levels to normed kde plot
+            X, Y = np.mgrid[np.min(x):np.max(x):100j, np.min(y):np.max(y):100j]
+            positions = np.vstack([X.ravel(), Y.ravel()])
+            kernel = gaussian_kde(dataset)
+            Z = np.reshape(kernel(positions).T, X.shape)
+
+            if color == 'blue':
+                ax.contour(X,Y,Z,levels=levels,alpha=0.5,colors=color)
+            elif color == 'red':
+                ax.contourf(X,Y,Z,levels=levels,alpha=1.0,colors=['#e61a0b','#f75448','#ff7a70'])
+
+            return kernel
+
+        # Store above declared functions to be used later
         self.ad_ks_test = ad_ks_test
+        self.load_test_set = load_test_set
+        self.confidence_bd = confidence_bd
+        self.make_contour_plot = make_contour_plot
 
     def pp_plot(self,truth,samples):
         """
@@ -182,71 +326,6 @@ class make_plots:
         plt.close()
         return
 
-    def plot_y_test(self,i_epoch,x_test,y_test,sig_test,y_normscale):
-        """
-        Plot examples of test y-data generation
-        """
-        params = self.params
-
-        # generate test data
-        #x_test, y_test, x, sig_test, parnames = data_maker.generate(
-        #    tot_dataset_size=params['n_samples'],
-        #    ndata=params['ndata'],
-        #    usepars=params['usepars'],
-        #    sigma=params['sigma'],
-        #    seed=params['seed']
-        #)
-
-        fig, axes = plt.subplots(params['r'],params['r'],figsize=(6,6),sharex='col',sharey='row')
-        fig_zoom, axes_zoom = plt.subplots(params['r'],params['r'],figsize=(6,6),sharex='col',sharey='row')
-
-        # run the x test data through the model
-        x = x_test[:params['r']*params['r'],:]
-        y_test = y_test[:params['r']*params['r'],:]
-        sig_test = sig_test[:params['r']*params['r'],:]
-
-        # apply forward model to the x data
-        _,_,y = VICI_forward_model.run(params, x, y_test, np.shape(y_test)[1], "forward_model_dir_%s/forward_model.ckpt" % params['run_label'])
-
-        y*=y_normscale[0]
-        y_test *= y_normscale[0]
-
-        cnt = 0
-        for i in range(params['r']):
-            for j in range(params['r']):
-
-                axes[i,j].clear()
-                axes[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),y[cnt,:],'b-')
-                axes[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),y_test[cnt,:],'k',alpha=0.5)
-                axes[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),sig_test[cnt,:],'cyan',alpha=0.5)
-                axes[i,j].set_xlim([0,1])
-                axes[i,j].set_xlabel('t') if i==params['r']-1 else axes[i,j].set_xlabel('')
-                axes[i,j].set_ylabel('y') if j==0 else axes[i,j].set_ylabel('')
-                if i==0 and j==0:
-                    axes[i,j].legend(('pred y','y'))
-
-                axes_zoom[i,j].clear()
-                axes_zoom[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),y[cnt,:],'b-')
-                axes_zoom[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),y_test[cnt,:],'k',alpha=0.5)
-                axes_zoom[i,j].plot(np.arange(params['ndata'])/float(params['ndata']),sig_test[cnt,:],'cyan',alpha=0.5)
-                axes_zoom[i,j].set_xlim([0.4,0.6])
-                axes_zoom[i,j].set_xlabel('t') if i==params['r']-1 else axes_zoom[i,j].set_xlabel('')
-                axes_zoom[i,j].set_ylabel('y') if j==0 else axes_zoom[i,j].set_ylabel('')
-                if i==0 and j==0:
-                    axes_zoom[i,j].legend(('pred y','y'))
-                cnt += 1
-
-        fig.canvas.draw()
-        fig.savefig('%s/ytest_%04d.png' % (params['plot_dir'][0],i_epoch),dpi=360)
-        fig.savefig('%s/latest/latest_ytest.png' % params['plot_dir'],dpi=360)
-        plt.close(fig)
-
-        fig_zoom.canvas.draw()
-        fig_zoom.savefig('%s/ytestZoom_%04d.png' % (params['plot_dir'][0],i_epoch),dpi=360)
-        fig_zoom.savefig('%s/latest/latest_ytestZoom.png' % params['plot_dir'],dpi=360)
-        plt.close(fig_zoom)
-        return
-
     def make_loss_plot(self,KL_PLOT,COST_PLOT,i):
         # make log loss plot
         fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
@@ -274,7 +353,6 @@ class make_plots:
         plt.savefig('%s/latest/losses.png' % self.params['plot_dir'])
         plt.close(fig_loss)
 
-
     def gen_kl_plots(self,model,sig_test,par_test,normscales):
 
 
@@ -285,78 +363,7 @@ class make_plots:
         Bilby sampler runs.
         """
 
-        def load_test_set(model,sig_test,par_test,normscales,sampler='dynesty1'):
-            """
-            load requested test set
-            """
-
-            if sampler=='vitamin1' or sampler=='vitamin2':
-                # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                _, _, x, _ = model.run(self.params, sig_test, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
-
-                # Convert XS back to unnormalized version
-                if self.params['do_normscale']:
-                    for m in range(self.params['ndim_x']):
-                        x[:,m,:] = x[:,m,:]*normscales[m] 
-                return x               
-
-            # Define variables
-            pos_test = []
-            samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndim_x']+1))
-            cnt=0
-            test_set_dir = params['kl_set_dir'] + '_' + sampler
-
-            # Load test set
-            for i in range(params['r']):
-                for j in range(params['r']):
-                    # TODO: remove this bandaged phase file calc
-                    f = h5py.File('%s/test_samp_%d.h5py' % (test_set_dir,cnt), 'r+')
-
-                    # select samples from posterior randomly
-                    shuffling = np.random.permutation(f['phase_post'][:].shape[0])
-                    phase = f['phase_post'][:][shuffling]
-
-                    if params['do_mc_eta_conversion']:
-                        m1 = f['mass_1_post'][:][shuffling]
-                        m2 = f['mass_2_post'][:][shuffling]
-                        eta = (m1*m2)/(m1+m2)**2
-                        mc = np.sum([m1,m2], axis=0)*eta**(3.0/5.0)
-                    else:
-                        m1 = f['mass_1_post'][:][shuffling]
-                        m2 = f['mass_2_post'][:][shuffling]
-                    t0 = params['ref_gps_time'] - f['geocent_time_post'][:][shuffling]
-                    dist=f['luminosity_distance_post'][:][shuffling]
-                    #theta_jn=f['theta_jn_post'][:][shuffling]
-                    if params['do_mc_eta_conversion']:
-                        f_new=np.array([mc,phase,t0,eta]).T
-                    else:
-                        f_new=np.array([m1,phase,t0,m2,dist]).T
-                    f_new=f_new[:params['n_samples'],:]
-                    samples[cnt,:,:]=f_new
-
-                    # get true scalar parameters
-                    if params['do_mc_eta_conversion']:
-                        m1 = np.array(f['mass_1'])
-                        m2 = np.array(f['mass_2'])
-                        eta = (m1*m2)/(m1+m2)**2
-                        mc = np.sum([m1,m2])*eta**(3.0/5.0)
-                        pos_test.append([mc,np.array(f['phase']),params['ref_gps_time']-np.array(f['geocent_time']),eta])
-                    else:
-                        m1 = np.array(f['mass_1'])
-                        m2 = np.array(f['mass_2'])
-                        pos_test.append([m1,np.array(f['phase']),params['ref_gps_time']-np.array(f['geocent_time']),m2,np.array(f['luminosity_distance'])])
-                    cnt += 1
-                    f.close()
-
-            pos_test = np.array(pos_test)
-            
-            pos_test = pos_test[:,[0,2,3,4]]
-            samples = samples[:,:,[0,2,3,4]]
-            samples = samples.reshape(samples.shape[0],samples.shape[2],samples.shape[1])
-
-            return samples
-
-        def compute_kl(sampset_1,sampset_2):
+        def compute_kl(sampset_1,sampset_2,samplers):
             """
             Compute KL for one test case.
             """
@@ -366,31 +373,65 @@ class make_plots:
             set2 = []
 
             # Iterate over parameters and remove samples outside of prior
-            for i in range(sampset_1.shape[0]):
-                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
-                mask = np.argwhere(mask[0])
-                new_rev = sampset_1[i,mask]
-                new_rev = new_rev.reshape(new_rev.shape[0])
-                new_samples = sampset_2[i,mask]
-                new_samples = new_samples.reshape(new_samples.shape[0])
-                tmp_max = new_rev.shape[0]
-                if tmp_max < cur_max: cur_max = tmp_max
-                set1.append(new_rev[:cur_max])
-                set2.append(new_samples[:cur_max])
+            if samplers[0] == 'vitamin1':
+                for i in range(sampset_1.shape[0]):
+                    if samplers[1] != 'vitamin2':
+                        mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                        mask = np.argwhere(mask[0])
+                        new_rev = sampset_1[i,mask]
+                        new_rev = new_rev.reshape(new_rev.shape[0])
+                        new_samples = sampset_2[i,mask]
+                        new_samples = new_samples.reshape(new_samples.shape[0])
+                        tmp_max = new_rev.shape[0]
+                        if tmp_max < cur_max: cur_max = tmp_max
+                        set1.append(new_rev[:cur_max])
+                        set2.append(new_samples[:cur_max])
+                    elif samplers[1] == 'vitamin2':
+                        mask1 = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                        mask2 = [(sampset_2[0,:] >= sampset_2[2,:]) & (sampset_2[3,:] >= 1000.0) & (sampset_2[3,:] <= 3000.0) & (sampset_2[1,:] >= 0.4) & (sampset_2[1,:] <= 0.6) & (sampset_2[0,:] >= 35.0) & (sampset_2[0,:] <= 80.0) & (sampset_2[2,:] <= 80.0) & (sampset_2[2,:] >= 35.0)]
 
-            set1 = np.array(set1)
-            set2 = np.array(set2)
+                        mask1, mask2 = np.argwhere(mask1[0]), np.argwhere(mask2[0])
+                        new_rev = sampset_1[i,mask1]
+                        new_rev = new_rev.reshape(new_rev.shape[0])
+                        new_samples = sampset_2[i,mask2]
+                        new_samples = new_samples.reshape(new_samples.shape[0])
+                        set1_max = new_rev.shape[0]
+                        set2_max = new_samples.shape[0]
+                        if set1_max < cur_max: 
+                            cur_max = set1_max
+                        if set2_max < cur_max:
+                            cur_max = set2_max
+                        set1.append(new_rev[:cur_max])
+                        set2.append(new_samples[:cur_max])
+
+                set1 = np.array(set1)
+                set2 = np.array(set2)
+
+            else:
+                set1 = sampset_1
+                set2 = sampset_2
+      
+            #if samplers[0] == 'vitamin1' and samplers[1] == 'vitamin2':
+            #    print(set1[0,:],set2[0,:])
+                #plt.close('all')
+                #plt.hist(set1[0,:],bins=100,alpha=0.5,color='blue')
+                #plt.hist(set2[0,:],bins=100,alpha=0.5,color='blue')
+                #plt.savefig('/home/hunter.gabbard/public_html/test.png')
+                #plt.close()
+            #    exit()
 
             kl_samps = []
             n_samps = self.params['n_samples']
             n_pars = self.params['ndim_x']
 
             # Iterate over number of randomized sample slices
-            for j in range(self.params['n_kl_samp']):
-                kl_result = np.sum(set2[:,np.random.randint(0,high=int(set2.shape[1]),size=int(set2.shape[1]/2.0))] * ( np.log(set2[:,np.random.randint(0,high=int(set2.shape[1]),size=int(set2.shape[1]/2.0))])
-                                            - np.log(set1[:,np.random.randint(0,high=int(set2.shape[1]),size=int(set2.shape[1]/2.0))]) ))
-                kl_samps.append(kl_result)
-            kl_arr = kl_samps   
+            #for j in range(self.params['n_kl_samp']):
+            set1 = set1[:,:]#np.random.randint(0,high=int(set1.shape[1]),size=int(set1.shape[1]/2.0))]
+            set2 = set2[:,:]#np.random.randint(0,high=int(set2.shape[1]),size=int(set2.shape[1]/2.0))]
+            kl_result = (1.0/set1.shape[1]) * np.sum(set2 * ( np.log(set2)
+                                            - np.log(set1) ))
+                #kl_samps.append(kl_result)
+            kl_arr = kl_result   
 
             return kl_arr
    
@@ -398,7 +439,7 @@ class make_plots:
         params = self.params
         usesamps = params['use_samplers']
         samplers = params['samplers']
-        fig_kl, axis_kl = plt.subplots(len(usesamps),len(usesamps),figsize=(6,6))
+        fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
         
         # Compute kl divergence on all test cases with preds vs. benchmark
         # Iterate over samplers
@@ -407,34 +448,147 @@ class make_plots:
             for j in range(tmp_idx):
                 # Load appropriate test sets
                 if samplers[usesamps[i]] == samplers[usesamps[::-1][j]]:
-                    set1 = load_test_set(model,sig_test,par_test,normscales,sampler=samplers[usesamps[i]]+'1')
-                    set2 = load_test_set(model,sig_test,par_test,normscales,sampler=samplers[usesamps[::-1][j]]+'2')
+                    sampler1, sampler2 = samplers[usesamps[i]]+'1', samplers[usesamps[::-1][j]]+'2'
+                    set1 = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
+                    set2 = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
                 else:
-                    set1 = load_test_set(model,sig_test,par_test,normscales,sampler=samplers[usesamps[i]]+'1')
-                    set2 = load_test_set(model,sig_test,par_test,normscales,sampler=samplers[usesamps[::-1][j]]+'1')
+                    sampler1, sampler2 = samplers[usesamps[i]]+'1', samplers[usesamps[::-1][j]]+'2'
+                    set1 = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
+                    set2 = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
 
                 # Iterate over test cases
                 tot_kl = []
                 for r in range(self.params['r']**2):
-                    tot_kl.append(compute_kl(set1[r],set2[r]))
+                    tot_kl.append(compute_kl(set1[r],set2[r],[sampler1,sampler2]))
                 tot_kl = np.array(tot_kl)
                 tot_kl = tot_kl.flatten()
-
+                
                 # Plot KL results
-                axis_kl[len(usesamps)-1-j,i].hist(tot_kl,bins=100,alpha=0.5,color='blue',normed=True)
-                for xtick,ytick in zip(axis_kl[i,j].xaxis.get_major_ticks(),axis_kl[i,j].yaxis.get_major_ticks()):
-                    xtick.label.set_fontsize(4)
-                    ytick.label.set_fontsize(4)
-
-                #axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
+                axis_kl.hist(tot_kl,bins=5,alpha=0.5,normed=True,label=sampler1+'-'+sampler2)
 
             tmp_idx -= 1 
 
         # Save KL corner plot
+        axis_kl.legend(loc='upper right', fontsize='x-small')
+        axis_kl.set_xscale('log')
+        axis_kl.set_yscale('log')
+        axis_kl.set_xlabel('KL Statistic')
         fig_kl.canvas.draw()
         fig_kl.savefig('%s/latest/hist-kl.png' % (self.params['plot_dir'][0]),dpi=360)
         plt.close(fig_kl)
 
+        return
+
+    def make_corner_plot(self,sampler='dynesty1'):
+        """
+        Function to generate a corner plot for n-test GW samples. Corner plot has posteriors 
+        from two samplers (usually VItamin and some other Bayesian sampler). The 4D overlap 
+        for each sample is usually posted in the upper right hand corner of each plot, 
+        but is set to zero when not in use.
+
+        Parametes
+        ---------
+        sampler: str
+            sampler to compare VItamin results to
+        """
+
+        # Define variables
+        params = self.params
+        Vitamin_preds = self.rev_x
+        sampler_preds = self.load_test_set(None,None,None,None,sampler=sampler)
+
+        # Iterate over test samples
+        for r in range(params['r']**2):
+            print('Making corner plot %d ...' % r)
+
+            # Declare figure object
+            fig_corner, axis_corner = plt.subplots(params['ndim_x'],params['ndim_x'],figsize=(6,6),sharex='col')
+
+            # Apply mask
+            sampset_1 = Vitamin_preds[r]
+            sampset_2 = sampler_preds[r]
+            cur_max = self.params['n_samples']
+            set1 = []
+            set2 = []
+            for i in range(sampset_1.shape[0]):
+                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                mask = np.argwhere(mask[0])
+                new_rev = sampset_1[i,mask]
+                new_rev = new_rev.reshape(new_rev.shape[0])
+                new_samples = sampset_2[i,:]
+                new_samples = new_samples.reshape(new_samples.shape[0])
+                tmp_max = new_rev.shape[0]
+                if tmp_max < cur_max: cur_max = tmp_max
+                set1.append(new_rev[:cur_max])
+                set2.append(new_samples[:cur_max])
+            set1 = np.array(set1)
+            set2 = np.array(set2)
+
+            # Iterate over parameters
+            tmp_idx=params['ndim_x']
+            for i in range(params['ndim_x']):
+                for j in range(tmp_idx):
+                    overlap = data_maker.overlap(set1.T,set2.T,next_cnt=True)
+                    parnames = ['$m_{1}$','$t_{0}$','$m_{2}$','$d_{l}$']
+                    parname1 = parnames[i]
+                    parname2 = parnames[params['usepars'][::-1][j]]
+
+                    axis_corner[params['ndim_x']-1-j,i].clear()
+                    # Make histograms on diagonal
+                    if (params['ndim_x']-1-j) == i:
+                        axis_corner[params['ndim_x']-1-j,i].hist(set1[i,:],bins=30,alpha=0.5,density=True,label='VItamin',color='r')
+                        axis_corner[params['ndim_x']-1-j,i].hist(set2[i,:],bins=30,alpha=0.5,density=True,label=sampler,color='b')
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.pos_test[r,i], linewidth=0.5, color='black')
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[0], linewidth=0.5, color='r')
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[1], linewidth=0.5, color='r')
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[0], linewidth=0.5, color='b')
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[1], linewidth=0.5, color='b')
+                    # Make scatter plots on off-diagonal
+                    else:
+#                        axis_corner[params['ndim_x']-1-j,i].scatter(set1[i,:], set1[params['usepars'][::-1][j],:],c='r',s=0.2,alpha=0.5, label='VItamin')
+#                        axis_corner[params['ndim_x']-1-j,i].scatter(set2[i,:], set2[params['usepars'][::-1][j],:],c='b',s=0.2,alpha=0.5, label=sampler)
+                        comb_set1 = np.array([set1[i,:],set1[params['usepars'][::-1][j],:]])
+                        _ = self.make_contour_plot(axis_corner[params['ndim_x']-1-j,i],set1[i,:],set1[params['usepars'][::-1][j],:],comb_set1,'red')
+                        comb_set2 = np.array([set2[i,:],set2[params['usepars'][::-1][j],:]])
+                        _ = self.make_contour_plot(axis_corner[params['ndim_x']-1-j,i],set2[i,:],set2[params['usepars'][::-1][j],:],comb_set2,'blue')
+                        axis_corner[params['ndim_x']-1-j,i].plot(self.pos_test[r,i],self.pos_test[r,params['usepars'][::-1][j]],'+c',markersize=8, label='Truth')
+#                    oltxt = '%.2f' % overlap
+#                    axis_corner[params['ndim_x']-1-j,i].text(0.90, 0.95, oltxt,
+#                        horizontalalignment='right',
+#                        verticalalignment='top',
+#                            transform=axis_corner[params['ndim_x']-1-j,i].transAxes)
+#                    if i == 0 and (params['ndim_x']-1-j) == 0: 
+#                        axis_corner[params['ndim_x']-1-j,i].legend(loc='upper left', fontsize='x-small')
+                    for xtick,ytick in zip(axis_corner[params['ndim_x']-1-j,i].xaxis.get_major_ticks(),axis_corner[params['ndim_x']-1-j,i].yaxis.get_major_ticks()):
+                        xtick.label.set_fontsize(4)
+                        ytick.label.set_fontsize(4)
+                    axis_corner[params['ndim_x']-1-j,i].grid(False)
+
+                    # add labels
+                    if i == 0:
+                        axis_corner[params['ndim_x']-1-j,i].set_ylabel(parname2)
+                    if params['ndim_x']-1-j == (params['ndim_x']-1):
+                        axis_corner[params['ndim_x']-1-j,i].set_xlabel(parname1)
+                    if i != 0:
+                        # Turn off some some tick marks
+                        axis_corner[params['ndim_x']-1-j,i].yaxis.set_visible(False)
+
+                tmp_idx -= 1
+            
+            # remove subplots not used 
+            axis_corner[0,1].set_axis_off()
+            axis_corner[0,2].set_axis_off()
+            axis_corner[0,3].set_axis_off()
+            axis_corner[1,2].set_axis_off()
+            axis_corner[1,3].set_axis_off()
+            axis_corner[2,3].set_axis_off()
+
+            # plot corner plot
+            plt.subplots_adjust(wspace=0, hspace=0)
+            fig_corner.canvas.draw()
+            fig_corner.savefig('%s/latest/corner_testcase%s.png' % (self.params['plot_dir'][0],str(r)),dpi=360)
+            plt.close(fig_corner)
+            plt.close('all')
         return
 
     def make_overlap_plot(self,epoch,iterations,s,olvec,olvec_2d,adksVec):
@@ -454,10 +608,10 @@ class make_plots:
                     fig, axes = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
 
                     # initialize 1D plots for showing testing results
-                    fig_1d, axes_1d = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
+                    fig_1d, axes_1d = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
 
                     # initialize 1D plots for showing testing results for last 1d hist
-                    fig_1d_last, axes_1d_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
+                    fig_1d_last, axes_1d_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
 
                     # initialize 1D plots for showing testing results
                     #fig_kl, axis_kl = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
@@ -535,10 +689,13 @@ class make_plots:
                             # plot the 1D samples and the 5% confidence bounds
                             ol_hist = data_maker.overlap(self.samples[cnt,mask,k].reshape(mask.shape[0],1),self.rev_x[cnt,k,mask].reshape(mask.shape[0],1),k)
                             olvec_1d[i,j,k] = ol_hist
-                            n_hist_bins=25
+                            n_hist_bins=30
                             axes_1d[i,j].clear()
-                            axes_1d[i,j].hist(self.samples[cnt,mask,k].reshape(mask.shape[0]),color='b',bins=n_hist_bins,alpha=0.5,normed=True)
-                            axes_1d[i,j].hist(self.rev_x[cnt,k,mask].reshape(mask.shape[0]),color='r',bins=n_hist_bins,alpha=0.5,normed=True)
+                            axes_1d[i,j].hist(self.samples[cnt,mask,k].reshape(mask.shape[0]),color='b',bins=n_hist_bins,alpha=0.5,density=True)
+                            axes_1d[i,j].hist(self.rev_x[cnt,k,mask].reshape(mask.shape[0]),color='r',bins=n_hist_bins,alpha=0.5,density=True)
+                            for xtick,ytick in zip(axes_1d[i,j].xaxis.get_major_ticks(),axes_1d[i,j].yaxis.get_major_ticks()):
+                                    xtick.label.set_fontsize(4)
+                                    ytick.label.set_fontsize(4)
                             #axes_1d[i,j].set_xlim([0,1])
                             axes_1d[i,j].axvline(x=self.pos_test[cnt,k], linewidth=0.5, color='black')
                             axes_1d[i,j].axvline(x=confidence_bd(self.samples[cnt,mask,k].reshape(mask.shape[0]))[0], linewidth=0.5, color='b')
@@ -550,8 +707,8 @@ class make_plots:
                                 horizontalalignment='right',
                                 verticalalignment='top',
                                     transform=axes_1d[i,j].transAxes)
-                            matplotlib.rc('xtick', labelsize=8)
-                            matplotlib.rc('ytick', labelsize=8)
+                            #matplotlib.rc('xtick', labelsize=4)
+                            #matplotlib.rc('ytick', labelsize=4)
                             axes_1d[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axes_1d[i,j].set_xlabel('')
 
                             # Plot statistic histograms
@@ -579,15 +736,15 @@ class make_plots:
                                 #    ytick.label.set_fontsize(4)
 
                                 #axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
-                                axis_ks[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ks[i,j].set_xlabel('')
-                                axis_ad[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ad[i,j].set_xlabel('')
+                                axis_ks[i,j].set_xlabel('ks-stat') if i==self.params['r']-1 else axis_ks[i,j].set_xlabel('')
+                                axis_ad[i,j].set_xlabel('ad-stat') if i==self.params['r']-1 else axis_ad[i,j].set_xlabel('')
 
                             except IndexError:
                                 print('Warning: bad stat result!')
                                 continue
 
                             if i == 0 and j == 0: 
-                                axis_kl[i,j].legend(loc='upper left', fontsize='x-small')
+                                #axis_kl[i,j].legend(loc='upper left', fontsize='x-small')
                                 axis_ad[i,j].legend(loc='upper left', fontsize='x-small')
                                 axis_ks[i,j].legend(loc='upper left', fontsize='x-small')
 
@@ -596,8 +753,11 @@ class make_plots:
                                 ol_hist = data_maker.overlap(self.samples[cnt,mask,k+1].reshape(mask.shape[0],1),self.rev_x[cnt,k+1,mask].reshape(mask.shape[0],1),k)
                                 olvec_1d[i,j,k+1] = ol_hist
                                 axes_1d_last[i,j].clear()
-                                axes_1d_last[i,j].hist(self.samples[cnt,mask,k+1].reshape(mask.shape[0]),color='b',bins=n_hist_bins,alpha=0.5,normed=True)
-                                axes_1d_last[i,j].hist(self.rev_x[cnt,k+1,mask].reshape(mask.shape[0]),color='r',bins=n_hist_bins,alpha=0.5,normed=True)
+                                axes_1d_last[i,j].hist(self.samples[cnt,mask,k+1].reshape(mask.shape[0]),color='b',bins=n_hist_bins,alpha=0.5,density=True)
+                                axes_1d_last[i,j].hist(self.rev_x[cnt,k+1,mask].reshape(mask.shape[0]),color='r',bins=n_hist_bins,alpha=0.5,density=True)
+                                for xtick,ytick in zip(axes_1d_last[i,j].xaxis.get_major_ticks(),axes_1d_last[i,j].yaxis.get_major_ticks()):
+                                    xtick.label.set_fontsize(4)
+                                    ytick.label.set_fontsize(4)
                                 #axes_1d_last[i,j].set_xlim([0,1])
                                 axes_1d_last[i,j].axvline(x=self.pos_test[cnt,k+1], linewidth=0.5, color='black')
                                 axes_1d_last[i,j].axvline(x=confidence_bd(self.samples[cnt,mask,k+1].reshape(mask.shape[0]))[0], linewidth=0.5, color='b')
@@ -609,6 +769,8 @@ class make_plots:
                                     horizontalalignment='right',
                                     verticalalignment='top',
                                         transform=axes_1d_last[i,j].transAxes)
+                                #matplotlib.rc('xtick', labelsize=4)
+                                #matplotlib.rc('ytick', labelsize=4)
                                 axes_1d_last[i,j].set_xlabel(self.params['parnames'][k+1]) if i==self.params['r']-1 else axes_1d_last[i,j].set_xlabel('')
 
                                 # Plot statistic histograms
@@ -633,8 +795,8 @@ class make_plots:
                                         #    ytick.label.set_fontsize(4)
 
                                         #axis_kl[i,j].set_xlabel('KL Values') if i==self.params['r']-1 else axis_kl[i,j].set_xlabel('')
-                                        axis_ks[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ks[i,j].set_xlabel('')
-                                        axis_ad[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axis_ad[i,j].set_xlabel('')
+                                        axis_ks_last[i,j].set_xlabel('ks-stat') if i==self.params['r']-1 else axis_ks[i,j].set_xlabel('')
+                                        axis_ad_last[i,j].set_xlabel('ad-stat') if i==self.params['r']-1 else axis_ad[i,j].set_xlabel('')
                                     except IndexError:
                                         print('Warning: bad stat result!')
                                         continue
@@ -646,13 +808,13 @@ class make_plots:
                         fig_1d.savefig('%s/latest/latest-1d_%d.png' % (self.params['plot_dir'][0],k),dpi=360)
 
                         if self.params['do_adkskl_test']:
-                            fig_kl.canvas.draw()
-                            fig_kl.savefig('%s/latest/hist-kl_%d.png' % (self.params['plot_dir'][0],k),dpi=360)
+                            #fig_kl.canvas.draw()
+                            #fig_kl.savefig('%s/latest/hist-kl_%d.png' % (self.params['plot_dir'][0],k),dpi=360)
                             fig_ad.canvas.draw()
                             fig_ad.savefig('%s/latest/hist-ad_%d.png' % (self.params['plot_dir'][0],k),dpi=360)
                             fig_ks.canvas.draw()
                             fig_ks.savefig('%s/latest/hist-ks_%d.png' % (self.params['plot_dir'][0],k),dpi=360)
-                            plt.close(fig_kl)
+                            #plt.close(fig_kl)
                             plt.close(fig_ks)
                             plt.close(fig_ad)
                         if k == (self.params['ndim_x']-2):
@@ -665,9 +827,9 @@ class make_plots:
                                 fig_ks_last.savefig('%s/latest/hist-ks_%d.png' % (self.params['plot_dir'][0],k+1),dpi=360)
                                 fig_ad_last.canvas.draw()
                                 fig_ad_last.savefig('%s/latest/hist-ad_%d.png' % (self.params['plot_dir'][0],k+1),dpi=360)
-                                fig_kl_last.canvas.draw()
-                                fig_kl_last.savefig('%s/latest/hist-kl_%d.png' % (self.params['plot_dir'][0],k+1),dpi=360)
-                                plt.close(fig_kl_last)
+                                #fig_kl_last.canvas.draw()
+                                #fig_kl_last.savefig('%s/latest/hist-kl_%d.png' % (self.params['plot_dir'][0],k+1),dpi=360)
+                                #plt.close(fig_kl_last)
                                 plt.close(fig_ks_last)
                                 plt.close(fig_ad_last)
 

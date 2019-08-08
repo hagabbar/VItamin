@@ -21,6 +21,7 @@ class VariationalAutoencoder(object):
         self.name = name
         self.middle = middle
         self.bias_start = 0.0
+        self.drate = 0.0
 
         network_weights = self._create_weights()
         self.weights = network_weights
@@ -33,16 +34,16 @@ class VariationalAutoencoder(object):
         with tf.name_scope("VICI_encoder"):
             hidden1_pre = tf.add(tf.matmul(x, self.weights['VICI_encoder']['W3_to_hidden']), self.weights['VICI_encoder']['b3_to_hidden'])
             hidden1_post = self.nonlinearity(hidden1_pre)
-            hidden1_dropout = tf.layers.dropout(hidden1_post,rate=0.5)
+            hidden1_dropout = tf.layers.dropout(hidden1_post,rate=self.drate)
 #            hidden1_post = tf.nn.batch_normalization(hidden1_post,tf.Variable(tf.zeros([400], dtype=tf.float32)),tf.Variable(tf.ones([400], dtype=tf.float32)),None,None,0.000001,name="e_b_norm_1")
 
             hidden2_pre = tf.add(tf.matmul(hidden1_dropout, self.weights['VICI_encoder']['W3_hth']), self.weights['VICI_encoder']['b3_hth'])
             hidden2_post = self.nonlinearity(hidden2_pre)
-            hidden2_dropout = tf.layers.dropout(hidden2_post,rate=0.5)
+            hidden2_dropout = tf.layers.dropout(hidden2_post,rate=self.drate)
 
             hidden3_pre = tf.add(tf.matmul(hidden2_dropout, self.weights['VICI_encoder']['W3b_hth']), self.weights['VICI_encoder']['b3b_hth'])
             hidden3_post = self.nonlinearity(hidden3_pre)
-            hidden3_dropout = tf.layers.dropout(hidden3_post,rate=0.5)
+            hidden3_dropout = tf.layers.dropout(hidden3_post,rate=self.drate)
 ##            
 #            hidden4_pre = tf.add(tf.matmul(hidden3_post, self.weights['IVA_encoder']['W3c_hth']), self.weights['IVA_encoder']['b3c_hth'])
 #            hidden4_post = self.nonlinearity(hidden4_pre)
