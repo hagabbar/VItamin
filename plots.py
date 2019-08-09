@@ -311,8 +311,22 @@ class make_plots:
                 for m in range(self.params['ndim_x']):
                     x[:,m,:] = x[:,m,:]*normscales[m]
 
-            x = x.reshape(x.shape[2],x.shape[1])
-            pp[cnt+2] = self.pp_plot(par_test[cnt,:],x[:,:])
+            # Apply mask
+            sampset_1 = x[0,:,:]
+            cur_max = self.params['n_samples']
+            set1 = []
+            for i in range(sampset_1.shape[0]):
+                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                mask = np.argwhere(mask[0])
+                new_rev = sampset_1[i,mask]
+                new_rev = new_rev.reshape(new_rev.shape[0])
+                tmp_max = new_rev.shape[0]
+                if tmp_max < cur_max: cur_max = tmp_max
+                set1.append(new_rev[:cur_max])
+            set1 = np.array(set1)
+
+            set1 = set1.reshape(set1.shape[1],set1.shape[0])
+            pp[cnt+2] = self.pp_plot(par_test[cnt,:],set1[:,:])
             print('Computed p-p plot iteration %d/%d' % (int(cnt),int(Npp)))
 
         plt.plot(np.arange(Npp+2)/(Npp+1.0),np.sort(pp),'-')

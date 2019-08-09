@@ -31,8 +31,8 @@ load_test_set = True        # if True, load previously made test samples (includ
 T = 1                        # length of time series (s)
 dt = T/ndata                 # sampling time (Sec)
 fnyq = 0.5/dt                # Nyquist frequency (Hz)
-tot_dataset_size=int(1.5e6)    # total number of training samples to use
-tset_split=int(5e4)          # number of training samples per saved data files
+tot_dataset_size=int(1e3)    # total number of training samples to use
+tset_split=int(1e3)          # number of training samples per saved data files
 r = 5                        # the grid dimension for the output tests
 iterations=int(1e7)          # total number of training iterations
 n_noise=1                    # this is a redundant parameter. Needs to be removed TODO
@@ -333,13 +333,13 @@ if params['do_only_test']:
     plotter = plots.make_plots(params,samples,XS,pos_test)
 
     # Make corner plots
-    plotter.make_corner_plot(sampler='dynesty1')
+#    plotter.make_corner_plot(sampler='dynesty1')
 
     # Make KL plot
-    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+#    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
 
     # Make pp plot
-#    plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)
+    plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)
 
     # Geneerate overlap scatter plots
     #plotter.make_overlap_plot(0,iterations,s,olvec,olvec_2d,adksVec)
