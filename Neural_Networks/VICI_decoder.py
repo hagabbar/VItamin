@@ -26,7 +26,7 @@ class VariationalAutoencoder(object):
         network_weights = self._create_weights()
         self.weights = network_weights
 
-        self.nonlinearity = tf.nn.leaky_relu
+        self.nonlinearity = tf.nn.relu
 
     def calc_reconstruction(self, z):
         with tf.name_scope("VICI_decoder"):

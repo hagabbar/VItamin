@@ -64,7 +64,7 @@ class make_plots:
             c=vici = []
             for i in range(inn_samps.shape[0]):
                 # remove samples outside of the prior mass distribution
-                mask = [(inn_samps[0,:] >= inn_samps[2,:]) & (inn_samps[3,:] >= 1000.0) & (inn_samps[3,:] <= 3000.0) & (inn_samps[1,:] >= 0.4) & (inn_samps[1,:] <= 0.6) & (inn_samps[0,:] >= 35.0) & (inn_samps[0,:] <= 80.0) & (inn_samps[2,:] <= 80.0) & (inn_samps[2,:] >= 35.0)]
+                mask = [(inn_samps[0,:] >= inn_samps[2,:]) & (inn_samps[3,:] >= 1000.0) & (inn_samps[3,:] <= 3000.0) & (inn_samps[1,:] >= 0.65) & (inn_samps[1,:] <= 0.85) & (inn_samps[0,:] >= 35.0) & (inn_samps[0,:] <= 80.0) & (inn_samps[2,:] <= 80.0) & (inn_samps[2,:] >= 35.0)]
                 mask = np.argwhere(mask[0])
                 new_rev = inn_samps[i,mask]
                 new_rev = new_rev.reshape(new_rev.shape[0])
@@ -121,13 +121,13 @@ class make_plots:
 
             if sampler=='vitamin1' or sampler=='vitamin2':
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                _, _, x, _ = model.run(self.params, sig_test, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
+                _, _, x, _, timet  = model.run(self.params, sig_test, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
 
                 # Convert XS back to unnormalized version
                 if self.params['do_normscale']:
                     for m in range(self.params['ndim_x']):
                         x[:,m,:] = x[:,m,:]*normscales[m]
-                return x
+                return x, [timet,timet,timet]
 
             # Define variables
             pos_test = []
@@ -136,6 +136,7 @@ class make_plots:
             test_set_dir = params['kl_set_dir'] + '_' + sampler
 
             # Load test set
+            timet=[]
             for i in range(params['r']):
                 for j in range(params['r']):
                     # TODO: remove this bandaged phase file calc
@@ -156,6 +157,7 @@ class make_plots:
                     t0 = params['ref_gps_time'] - f['geocent_time_post'][:][shuffling]
                     dist=f['luminosity_distance_post'][:][shuffling]
                     #theta_jn=f['theta_jn_post'][:][shuffling]
+                    timet.append(np.array(f['runtime']))
                     if params['do_mc_eta_conversion']:
                         f_new=np.array([mc,phase,t0,eta]).T
                     else:
@@ -178,6 +180,9 @@ class make_plots:
                     f.close()
 
             pos_test = np.array(pos_test)
+            # save time per sample
+            timet = np.array(timet)
+            timet = np.array([np.min(timet),np.max(timet),np.median(timet)])
 
             pos_test = pos_test[:,[0,2,3,4]]
             samples = samples[:,:,[0,2,3,4]]
@@ -187,7 +192,7 @@ class make_plots:
             #samples = samples.reshape(samples.shape[0],samples.shape[2],samples.shape[1])
             samples = np.array(new_samples)
 
-            return samples
+            return samples, timet
 
         def confidence_bd(samp_array):
             """
@@ -273,11 +278,42 @@ class make_plots:
         self.confidence_bd = confidence_bd
         self.make_contour_plot = make_contour_plot
 
+    def plot_testdata(self,y,s,N,outdir):
+        """
+        Plot the test data timeseries
+
+        y:
+            noisy time series
+        s:
+            noise free time series
+        N:
+            total number of samples?
+        outdir:
+            output directory
+        """
+        cnt = 0
+        r1 = int(np.sqrt(N))
+        r2 = int(N/r1)
+        fig, axes = plt.subplots(r1,r2,figsize=(6,6),sharex='col',sharey='row')
+        for i in range(r1):
+            for j in range(r2):
+                axes[i,j].plot(y[cnt,:],'-k')
+                axes[i,j].plot(s[cnt,:],'-r')
+                #axes[i,j].set_xlim([0,1])
+                axes[i,j].set_xlabel('t') if i==r1-1 else axes[i,j].set_xlabel('')
+                axes[i,j].set_ylabel('y') if j==0 else axes[i,j].set_ylabel('')
+                cnt += 1
+        plt.savefig('%s/latest/test_data.png' % outdir, dpi=360)
+        plt.close()
+
+        return
+
     def pp_plot(self,truth,samples):
         """
         generates the pp plot data given samples and truth values
         """
         Nsamp = samples.shape[0]
+
         kernel = gaussian_kde(samples.transpose())
         v = kernel.pdf(truth)
         x = kernel.pdf(samples.transpose())
@@ -285,26 +321,32 @@ class make_plots:
 
         return r
 
-    def plot_pp(self,model,sig_test,par_test,i_epoch,normscales):
+    def plot_pp(self,model,sig_test,par_test,i_epoch,normscales,samples,pos_test):
         """
         make p-p plots
         """
         Npp = self.params['Npp']
-        Nsamp = 1#self.params['n_samples']
         ndim_y = self.params['ndata']
         outdir = self.params['plot_dir'][0]
         
+        if self.params['do_normscale']:
+            for m in range(self.params['ndim_x']):
+                par_test[:,m] = par_test[:,m] * normscales[m]
         
         plt.figure()
         pp = np.zeros(Npp+2)
         pp[0] = 0.0
         pp[1] = 1.0
+        pp_bilby = np.zeros((self.params['r']**2)+2)
+        pp_bilby[0] = 0.0
+        pp[1] = 1.0
+                 
         for cnt in range(Npp):
 
-            y = np.tile(np.array(sig_test[cnt,:]),Nsamp).reshape(Nsamp,ndim_y)
+            y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
 
             # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-            _, _, x, _ = model.run(self.params, y, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label']) # This runs the trained model using the weights stored in inverse_model_dir/inverse_model.ckpt
+            _, _, x, _, _ = model.run(self.params, y, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label']) # This runs the trained model using the weights stored in inverse_model_dir/inverse_model.ckpt
 
             # Convert XS back to unnormalized version
             if self.params['do_normscale']:
@@ -316,7 +358,7 @@ class make_plots:
             cur_max = self.params['n_samples']
             set1 = []
             for i in range(sampset_1.shape[0]):
-                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.65) & (sampset_1[1,:] <= 0.85) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
                 mask = np.argwhere(mask[0])
                 new_rev = sampset_1[i,mask]
                 new_rev = new_rev.reshape(new_rev.shape[0])
@@ -326,46 +368,50 @@ class make_plots:
             set1 = np.array(set1)
 
             set1 = set1.reshape(set1.shape[1],set1.shape[0])
-            pp[cnt+2] = self.pp_plot(par_test[cnt,:],set1[:,:])
-            print('Computed p-p plot iteration %d/%d' % (int(cnt),int(Npp)))
+            pp[cnt+2] = self.pp_plot(par_test[cnt,:],set1)
+            print('Computed p-p plot iteration %d/%d' % (int(cnt)+1,int(Npp)))
+        
+        # make bilby p-p plot
+        for cnt in range(self.params['r']**2):
+            pp_bilby[cnt+2] = self.pp_plot(pos_test[cnt,:],samples[cnt,:,:])
+            print('Computed Bilby p-p plot iteration %d/%d' % (int(cnt)+1,int(self.params['r']**2)))
+            
 
-        plt.plot(np.arange(Npp+2)/(Npp+1.0),np.sort(pp),'-')
+        plt.plot(np.arange(Npp+2)/(Npp+1.0),np.sort(pp),'-',label='vitamin')
+        plt.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',label='Bilby')
         plt.plot([0,1],[0,1],'--k')
         plt.xlim([0,1])
         plt.ylim([0,1])
         plt.ylabel('Empirical Cummulative Distribution')
         plt.xlabel('Theoretical Cummulative Distribution')
+        plt.legend(loc='upper left')
         plt.savefig('%s/pp_plot_%04d.png' % (outdir,i_epoch),dpi=360)
         plt.savefig('%s/latest/latest_pp_plot.png' % outdir,dpi=360)
         plt.close()
         return
 
-    def make_loss_plot(self,KL_PLOT,COST_PLOT,i):
-        # make log loss plot
-        fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
-        axes_loss.grid()
-        axes_loss.set_ylabel('Loss')
-        axes_loss.set_xlabel('Iterations elapsed: %s' % i)
-        axes_loss.semilogx(np.arange(len(KL_PLOT)), KL_PLOT, label='KL')
-        axes_loss.semilogx(np.arange(len(COST_PLOT)), COST_PLOT, label='COST')
-        axes_loss.semilogx(np.arange(len(COST_PLOT)), (KL_PLOT+COST_PLOT), label='Total')
-        axes_loss.legend(loc='upper left')
-        plt.savefig('%s/latest/losses_logscale.png' % self.params['plot_dir'])
-        plt.close(fig_loss)
-
-        # make non-log scale loss plot
-        fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
-        axes_loss.grid()
-        axes_loss.set_ylabel('Loss')
-        axes_loss.set_xlabel('Iterations elapsed: %s' % i)
-        axes_loss.plot(np.arange(len(KL_PLOT)), KL_PLOT, label='KL')
-        axes_loss.plot(np.arange(len(COST_PLOT)), COST_PLOT, label='COST')
-        axes_loss.plot(np.arange(len(COST_PLOT)), (KL_PLOT+COST_PLOT), label='Total')
-        axes_loss.set_xscale('log')
-        axes_loss.set_yscale('log')
-        axes_loss.legend(loc='upper left')
-        plt.savefig('%s/latest/losses.png' % self.params['plot_dir'])
-        plt.close(fig_loss)
+    def make_loss_plot(self,loss,kl,cad,fwd=True):
+        """
+        plots the forward losses
+        """
+        fig, axes = plt.subplots(1,figsize=(5,5))
+        N = loss.size
+        ivec = cad*np.arange(N)
+        axes.semilogx(ivec,loss,alpha=0.8,linewidth=1.0)
+        axes.semilogx(ivec,kl,alpha=0.8,linewidth=1.0)
+        axes.semilogx(ivec,kl+loss,alpha=0.8,linewidth=1.0)
+        axes.grid()
+        axes.set_ylabel('loss')
+        axes.set_xlabel('iteration')
+        axes.set_xlim([1,cad*N])
+        axes.legend(('loss','KL','total'))
+        plt.grid(True, which="both")
+        des = 'fwd' if fwd==True else 'inv'
+        plt.savefig('%s/latest/%s_losses_log.png' % (self.params['plot_dir'][0],des),dpi=360)
+        axes.set_xscale('linear')
+        plt.savefig('%s/latest/%s_losses_linear.png' % (self.params['plot_dir'][0],des),dpi=360)
+        plt.close()
+        return
 
     def gen_kl_plots(self,model,sig_test,par_test,normscales):
 
@@ -390,7 +436,7 @@ class make_plots:
             if samplers[0] == 'vitamin1':
                 for i in range(sampset_1.shape[0]):
                     if samplers[1] != 'vitamin2':
-                        mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                        mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.65) & (sampset_1[1,:] <= 0.85) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
                         mask = np.argwhere(mask[0])
                         new_rev = sampset_1[i,mask]
                         new_rev = new_rev.reshape(new_rev.shape[0])
@@ -401,8 +447,8 @@ class make_plots:
                         set1.append(new_rev[:cur_max])
                         set2.append(new_samples[:cur_max])
                     elif samplers[1] == 'vitamin2':
-                        mask1 = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
-                        mask2 = [(sampset_2[0,:] >= sampset_2[2,:]) & (sampset_2[3,:] >= 1000.0) & (sampset_2[3,:] <= 3000.0) & (sampset_2[1,:] >= 0.4) & (sampset_2[1,:] <= 0.6) & (sampset_2[0,:] >= 35.0) & (sampset_2[0,:] <= 80.0) & (sampset_2[2,:] <= 80.0) & (sampset_2[2,:] >= 35.0)]
+                        mask1 = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.65) & (sampset_1[1,:] <= 0.85) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                        mask2 = [(sampset_2[0,:] >= sampset_2[2,:]) & (sampset_2[3,:] >= 1000.0) & (sampset_2[3,:] <= 3000.0) & (sampset_2[1,:] >= 0.65) & (sampset_2[1,:] <= 0.85) & (sampset_2[0,:] >= 35.0) & (sampset_2[0,:] <= 80.0) & (sampset_2[2,:] <= 80.0) & (sampset_2[2,:] >= 35.0)]
 
                         mask1, mask2 = np.argwhere(mask1[0]), np.argwhere(mask2[0])
                         new_rev = sampset_1[i,mask1]
@@ -425,26 +471,17 @@ class make_plots:
                 set1 = sampset_1
                 set2 = sampset_2
       
-            #if samplers[0] == 'vitamin1' and samplers[1] == 'vitamin2':
-            #    print(set1[0,:],set2[0,:])
-                #plt.close('all')
-                #plt.hist(set1[0,:],bins=100,alpha=0.5,color='blue')
-                #plt.hist(set2[0,:],bins=100,alpha=0.5,color='blue')
-                #plt.savefig('/home/hunter.gabbard/public_html/test.png')
-                #plt.close()
-            #    exit()
-
             kl_samps = []
             n_samps = self.params['n_samples']
             n_pars = self.params['ndim_x']
 
             # Iterate over number of randomized sample slices
-            #for j in range(self.params['n_kl_samp']):
-            set1 = set1[:,:]#np.random.randint(0,high=int(set1.shape[1]),size=int(set1.shape[1]/2.0))]
-            set2 = set2[:,:]#np.random.randint(0,high=int(set2.shape[1]),size=int(set2.shape[1]/2.0))]
-            kl_result = (1.0/set1.shape[1]) * np.sum(set2 * ( np.log(set2)
-                                            - np.log(set1) ))
-                #kl_samps.append(kl_result)
+            set1 = set1[:,:]
+            set2 = set2[:,:]
+            p = gaussian_kde(set1)
+            q = gaussian_kde(set2)
+            kl_result = (1.0/set1.shape[1]) * np.sum(( np.log(p(set1))
+                                            - np.log(q(set1)) ))
             kl_arr = kl_result   
 
             return kl_arr
@@ -458,18 +495,21 @@ class make_plots:
         # Compute kl divergence on all test cases with preds vs. benchmark
         # Iterate over samplers
         tmp_idx=len(usesamps)
+        print_cnt = 1
+        runtime = {}
         for i in range(len(usesamps)):
             for j in range(tmp_idx):
                 # Load appropriate test sets
                 if samplers[usesamps[i]] == samplers[usesamps[::-1][j]]:
                     sampler1, sampler2 = samplers[usesamps[i]]+'1', samplers[usesamps[::-1][j]]+'2'
-                    set1 = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
-                    set2 = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
+                    set1,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
+                    set2,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
                 else:
                     sampler1, sampler2 = samplers[usesamps[i]]+'1', samplers[usesamps[::-1][j]]+'2'
-                    set1 = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
-                    set2 = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
+                    set1,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
+                    set2,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
 
+                
                 # Iterate over test cases
                 tot_kl = []
                 for r in range(self.params['r']**2):
@@ -479,8 +519,16 @@ class make_plots:
                 
                 # Plot KL results
                 axis_kl.hist(tot_kl,bins=5,alpha=0.5,normed=True,label=sampler1+'-'+sampler2)
+                
+                print('Completed KL calculation %d/%d' % (print_cnt,len(usesamps)*2))
+                print_cnt+=1
 
-            tmp_idx -= 1 
+            tmp_idx -= 1
+            runtime[sampler1] = time
+
+        # Print sampler runtimes
+        for i in range(len(usesamps)):
+            print('%s sampler runtimes: %s' % (samplers[usesamps[i]]+'1',str(runtime[samplers[usesamps[i]]+'1'])))
 
         # Save KL corner plot
         axis_kl.legend(loc='upper right', fontsize='x-small')
@@ -509,7 +557,11 @@ class make_plots:
         # Define variables
         params = self.params
         Vitamin_preds = self.rev_x
-        sampler_preds = self.load_test_set(None,None,None,None,sampler=sampler)
+        sampler_preds,_ = self.load_test_set(None,None,None,None,sampler=sampler)
+
+        # declare Francesco ratio list
+        ratios = []
+        fig_ratios, axis_ratios = plt.subplots(1,1,figsize=(6,6))
 
         # Iterate over test samples
         for r in range(params['r']**2):
@@ -525,7 +577,7 @@ class make_plots:
             set1 = []
             set2 = []
             for i in range(sampset_1.shape[0]):
-                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.4) & (sampset_1[1,:] <= 0.6) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.65) & (sampset_1[1,:] <= 0.85) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
                 mask = np.argwhere(mask[0])
                 new_rev = sampset_1[i,mask]
                 new_rev = new_rev.reshape(new_rev.shape[0])
@@ -538,6 +590,25 @@ class make_plots:
             set1 = np.array(set1)
             set2 = np.array(set2)
 
+            # Francesco ratio test
+            # Compute Gaussian KDE on both sets
+#            set1_kde = gaussian_kde(set1)
+#            set2_kde = gaussian_kde(set2)
+
+            # Evaluate kde at truth
+#            set1_eval = set1_kde(self.pos_test[r,:])
+#            set2_eval = set2_kde(self.pos_test[r,:])
+            # Compute ratio (vitamin/dynesty)
+#            ratios.append(set1_eval/set2_eval)
+#            print('Evaluated kde ratio on test sample %d' % (r+1))
+
+        # Plot kde ratio in histogram
+#        axis_ratios.hist(np.array(ratios),bins=5,density=True)
+#        axis_ratios.set_xscale('log')
+#        fig_ratios.savefig('%s/latest/kde_ratios_vitamin-bilby.png' % (self.params['plot_dir'][0]),dpi=360)
+#        plt.close(fig_ratios)
+#        exit()
+ 
             # Iterate over parameters
             tmp_idx=params['ndim_x']
             for i in range(params['ndim_x']):
@@ -603,6 +674,7 @@ class make_plots:
             fig_corner.savefig('%s/latest/corner_testcase%s.png' % (self.params['plot_dir'][0],str(r)),dpi=360)
             plt.close(fig_corner)
             plt.close('all')
+        
         return
 
     def make_overlap_plot(self,epoch,iterations,s,olvec,olvec_2d,adksVec):
@@ -642,7 +714,7 @@ class make_plots:
                         for j in range(self.params['r']):
 
                             # remove samples outside of the prior mass distribution
-                            mask = [(self.rev_x[cnt,0,:] >= self.rev_x[cnt,2,:]) & (self.rev_x[cnt,3,:] >= 1000.0) & (self.rev_x[cnt,3,:] <= 3000.0) & (self.rev_x[cnt,1,:] >= 0.4) & (self.rev_x[cnt,1,:] <= 0.6) & (self.rev_x[cnt,0,:] >= 35.0) & (self.rev_x[cnt,0,:] <= 80.0) & (self.rev_x[cnt,2,:] <= 80.0) & (self.rev_x[cnt,2,:] >= 35.0)]
+                            mask = [(self.rev_x[cnt,0,:] >= self.rev_x[cnt,2,:]) & (self.rev_x[cnt,3,:] >= 1000.0) & (self.rev_x[cnt,3,:] <= 3000.0) & (self.rev_x[cnt,1,:] >= 0.65) & (self.rev_x[cnt,1,:] <= 0.85) & (self.rev_x[cnt,0,:] >= 35.0) & (self.rev_x[cnt,0,:] <= 80.0) & (self.rev_x[cnt,2,:] <= 80.0) & (self.rev_x[cnt,2,:] >= 35.0)]
                             mask = np.argwhere(mask[0])
                             new_rev = self.rev_x[cnt,nextk,mask]
                             new_rev = new_rev.reshape(new_rev.shape[0])

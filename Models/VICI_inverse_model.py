@@ -49,6 +49,7 @@
 ################################################################################################################
 
 import numpy as np
+import time
 import tensorflow as tf
 
 #from Neural_Networks import OELBO_decoder_difference
@@ -80,7 +81,7 @@ def tf_normalise_dataset(xp):
     return x_data
 
 #def train(params, load_dir, save_dir, plotter, y_data_test, pos_test, samples):
-def train(params, x_data, y_data, siz_high_res, save_dir, plotter, y_data_test,train_files,normscales,y_data_train_noisefree,y_normscale):    
+def train(params, x_data, y_data, siz_high_res, save_dir, plotter, y_data_test,train_files,normscales,y_data_train_noisefree,samples,pos_test,y_normscale):    
 
     x_data = x_data
     y_data_train_l = y_data
@@ -271,7 +272,8 @@ def train(params, x_data, y_data, siz_high_res, save_dir, plotter, y_data_test,t
         if params['do_extra_noise']:
             x_data_train_l = x_data[next_indices,:]
             y_data_train_l = y_data_train_noisefree[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],params['ndata']))
-            y_data_train_l /= y_normscale[0]
+            if params['do_normscale']:
+                y_data_train_l /= y_normscale[0]
             #print('generated {} elements of new training data noise'.format(params['batch_size']))
 
             session.run(minimize, feed_dict={bs_ph:bs, x_ph:x_data_train_l, lam_ph:lam, yt_ph:y_data_train_l}) # minimising cost function
@@ -283,39 +285,39 @@ def train(params, x_data, y_data, siz_high_res, save_dir, plotter, y_data_test,t
                 
             #ynt = session.run(y, feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], yt_ph:y_data_train_l[0:test_n,:]})
             #cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], y_ph:ynt, lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
-            cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
+            cost_value_vae, KL_VAE = session.run([cost_R_vae, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data_train_l[0:test_n,:], lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
             KL_PLOT[ni] = KL_VAE
-            COST_PLOT[ni] = -cost_value_vae
+            COST_PLOT[ni] = cost_value_vae
 
-            # make log loss plot
-            fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
-            axes_loss.grid()
-            axes_loss.set_ylabel('Loss')
-            axes_loss.set_xlabel('Iterations elapsed: %s' % i)
-            axes_loss.semilogy(np.arange(len(KL_PLOT)), np.abs(KL_PLOT), label='KL')
-            axes_loss.semilogy(np.arange(len(COST_PLOT)), np.abs(COST_PLOT), label='COST')
-            axes_loss.legend(loc='upper left')
-            plt.savefig('%s/latest/losses_logscale.png' % params['plot_dir'])
-            plt.close(fig_loss)
+            # plot losses
+            plotter.make_loss_plot(COST_PLOT[:ni+1],KL_PLOT[:ni+1],params['report_interval'],fwd=False)
 
-            # make non-log scale loss plot
-            fig_loss, axes_loss = plt.subplots(1,figsize=(10,8))
-            axes_loss.grid()
-            axes_loss.set_ylabel('Loss')
-            axes_loss.set_xlabel('Iterations elapsed: %s' % i)
-            axes_loss.plot(np.arange(len(KL_PLOT)), KL_PLOT, label='KL')
-            axes_loss.plot(np.arange(len(COST_PLOT)), COST_PLOT, label='COST')
-            axes_loss.set_xscale('log')
-            axes_loss.set_yscale('log')
-            axes_loss.legend(loc='upper left')
-            plt.savefig('%s/latest/losses.png' % params['plot_dir'])
-            plt.close(fig_loss)
-                
             if params['print_values']==True:
                 print('--------------------------------------------------------------')
                 print('Iteration:',i)
-                print('Training Set -ELBO:',-cost_value_vae)
+                print('Training Set -ELBO:',cost_value_vae)
                 print('KL Divergence:',KL_VAE)
+
+        if i % params['plot_interval'] == 0 and i>0:
+            # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+            _, _, XS, _, _  = VICI_inverse_model.run(params, y_data_test, np.shape(x_data)[1], "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+
+            # Convert XS back to unnormalized version
+            if params['do_normscale']:
+                for m in range(params['ndim_x']):
+                    XS[:,m,:] = XS[:,m,:]*normscales[m]
+
+            # Generate final results plots
+            plotter = plots.make_plots(params,samples,XS,pos_test)
+
+            # Make corner plots
+            plotter.make_corner_plot(sampler='dynesty1')
+
+            # Make KL plot
+            plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data,normscales)
+
+            # Make pp plot
+#            plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)
        
         if i % params['save_interval'] == 0 and i > 0:
 
@@ -513,6 +515,9 @@ def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_file
                 cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
                 KL_PLOT[ni] = KL_VAE
                 COST_PLOT[ni] = -cost_value_vae
+
+                # plot losses
+                plotter.make_loss_plot(COST_PLOT[:ni+1],KL_PLOT[:ni+1],params['report_interval'],fwd=False)
                 
                 if params['print_values']==True:
                     print('--------------------------------------------------------------')
@@ -520,6 +525,28 @@ def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_file
                     print('Training Set ELBO:',-cost_value_vae)
                     print('KL Divergence:',KL_VAE)
        
+        if i % params['plot_interval'] == 0 and i>0:
+            # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+            _, _, XS, _  = VICI_inverse_model.run(params, y_data_test_h, np.shape(x_data_train)[1], "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+
+            # Convert XS back to unnormalized version
+            if params['do_normscale']:
+                for m in range(params['ndim_x']):
+                    XS[:,m,:] = XS[:,m,:]*normscales[m]
+
+            # Make KL plot
+            plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+
+            # Make corner plots
+            plotter.make_corner_plot(sampler='dynesty1')
+
+            # Make KL plot
+            plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+
+            # Make pp plot
+#            plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)
+            
+
         if i % params['save_interval'] == 0:
              
             save_path = saver.save(session,save_dir)
@@ -607,66 +634,27 @@ def run(params, y_data_test, siz_x_data, load_dir):
 
     else:
         for i in range(ns):
-            rec_x_m = session.run(x_mean,feed_dict={y_ph:y_data_test})
+            #rec_x_m = session.run(x_mean,feed_dict={y_ph:y_data_test})
+            run_startt = time.time()
             rec_x_mx = session.run(qx_samp,feed_dict={y_ph:y_data_test})
-            rec_x_s = session.run(x_mean,feed_dict={y_ph:y_data_test})
+            run_endt = time.time()
+#            run_startt = time.time()
+#            rec_x_s = session.run(x_mean,feed_dict={y_ph:y_data_test})
+#            run_endt = time.time()
 
-            XM[:,:,i] = rec_x_m
+            #XM[:,:,i] = rec_x_m
             XSX[:,:,i] = rec_x_mx
-            XSA[:,:,i] = rec_x_s
+            #XSA[:,:,i] = rec_x_s
 
+    pmax = None#session.run(x_pmax,feed_dict={y_ph:y_data_test})
     
-    pmax = session.run(x_pmax,feed_dict={y_ph:y_data_test})
-    
-    xm = np.mean(XM,axis=2)
-    xsx = np.std(XSX,axis=2)
-    xs = np.std(XM,axis=2)
+    xm = None#np.mean(XM,axis=2)
+    xsx = None#np.std(XSX,axis=2)
+    xs = None#np.std(XM,axis=2)
     XS = XSX[:,:,0:n_ex_s]
     #XS = XSA[:,:,0:n_ex_s]
 
-    """
-    n_steps=0
-    i = False
-    while i == False:
-        rec_x_m = session.run(x_mean,feed_dict={y_ph:y_data_test})
-        rec_x_mx = session.run(qx_samp,feed_dict={y_ph:y_data_test})
-        rec_x_s = session.run(x_mean,feed_dict={y_ph:y_data_test})
-        # remove m1 and m2 samples outside of prior
-        cont = False
-        for j in range(XSX.shape[0]):
-            if (rec_x_mx[j,0] >= 35.0) and (rec_x_mx[j,0] <= 50.0) and (rec_x_mx[j,2] <= 50.0) and (rec_x_mx[j,2] >= 35.0):
-                continue
-            else: cont=True
-        if cont==True:
-            continue
-        elif n_steps==ns:
-            i=True
-        else:
-            XM[:,:,i] = rec_x_m
-            XSX[:,:,i] = rec_x_mx
-            XSA[:,:,i] = rec_x_s
-            ns+=1
-    """
-    # remove m1 and m2 samples outside of prior
-    """
-    new_XS = []
-    #print(XS[0,:,:].shape) test samples, parameter, posterior
-    max_len=n_ex_s
-    for j in range(XSX.shape[0]):
-        mask = [(XSX[j,0,:] >= 35.0) & (XSX[j,0,:] <= 50.0) & (XSX[j,2,:] <= 50.0) & (XSX[j,2,:] >= 35.0)]
-        mask = np.argwhere(mask[0])
-        temp_XS = XSX[j,:,mask]
-        temp_XS = temp_XS.reshape(XSX[j,:,mask].shape[2],XSX[j,:,mask].shape[0])
-        new_XS.append(temp_XS[:,0:max_len])
-    new_XS = np.array(new_XS)
-    print(new_XS.shape)
-    exit()
-    XS = XSX[:,:,0:n_ex_s]
-    """
-    #XS = XSA[:,:,0:n_ex_s]
-    
-                
-    return xm, xsx, XS, pmax
+    return xm, xsx, XS, pmax, (run_endt - run_startt)
 
 def compute_ELBO(params, x_data, y_data_h, load_dir):
     

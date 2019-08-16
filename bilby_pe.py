@@ -215,8 +215,8 @@ def gen_masses(m_min=5.0,M_max=100.0,mdist='metric'):
         new_m_min = m_min
         new_M_max = M_max
         while not flag:
-            m1 = np.random.uniform(low=35.0,high=50.0)
-            m2 = np.random.uniform(low=35.0,high=50.0)
+            m1 = np.random.uniform(low=35.0,high=80.0)
+            m2 = np.random.uniform(low=35.0,high=80.0)
             m12 = np.array([m1,m2]) 
             flag = True if (np.sum(m12)<new_M_max) and (np.all(m12>new_m_min)) and (m12[0]>=m12[1]) else False
         eta = m12[0]*m12[1]/(m12[0]+m12[1])**2
@@ -272,7 +272,7 @@ def gen_par(fs,T_obs,geocent_time,mdist='metric'):
     """
     # define distribution params
     m_min = 35.0         # 5 rest frame component masses
-    M_max = 100.0       # 100 rest frame total mass
+    M_max = 160.0       # 100 rest frame total mass
 
     m12, mc, eta = gen_masses(m_min,M_max,mdist=mdist)
     M = np.sum(m12)
@@ -287,7 +287,7 @@ def gen_par(fs,T_obs,geocent_time,mdist='metric'):
     #theta_jn = np.random.uniform(low=0.0, high=2.0*np.pi)
     #print('{}: selected bbh inc angle = {}'.format(time.asctime(),theta_jn))
 
-    geocent_time = np.random.uniform(low=geocent_time-0.1,high=geocent_time+0.1)
+    geocent_time = np.random.uniform(low=geocent_time+0.15,high=geocent_time+0.35)
     print('{}: selected bbh GPS time = {}'.format(time.asctime(),geocent_time))
 
     lum_dist = np.random.uniform(low=1e3, high=3e3)
@@ -301,7 +301,7 @@ def gen_par(fs,T_obs,geocent_time,mdist='metric'):
     return m12[0], m12[1], mc, eta, phase, geocent_time, lum_dist, theta_jn
 
 def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=36.,m2=36.,mc=17.41,
-           geocent_time=1126259642.5,lum_dist=2000.,phase=0.0,N_gen=1000,make_test_samp=False,
+           lum_dist=2000.,phase=0.0,N_gen=1000,make_test_samp=False,
            make_train_samp=False,run_label='test_results',make_noise=False,n_noise=25,outdir='bilby_output'):
     # Set the duration and sampling frequency of the data segment that we're
     # going to inject the signal into
@@ -316,6 +316,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     mc=0
     eta=0
     ref_geocent_time=1126259642.5 # reference gps time
+    geocent_time=1126259642.5
 
     pars = {'mc':mc,'geocent_time':geocent_time,'phase':phase,
             'N_gen':N_gen,'det':det,'ra':ra,'dec':dec,'psi':psi,'theta_jn':theta_jn,'lum_dist':lum_dist}

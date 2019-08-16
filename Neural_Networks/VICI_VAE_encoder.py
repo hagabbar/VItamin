@@ -26,8 +26,8 @@ class VariationalAutoencoder(object):
         network_weights = self._create_weights()
         self.weights = network_weights
 
-        #self.nonlinearity = tf.nn.relu
-        self.nonlinearity = tf.nn.leaky_relu
+        self.nonlinearity = tf.nn.relu
+        #self.nonlinearity = tf.nn.leaky_relu
 
 
     def _calc_z_mean_and_sigma(self,x):
