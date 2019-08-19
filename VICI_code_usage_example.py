@@ -25,18 +25,19 @@ from Neural_Networks import batch_manager
 from data import chris_data
 import plots
 
-run_label='gpu4',            # label for run
+run_label='gpu0',            # label for run
 plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
-load_train_set = False        # if True, load previously made train samples.
+load_train_set = True       # if True, load previously made train samples.
 load_test_set = True         # if True, load previously made test samples (including bilby posterior)
 T = 1                        # length of time series (s)
 dt = T/ndata                 # sampling time (Sec) #TODO: remove this.
 fnyq = 0.5/dt                # Nyquist frequency (Hz) #TODO: remove this.
-tot_dataset_size=int(1e6)    # total number of training samples to use
+tot_dataset_size=int(1e5)    # total number of training samples to use
 tset_split=int(5e4)          # number of training samples per saved data files
 r = 5                        # the grid dimension for the output tests
 n_noise=1                    # this is a redundant parameter. Needs to be removed TODO
+ref_geocent_time=1126259642.5            # reference gps time
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
@@ -51,7 +52,7 @@ def get_params():
         z_dimension=32,               # number of latent space dimensions inference model (inverse reconstruction)
         n_weights = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         save_interval=500,           # interval at which to save inference model weights
-        plot_interval=50000,           # interval over which plotting is done
+        plot_interval=200000,           # interval over which plotting is done
 
         
         ndata = ndata,
@@ -59,6 +60,8 @@ def get_params():
         ndim_x=4,                             # number of parameters to PE on
         sigma=1.0,                            # stadnard deviation of the noGise on signal
         usepars=[0,1,2,3],                    # which parameters you want to do PE on
+        prior_min=[35.0,0.0,ref_geocent_time+0.15,35.0,1000.0],                         # minimum prior range
+        prior_max=[80.0,2*np.pi,ref_geocent_time+0.35,80.0,3000.0],                         # maximum prior range
         tot_dataset_size=tot_dataset_size,    # total size of training set
         tset_split=tset_split,                # n_samples per training set file
         seed=42,                              # random seed number
@@ -72,7 +75,7 @@ def get_params():
         test_set_dir='condor_runs/final_run/bilby_output_dynesty1', #location of test set for all plots ecept kl
         add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         n_noise=n_noise,                      # number of noise realizations
-        ref_geocent_time=1126259642.5,            # reference gps time 
+        ref_geocent_time=ref_geocent_time,            # reference gps time 
         do_normscale=True,                    # if true normalize parameters
         do_mc_eta_conversion=False,           # if True, convert m1 and m2 parameters into mc and eta
         n_kl_samp=25,                        # number of iterations in statistic tests TODO: remove this
@@ -85,7 +88,7 @@ def get_params():
         samplers=['vitamin','dynesty','emcee'],          # list of available bilby samplers to use
         use_samplers = [0,1,2],                  # number of Bilby samplers to use 
         kl_set_dir='condor_runs/final_run/bilby_output', # location of test set used for kl
-        do_only_test = True                  # if true, don't train but only run on test samples using pretrained network
+        do_only_test = False                 # if true, don't train but only run on test samples using pretrained network
     )
     return params
 
@@ -126,7 +129,7 @@ if not load_train_set:
 
         # Scale t0 par to be between 0 and 1
 #        signal_train_pars[:,2] = params['ref_gps_time'] - signal_train_pars[:,2]
-        signal_train_pars[:,2] = (signal_train_pars[:,2] - (params['ref_geocent_time'] + 0.15)) / 0.2
+        signal_train_pars[:,2] = (signal_train_pars[:,2] - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
 
 #        x_data_train_h.append(signal_train_images)
 #        y_data_train_lh.append(signal_train_pars)
@@ -157,7 +160,7 @@ for i in range(params['r']):
         f = h5py.File('%s/test_samp_%d.h5py' % (params['test_set_dir'],cnt), 'r+')
 
         # select samples from posterior randomly
-        phase = f['phase_post'][:]
+        phase = (f['phase_post'][:] - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
          
         if params['do_mc_eta_conversion']:
             m1 = f['mass_1_post'][:]
@@ -165,10 +168,10 @@ for i in range(params['r']):
             eta = (m1*m2)/(m1+m2)**2
             mc = np.sum([m1,m2], axis=0)*eta**(3.0/5.0)
         else: 
-            m1 = f['mass_1_post'][:]
-            m2 = f['mass_2_post'][:]
-        t0 = (f['geocent_time_post'][:] - (params['ref_geocent_time'] + 0.15)) / 0.2
-        dist=f['luminosity_distance_post'][:]
+            m1 = (f['mass_1_post'][:] - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
+            m2 = (f['mass_2_post'][:] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
+        t0 = (f['geocent_time_post'][:] - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
+        dist=(f['luminosity_distance_post'][:] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
 #        theta_jn=f['theta_jn_post'][:][shuffling]
         if params['do_mc_eta_conversion']:
             f_new=np.array([mc,phase,t0,eta]).T
@@ -183,11 +186,14 @@ for i in range(params['r']):
             m2 = np.array(f['mass_2'])
             eta = (m1*m2)/(m1+m2)**2
             mc = np.sum([m1,m2])*eta**(3.0/5.0)
-            pos_test.append([mc,np.array(f['phase']),(f['geocent_time'][:] - (params['ref_geocent_time'] + 0.15)) / 0.2,eta])
+            pos_test.append([mc,np.array(f['phase']),(np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2]),eta])
         else:
-            m1 = np.array(f['mass_1'])
-            m2 = np.array(f['mass_2'])
-            pos_test.append([m1,np.array(f['phase']),(f['geocent_time'][:] - (params['ref_geocent_time'] + 0.15)) / 0.2,m2,np.array(f['luminosity_distance'])])
+            m1 = (np.array(f['mass_1']) - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
+            m2 = (np.array(f['mass_2']) - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
+            t0 = (np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
+            dist = (np.array(f['luminosity_distance']) - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
+            phase = (np.array(f['phase']) - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
+            pos_test.append([m1,phase,t0,m2,dist])
         labels_test.append([np.array(f['noisy_waveform'])])
         sig_test.append([np.array(f['noisefree_waveform'])])
 
@@ -227,14 +233,15 @@ if not params['do_load_in_chunks']:
 
     if params['do_normscale']:
 
-        normscales = [np.max(data['x_data_train_h'][:,0]),np.max(data['x_data_train_h'][:,1]),np.max(data['x_data_train_h'][:,2]),np.max(data['x_data_train_h'][:,3]),np.max(data['x_data_train_h'][:,4])]#,np.max(data['pos'][:,5])]
+        normscales = [1.0,1.0,1.0,1.0,1.0]
+
 
         # normalize training set
-        data['x_data_train_h'][:,0]=data['x_data_train_h'][:,0]/normscales[0]
-        data['x_data_train_h'][:,1]=data['x_data_train_h'][:,1]/normscales[1]
-        data['x_data_train_h'][:,2]=data['x_data_train_h'][:,2]/normscales[2]
-        data['x_data_train_h'][:,3]=data['x_data_train_h'][:,3]/normscales[3]
-        data['x_data_train_h'][:,4]=data['x_data_train_h'][:,4]/normscales[4]
+        data['x_data_train_h'][:,0]=(data['x_data_train_h'][:,0] - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
+        data['x_data_train_h'][:,1]=(data['x_data_train_h'][:,1] - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
+        data['x_data_train_h'][:,2]=data['x_data_train_h'][:,2] #- (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
+        data['x_data_train_h'][:,3]=(data['x_data_train_h'][:,3] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
+        data['x_data_train_h'][:,4]=(data['x_data_train_h'][:,4] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
     #    data['x_data_train_h'][:,5]=data['x_data_train_h'][:,5]/normscales[5]
 
     # TODO: move this to whitening procedure in bilby
@@ -271,12 +278,13 @@ if params['do_load_in_chunks']:
 
 # Make directory for plots
 #plots.make_dirs(params['plot_dir'][0])
+y_normscale = [1]
 
 # Declare plot class variables
 plotter = plots.make_plots(params,samples,None,pos_test)
 
 # Plot test sample time series
-plotter.plot_testdata((y_data_test_h*y_normscale[0]),sig_test,params['r']**2,params['plot_dir'])
+plotter.plot_testdata((y_data_test_h),sig_test,params['r']**2,params['plot_dir'])
 
 # Train model
 if not params['do_only_test']:
@@ -308,7 +316,7 @@ if params['do_only_test']:
     plotter.make_corner_plot(sampler='dynesty1')
 
     # Make KL plot
-    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+#    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
 
     # Make pp plot
     plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales,samples,pos_test)

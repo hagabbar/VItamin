@@ -314,7 +314,7 @@ def train(params, x_data, y_data, siz_high_res, save_dir, plotter, y_data_test,t
             plotter.make_corner_plot(sampler='dynesty1')
 
             # Make KL plot
-            plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data,normscales)
+#            plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data,normscales)
 
             # Make pp plot
 #            plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)

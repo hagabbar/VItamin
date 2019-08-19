@@ -64,7 +64,7 @@ class make_plots:
             c=vici = []
             for i in range(inn_samps.shape[0]):
                 # remove samples outside of the prior mass distribution
-                mask = [(inn_samps[0,:] >= inn_samps[2,:]) & (inn_samps[3,:] >= 1000.0) & (inn_samps[3,:] <= 3000.0) & (inn_samps[1,:] >= 0.65) & (inn_samps[1,:] <= 0.85) & (inn_samps[0,:] >= 35.0) & (inn_samps[0,:] <= 80.0) & (inn_samps[2,:] <= 80.0) & (inn_samps[2,:] >= 35.0)]
+                mask = [(inn_samps[0,:] >= inn_samps[2,:]) & (inn_samps[3,:] >= 0.0) & (inn_samps[3,:] <= 1.0) & (inn_samps[1,:] >= 0.0) & (inn_samps[1,:] <= 1.0) & (inn_samps[0,:] >= 0.0) & (inn_samps[0,:] <= 1.0) & (inn_samps[2,:] <= 1.0) & (inn_samps[2,:] >= 0.0)]
                 mask = np.argwhere(mask[0])
                 new_rev = inn_samps[i,mask]
                 new_rev = new_rev.reshape(new_rev.shape[0])
@@ -143,19 +143,18 @@ class make_plots:
                     f = h5py.File('%s/test_samp_%d.h5py' % (test_set_dir,cnt), 'r+')
 
                     # select samples from posterior randomly
-                    shuffling = np.random.permutation(f['phase_post'][:].shape[0])
-                    phase = f['phase_post'][:][shuffling]
+                    phase = (f['phase_post'][:] - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
 
                     if params['do_mc_eta_conversion']:
-                        m1 = f['mass_1_post'][:][shuffling]
-                        m2 = f['mass_2_post'][:][shuffling]
+                        m1 = f['mass_1_post'][:]
+                        m2 = f['mass_2_post'][:]
                         eta = (m1*m2)/(m1+m2)**2
                         mc = np.sum([m1,m2], axis=0)*eta**(3.0/5.0)
                     else:
-                        m1 = f['mass_1_post'][:][shuffling]
-                        m2 = f['mass_2_post'][:][shuffling]
-                    t0 = params['ref_gps_time'] - f['geocent_time_post'][:][shuffling]
-                    dist=f['luminosity_distance_post'][:][shuffling]
+                        m1 = (f['mass_1_post'][:] - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
+                        m2 = (f['mass_2_post'][:] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
+                    t0 = (f['geocent_time_post'][:] - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
+                    dist=(f['luminosity_distance_post'][:] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
                     #theta_jn=f['theta_jn_post'][:][shuffling]
                     timet.append(np.array(f['runtime']))
                     if params['do_mc_eta_conversion']:
@@ -171,11 +170,14 @@ class make_plots:
                         m2 = np.array(f['mass_2'])
                         eta = (m1*m2)/(m1+m2)**2
                         mc = np.sum([m1,m2])*eta**(3.0/5.0)
-                        pos_test.append([mc,np.array(f['phase']),params['ref_gps_time']-np.array(f['geocent_time']),eta])
+                        pos_test.append([mc,np.array(f['phase']),(np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2]),eta])
                     else:
-                        m1 = np.array(f['mass_1'])
-                        m2 = np.array(f['mass_2'])
-                        pos_test.append([m1,np.array(f['phase']),params['ref_gps_time']-np.array(f['geocent_time']),m2,np.array(f['luminosity_distance'])])
+                        m1 = (np.array(f['mass_1']) - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
+                        m2 = (np.array(f['mass_2']) - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
+                        t0 = (np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
+                        dist = (np.array(f['luminosity_distance']) - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
+                        phase = (np.array(f['phase']) - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
+                        pos_test.append([m1,phase,t0,m2,dist])
                     cnt += 1
                     f.close()
 
@@ -183,6 +185,9 @@ class make_plots:
             # save time per sample
             timet = np.array(timet)
             timet = np.array([np.min(timet),np.max(timet),np.median(timet)])
+
+            # rescale all samples to be from 0 to 1
+            samples
 
             pos_test = pos_test[:,[0,2,3,4]]
             samples = samples[:,:,[0,2,3,4]]
@@ -358,7 +363,7 @@ class make_plots:
             cur_max = self.params['n_samples']
             set1 = []
             for i in range(sampset_1.shape[0]):
-                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.65) & (sampset_1[1,:] <= 0.85) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 0.0) & (sampset_1[3,:] <= 1.0) & (sampset_1[1,:] >= 0.0) & (sampset_1[1,:] <= 1.0) & (sampset_1[0,:] >= 0.0) & (sampset_1[0,:] <= 1.0) & (sampset_1[2,:] <= 1.0) & (sampset_1[2,:] >= 0.0)]
                 mask = np.argwhere(mask[0])
                 new_rev = sampset_1[i,mask]
                 new_rev = new_rev.reshape(new_rev.shape[0])
@@ -436,7 +441,7 @@ class make_plots:
             if samplers[0] == 'vitamin1':
                 for i in range(sampset_1.shape[0]):
                     if samplers[1] != 'vitamin2':
-                        mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.65) & (sampset_1[1,:] <= 0.85) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                        mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 0.0) & (sampset_1[3,:] <= 1.0) & (sampset_1[1,:] >= 0.0) & (sampset_1[1,:] <= 1.0) & (sampset_1[0,:] >= 0.0) & (sampset_1[0,:] <= 1.0) & (sampset_1[2,:] <= 1.0) & (sampset_1[2,:] >= 0.0)]
                         mask = np.argwhere(mask[0])
                         new_rev = sampset_1[i,mask]
                         new_rev = new_rev.reshape(new_rev.shape[0])
@@ -447,8 +452,8 @@ class make_plots:
                         set1.append(new_rev[:cur_max])
                         set2.append(new_samples[:cur_max])
                     elif samplers[1] == 'vitamin2':
-                        mask1 = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.65) & (sampset_1[1,:] <= 0.85) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
-                        mask2 = [(sampset_2[0,:] >= sampset_2[2,:]) & (sampset_2[3,:] >= 1000.0) & (sampset_2[3,:] <= 3000.0) & (sampset_2[1,:] >= 0.65) & (sampset_2[1,:] <= 0.85) & (sampset_2[0,:] >= 35.0) & (sampset_2[0,:] <= 80.0) & (sampset_2[2,:] <= 80.0) & (sampset_2[2,:] >= 35.0)]
+                        mask1 = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 0.0) & (sampset_1[3,:] <= 1.0) & (sampset_1[1,:] >= 0.0) & (sampset_1[1,:] <= 1.0) & (sampset_1[0,:] >= 0.0) & (sampset_1[0,:] <= 1.0) & (sampset_1[2,:] <= 1.0) & (sampset_1[2,:] >= 0.0)]
+                        mask2 = [(sampset_2[0,:] >= sampset_2[2,:]) & (sampset_2[3,:] >= 0.0) & (sampset_2[3,:] <= 1.0) & (sampset_2[1,:] >= 0.0) & (sampset_2[1,:] <= 1.0) & (sampset_2[0,:] >= 0.0) & (sampset_2[0,:] <= 1.0) & (sampset_2[2,:] <= 1.0) & (sampset_2[2,:] >= 0.0)]
 
                         mask1, mask2 = np.argwhere(mask1[0]), np.argwhere(mask2[0])
                         new_rev = sampset_1[i,mask1]
@@ -468,9 +473,19 @@ class make_plots:
                 set2 = np.array(set2)
 
             else:
+
                 set1 = sampset_1
                 set2 = sampset_2
       
+            # un-scale sets
+            # TODO: fix this mess
+#            for m in range(len(params['usepars'])):
+#                z = m
+#                if m >= 1: z += 1
+#                if m == 1: continue
+#                set1[m,:] = (set1[m,:] * (params['prior_max'][z] - params['prior_min'][z])) + (params['prior_min'][z])
+#                set2[m,:] = (set2[m,:] * (params['prior_max'][z] - params['prior_min'][z])) + (params['prior_min'][z]) 
+
             kl_samps = []
             n_samps = self.params['n_samples']
             n_pars = self.params['ndim_x']
@@ -509,7 +524,6 @@ class make_plots:
                     set1,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
                     set2,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
 
-                
                 # Iterate over test cases
                 tot_kl = []
                 for r in range(self.params['r']**2):
@@ -577,7 +591,7 @@ class make_plots:
             set1 = []
             set2 = []
             for i in range(sampset_1.shape[0]):
-                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 1000.0) & (sampset_1[3,:] <= 3000.0) & (sampset_1[1,:] >= 0.65) & (sampset_1[1,:] <= 0.85) & (sampset_1[0,:] >= 35.0) & (sampset_1[0,:] <= 80.0) & (sampset_1[2,:] <= 80.0) & (sampset_1[2,:] >= 35.0)]
+                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 0.0) & (sampset_1[3,:] <= 1.0) & (sampset_1[1,:] >= 0.0) & (sampset_1[1,:] <= 1.0) & (sampset_1[0,:] >= 0.0) & (sampset_1[0,:] <= 1.0) & (sampset_1[2,:] <= 1.0) & (sampset_1[2,:] >= 0.0)]
                 mask = np.argwhere(mask[0])
                 new_rev = sampset_1[i,mask]
                 new_rev = new_rev.reshape(new_rev.shape[0])
@@ -714,7 +728,7 @@ class make_plots:
                         for j in range(self.params['r']):
 
                             # remove samples outside of the prior mass distribution
-                            mask = [(self.rev_x[cnt,0,:] >= self.rev_x[cnt,2,:]) & (self.rev_x[cnt,3,:] >= 1000.0) & (self.rev_x[cnt,3,:] <= 3000.0) & (self.rev_x[cnt,1,:] >= 0.65) & (self.rev_x[cnt,1,:] <= 0.85) & (self.rev_x[cnt,0,:] >= 35.0) & (self.rev_x[cnt,0,:] <= 80.0) & (self.rev_x[cnt,2,:] <= 80.0) & (self.rev_x[cnt,2,:] >= 35.0)]
+                            mask = [(self.rev_x[cnt,0,:] >= self.rev_x[cnt,2,:]) & (self.rev_x[cnt,3,:] >= 0.0) & (self.rev_x[cnt,3,:] <= 1.0) & (self.rev_x[cnt,1,:] >= 0.0) & (self.rev_x[cnt,1,:] <= 1.0) & (self.rev_x[cnt,0,:] >= 0.0) & (self.rev_x[cnt,0,:] <= 1.0) & (self.rev_x[cnt,2,:] <= 1.0) & (self.rev_x[cnt,2,:] >= 0.0)]
                             mask = np.argwhere(mask[0])
                             new_rev = self.rev_x[cnt,nextk,mask]
                             new_rev = new_rev.reshape(new_rev.shape[0])
