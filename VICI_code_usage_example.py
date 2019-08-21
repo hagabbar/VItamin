@@ -25,7 +25,7 @@ from Neural_Networks import batch_manager
 from data import chris_data
 import plots
 
-run_label='gpu0',            # label for run
+run_label='gpu4',            # label for run
 plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
 load_train_set = True       # if True, load previously made train samples.
@@ -33,7 +33,7 @@ load_test_set = True         # if True, load previously made test samples (inclu
 T = 1                        # length of time series (s)
 dt = T/ndata                 # sampling time (Sec) #TODO: remove this.
 fnyq = 0.5/dt                # Nyquist frequency (Hz) #TODO: remove this.
-tot_dataset_size=int(1e5)    # total number of training samples to use
+tot_dataset_size=int(1e6)    # total number of training samples to use
 tset_split=int(5e4)          # number of training samples per saved data files
 r = 5                        # the grid dimension for the output tests
 n_noise=1                    # this is a redundant parameter. Needs to be removed TODO
@@ -45,14 +45,14 @@ def get_params():
         image_size = [1,ndata],       # Images Size
         print_values=True,            # optionally print values every report interval
         n_samples = 5000,             # number of posterior samples to save per reconstruction upon inference 
-        num_iterations=int(1e7)+1,        # number of iterations inference model (inverse reconstruction)
+        num_iterations=int(1e8)+1,        # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=128,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
         z_dimension=32,               # number of latent space dimensions inference model (inverse reconstruction)
         n_weights = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         save_interval=500,           # interval at which to save inference model weights
-        plot_interval=200000,           # interval over which plotting is done
+        plot_interval=100000,           # interval over which plotting is done
 
         
         ndata = ndata,
@@ -203,8 +203,8 @@ for i in range(params['r']):
 # Set test arrays
 pos_test = np.array(pos_test) # test parameters
 # TODO: move whitening terms to where whitening is done
-y_data_test_h = np.array(labels_test).reshape(int(r*r),ndata) * np.sqrt(2*params['ndata']) # noisy y test
-sig_test = np.array(sig_test).reshape(int(r*r),ndata) * np.sqrt(2*params['ndata']) # noise-free y test
+y_data_test_h = np.array(labels_test).reshape(int(r*r),ndata) * np.sqrt(float(params['ndata'])/2.0) # noisy y test
+sig_test = np.array(sig_test).reshape(int(r*r),ndata) * np.sqrt(float(params['ndata'])/2.0) # noise-free y test
 
 # Get list of training files
 train_files = []
@@ -246,21 +246,19 @@ if not params['do_load_in_chunks']:
 
     # TODO: move this to whitening procedure in bilby
     x_data_train_h = data['x_data_train_h']
-    y_data_train_lh = data['y_data_train_lh'] * np.sqrt(2*params['ndata'])
-    y_data_train_noisefree = data['y_data_train_noisefree'] * np.sqrt(2*params['ndata'])
+    y_data_train_lh = data['y_data_train_lh'] * np.sqrt(float(params['ndata'])/2.0)
+    y_data_train_noisefree = data['y_data_train_noisefree'] * np.sqrt(float(params['ndata'])/2.0)
 
-#    if params['do_normscale']:
-#        y_normscale = [np.max(y_data_train_lh)] # [1]
-#        y_normscale = [26.626726671237346]
-#        y_data_train_lh=y_data_train_lh/y_normscale[0]
-#        y_data_test_h = y_data_test_h / y_normscale[0]
-        
-
-#    y_data_train_noisefree = 0
     # Remove phase parameter
     pos_test = pos_test[:,[0,2,3,4]]
     x_data_train_h = x_data_train_h[:,[0,2,3,4]]
     samples = samples[:,:,[0,2,3,4]]
+
+    # rescale y data for training/testing by absolute max of training set
+#    y_normscale = [13.206409999486425]
+    y_normscale = [np.max(np.abs(y_data_train_lh))]
+    y_data_train_lh /= y_normscale[0]
+    y_data_test_h /= y_normscale[0]
 
     if params['do_normscale']: 
         normscales = [normscales[0],normscales[2],normscales[3],normscales[4]]#,normscales[5]]
@@ -278,7 +276,6 @@ if params['do_load_in_chunks']:
 
 # Make directory for plots
 #plots.make_dirs(params['plot_dir'][0])
-y_normscale = [1]
 
 # Declare plot class variables
 plotter = plots.make_plots(params,samples,None,pos_test)
@@ -313,13 +310,13 @@ if params['do_only_test']:
     plotter = plots.make_plots(params,samples,XS,pos_test)
 
     # Make corner plots
-    plotter.make_corner_plot(sampler='dynesty1')
+#    plotter.make_corner_plot(sampler='dynesty1')
 
     # Make KL plot
 #    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
 
     # Make pp plot
-    plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales,samples,pos_test)
+    plotter.plot_pp(VICI_inverse_model,y_data_test_h,x_data_train,0,normscales,samples,pos_test)
 
     # Geneerate overlap scatter plots
 #    plotter.make_overlap_plot(0,iterations,s,olvec,olvec_2d,adksVec)

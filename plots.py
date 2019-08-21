@@ -339,13 +339,14 @@ class make_plots:
                 par_test[:,m] = par_test[:,m] * normscales[m]
         
         plt.figure()
-        pp = np.zeros(Npp+2)
+        pp = np.zeros((self.params['r']**2)+2)
         pp[0] = 0.0
         pp[1] = 1.0
         pp_bilby = np.zeros((self.params['r']**2)+2)
         pp_bilby[0] = 0.0
         pp[1] = 1.0
-                 
+                
+         
         for cnt in range(Npp):
 
             y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
@@ -373,7 +374,7 @@ class make_plots:
             set1 = np.array(set1)
 
             set1 = set1.reshape(set1.shape[1],set1.shape[0])
-            pp[cnt+2] = self.pp_plot(par_test[cnt,:],set1)
+            pp[cnt+2] = self.pp_plot(pos_test[cnt,:],set1)
             print('Computed p-p plot iteration %d/%d' % (int(cnt)+1,int(Npp)))
         
         # make bilby p-p plot
@@ -382,7 +383,8 @@ class make_plots:
             print('Computed Bilby p-p plot iteration %d/%d' % (int(cnt)+1,int(self.params['r']**2)))
             
 
-        plt.plot(np.arange(Npp+2)/(Npp+1.0),np.sort(pp),'-',label='vitamin')
+        print(pp)
+        plt.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp),'-',label='vitamin')
         plt.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',label='Bilby')
         plt.plot([0,1],[0,1],'--k')
         plt.xlim([0,1])
@@ -477,26 +479,17 @@ class make_plots:
                 set1 = sampset_1
                 set2 = sampset_2
       
-            # un-scale sets
-            # TODO: fix this mess
-#            for m in range(len(params['usepars'])):
-#                z = m
-#                if m >= 1: z += 1
-#                if m == 1: continue
-#                set1[m,:] = (set1[m,:] * (params['prior_max'][z] - params['prior_min'][z])) + (params['prior_min'][z])
-#                set2[m,:] = (set2[m,:] * (params['prior_max'][z] - params['prior_min'][z])) + (params['prior_min'][z]) 
-
             kl_samps = []
             n_samps = self.params['n_samples']
             n_pars = self.params['ndim_x']
 
             # Iterate over number of randomized sample slices
-            set1 = set1[:,:]
-            set2 = set2[:,:]
             p = gaussian_kde(set1)
             q = gaussian_kde(set2)
-            kl_result = (1.0/set1.shape[1]) * np.sum(( np.log(p(set1))
-                                            - np.log(q(set1)) ))
+            log_diff = np.log(p(set1)/q(set1))
+            # Compute KL, but ignore values equal to infinity
+            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff[log_diff != np.inf])
+
             kl_arr = kl_result   
 
             return kl_arr
@@ -532,7 +525,9 @@ class make_plots:
                 tot_kl = tot_kl.flatten()
                 
                 # Plot KL results
-                axis_kl.hist(tot_kl,bins=5,alpha=0.5,normed=True,label=sampler1+'-'+sampler2)
+#                print(tot_kl)
+#                exit()
+                axis_kl.hist(tot_kl,bins=5,alpha=0.5,density=True,label=sampler1+'-'+sampler2)
                 
                 print('Completed KL calculation %d/%d' % (print_cnt,len(usesamps)*2))
                 print_cnt+=1
@@ -664,7 +659,7 @@ class make_plots:
                     axis_corner[params['ndim_x']-1-j,i].grid(False)
 
                     # add labels
-                    if i == 0:
+                    if i == 0 and params['ndim_x']-1-j != 0:
                         axis_corner[params['ndim_x']-1-j,i].set_ylabel(parname2)
                     if params['ndim_x']-1-j == (params['ndim_x']-1):
                         axis_corner[params['ndim_x']-1-j,i].set_xlabel(parname1)
