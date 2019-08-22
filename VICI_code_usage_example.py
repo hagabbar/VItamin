@@ -25,16 +25,13 @@ from Neural_Networks import batch_manager
 from data import chris_data
 import plots
 
-run_label='gpu4',            # label for run
+run_label='gpu2',            # label for run
 plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
 load_train_set = True       # if True, load previously made train samples.
 load_test_set = True         # if True, load previously made test samples (including bilby posterior)
-T = 1                        # length of time series (s)
-dt = T/ndata                 # sampling time (Sec) #TODO: remove this.
-fnyq = 0.5/dt                # Nyquist frequency (Hz) #TODO: remove this.
-tot_dataset_size=int(1e6)    # total number of training samples to use
-tset_split=int(5e4)          # number of training samples per saved data files
+tot_dataset_size=int(1e3)    # total number of training samples to use
+tset_split=int(1e3)          # number of training samples per saved data files
 r = 5                        # the grid dimension for the output tests
 n_noise=1                    # this is a redundant parameter. Needs to be removed TODO
 ref_geocent_time=1126259642.5            # reference gps time
@@ -52,7 +49,7 @@ def get_params():
         z_dimension=32,               # number of latent space dimensions inference model (inverse reconstruction)
         n_weights = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         save_interval=500,           # interval at which to save inference model weights
-        plot_interval=100000,           # interval over which plotting is done
+        plot_interval=500000,           # interval over which plotting is done
 
         
         ndata = ndata,
@@ -68,9 +65,6 @@ def get_params():
         run_label=run_label,                  # label for run
         plot_dir=plot_dir,                    # plot directory
         parnames=['m1','t0','m2','lum_dist'], # parameter names
-        T = T,                                # length of time series (s)
-        dt = T/ndata,                         # sampling time (Sec)
-        fnyq = 0.5/dt,                        # Nyquist frequency (Hz),
         train_set_dir='training_sets_final/tset_tot-%d_split-%d_%dNoise' % (tot_dataset_size,tset_split,n_noise), #location of training set
         test_set_dir='condor_runs/final_run/bilby_output_dynesty1', #location of test set for all plots ecept kl
         add_noise_real=True,                  # whether or not to add extra noise realizations in training set
@@ -82,13 +76,12 @@ def get_params():
         do_adkskl_test=True,                  # if True, do statistic tests
         do_m1_m2_cut=False,                   # if True, make a cut on all m1 and m2 values    
         do_extra_noise=True,                  # add extra noise realizations during training
-        do_load_in_chunks=False,              # if True, load training samples in random file chucnks every 25000 epochs
         Npp = 25,                             # number of test signals per pp-plot. TODO: use same 
                                               # use same samples as bilby
         samplers=['vitamin','dynesty','emcee'],          # list of available bilby samplers to use
         use_samplers = [0,1,2],                  # number of Bilby samplers to use 
         kl_set_dir='condor_runs/final_run/bilby_output', # location of test set used for kl
-        do_only_test = False                 # if true, don't train but only run on test samples using pretrained network
+        do_only_test = False                  # if true, don't train but only run on test samples using pretrained network
     )
     return params
 
@@ -172,12 +165,12 @@ for i in range(params['r']):
             m2 = (f['mass_2_post'][:] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
         t0 = (f['geocent_time_post'][:] - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
         dist=(f['luminosity_distance_post'][:] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
-#        theta_jn=f['theta_jn_post'][:][shuffling]
+
         if params['do_mc_eta_conversion']:
             f_new=np.array([mc,phase,t0,eta]).T
         else:
             f_new=np.array([m1,phase,t0,m2,dist]).T
-        f_new=f_new[:params['n_samples'],:] # TODO use random integers for indexing.
+        f_new=f_new[:params['n_samples'],:]
         samples[cnt,:,:]=f_new
 
         # get true scalar parameters
@@ -214,68 +207,56 @@ if type("%s" % params['train_set_dir']) is str:
 for filename in os.listdir(dataLocations[0]):
     train_files.append(filename)
 
-if not params['do_load_in_chunks']:
-    # load generated samples back in
-    if type("%s" % params['train_set_dir']) is str:
-        dataLocations = ["%s" % params['train_set_dir']]
-        data={'x_data_train_h': [], 'y_data_train_lh': [], 'y_data_test_h': [], 'y_data_train_noisefree': []}
-    for filename in os.listdir(dataLocations[0]):
-        data_temp={'x_data_train_h': h5py.File(dataLocations[0]+'/'+filename, 'r')['x_data_train_h'][:],
-                  'y_data_train_lh': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_train_lh'][:],
-                  'y_data_train_noisefree': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_train_noisefree'][:]}
-        data['x_data_train_h'].append(data_temp['x_data_train_h'])
-        data['y_data_train_lh'].append(data_temp['y_data_train_lh'])
-        data['y_data_train_noisefree'].append(data_temp['y_data_train_noisefree'])
+# load generated samples back in
+if type("%s" % params['train_set_dir']) is str:
+    dataLocations = ["%s" % params['train_set_dir']]
+    data={'x_data_train_h': [], 'y_data_train_lh': [], 'y_data_test_h': [], 'y_data_train_noisefree': []}
+for filename in os.listdir(dataLocations[0]):
+    data_temp={'x_data_train_h': h5py.File(dataLocations[0]+'/'+filename, 'r')['x_data_train_h'][:],
+              'y_data_train_lh': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_train_lh'][:],
+              'y_data_train_noisefree': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_train_noisefree'][:]}
+    data['x_data_train_h'].append(data_temp['x_data_train_h'])
+    data['y_data_train_lh'].append(data_temp['y_data_train_lh'])
+    data['y_data_train_noisefree'].append(data_temp['y_data_train_noisefree'])
 
-    data['x_data_train_h'] = np.concatenate(np.array(data['x_data_train_h']), axis=0)
-    data['y_data_train_lh'] = np.concatenate(np.array(data['y_data_train_lh']), axis=0)
-    data['y_data_train_noisefree'] = np.concatenate(np.array(data['y_data_train_noisefree']), axis=0)
+data['x_data_train_h'] = np.concatenate(np.array(data['x_data_train_h']), axis=0)
+data['y_data_train_lh'] = np.concatenate(np.array(data['y_data_train_lh']), axis=0)
+data['y_data_train_noisefree'] = np.concatenate(np.array(data['y_data_train_noisefree']), axis=0)
 
-    if params['do_normscale']:
+if params['do_normscale']:
 
-        normscales = [1.0,1.0,1.0,1.0,1.0]
+    normscales = [1.0,1.0,1.0,1.0,1.0]
 
 
-        # normalize training set
-        data['x_data_train_h'][:,0]=(data['x_data_train_h'][:,0] - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
-        data['x_data_train_h'][:,1]=(data['x_data_train_h'][:,1] - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
-        data['x_data_train_h'][:,2]=data['x_data_train_h'][:,2] #- (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
-        data['x_data_train_h'][:,3]=(data['x_data_train_h'][:,3] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
-        data['x_data_train_h'][:,4]=(data['x_data_train_h'][:,4] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
-    #    data['x_data_train_h'][:,5]=data['x_data_train_h'][:,5]/normscales[5]
+    # normalize training set
+    data['x_data_train_h'][:,0]=(data['x_data_train_h'][:,0] - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
+    data['x_data_train_h'][:,1]=(data['x_data_train_h'][:,1] - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
+    data['x_data_train_h'][:,2]=data['x_data_train_h'][:,2] #- (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
+    data['x_data_train_h'][:,3]=(data['x_data_train_h'][:,3] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
+    data['x_data_train_h'][:,4]=(data['x_data_train_h'][:,4] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
 
-    # TODO: move this to whitening procedure in bilby
-    x_data_train_h = data['x_data_train_h']
-    y_data_train_lh = data['y_data_train_lh'] * np.sqrt(float(params['ndata'])/2.0)
-    y_data_train_noisefree = data['y_data_train_noisefree'] * np.sqrt(float(params['ndata'])/2.0)
+# TODO: move this to whitening procedure in bilby
+x_data_train_h = data['x_data_train_h']
+y_data_train_lh = data['y_data_train_lh'] * np.sqrt(float(params['ndata'])/2.0)
+y_data_train_noisefree = data['y_data_train_noisefree'] * np.sqrt(float(params['ndata'])/2.0)
 
-    # Remove phase parameter
-    pos_test = pos_test[:,[0,2,3,4]]
-    x_data_train_h = x_data_train_h[:,[0,2,3,4]]
-    samples = samples[:,:,[0,2,3,4]]
+# Remove phase parameter
+pos_test = pos_test[:,[0,2,3,4]]
+x_data_train_h = x_data_train_h[:,[0,2,3,4]]
+samples = samples[:,:,[0,2,3,4]]
 
-    # rescale y data for training/testing by absolute max of training set
+# rescale y data for training/testing by absolute max of training set
 #    y_normscale = [13.206409999486425]
-    y_normscale = [np.max(np.abs(y_data_train_lh))]
-    y_data_train_lh /= y_normscale[0]
-    y_data_test_h /= y_normscale[0]
+y_normscale = [np.max(np.abs(y_data_train_lh))]
+y_data_train_lh /= y_normscale[0]
+y_data_test_h /= y_normscale[0]
 
-    if params['do_normscale']: 
-        normscales = [normscales[0],normscales[2],normscales[3],normscales[4]]#,normscales[5]]
-    x_data_train, y_data_train_l, y_data_train_h = x_data_train_h, y_data_train_lh, y_data_train_lh
-
-if params['do_load_in_chunks']:
-
-    if params['do_normscale']:
-        normscales = [80.0,2*np.pi,0.6,80.0,3000.0]#,np.max(data['pos'][:,5])]
-        normscales = [normscales[0],normscales[2],normscales[3],normscales[4]]#,normscales[5]]
-
-    # Remove phase parameter
-    pos_test = pos_test[:,[0,2,3,4]]
-    samples = samples[:,:,[0,2,3,4]]
+if params['do_normscale']: 
+    normscales = [normscales[0],normscales[2],normscales[3],normscales[4]]#,normscales[5]]
+x_data_train, y_data_train_l, y_data_train_h = x_data_train_h, y_data_train_lh, y_data_train_lh
 
 # Make directory for plots
-#plots.make_dirs(params['plot_dir'][0])
+plots.make_dirs(params['plot_dir'][0])
 
 # Declare plot class variables
 plotter = plots.make_plots(params,samples,None,pos_test)
@@ -285,11 +266,6 @@ plotter.plot_testdata((y_data_test_h),sig_test,params['r']**2,params['plot_dir']
 
 # Train model
 if not params['do_only_test']:
-    if params['do_load_in_chunks']:
-        # Get first set of training samples
-        x_data_train, y_data_train_l, y_data_train_h, x_data_train_h, y_data_train_lh =  chris_data.load_training_set(params,train_files,normscales)
-        y_data_train_h, y_data_train_lh = y_data_train_h * np.sqrt(2*params['ndata']), y_data_train_lh * np.sqrt(2*params['ndata'])
-
 
     loss_inv, kl_inv, train_files = VICI_inverse_model.train(params, x_data_train, y_data_train_l, np.shape(y_data_train_h)[1], "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'], plotter, y_data_test_h,train_files,normscales,y_data_train_noisefree,samples,pos_test,y_normscale) # This trains the inverse model to recover posteriors using the forward model weights stored in forward_model_dir/forward_model.ckpt and saves the inverse model weights in inverse_model_dir/inverse_model.ckpt
 
@@ -310,10 +286,10 @@ if params['do_only_test']:
     plotter = plots.make_plots(params,samples,XS,pos_test)
 
     # Make corner plots
-#    plotter.make_corner_plot(sampler='dynesty1')
+    plotter.make_corner_plot(sampler='dynesty1')
 
     # Make KL plot
-#    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
 
     # Make pp plot
     plotter.plot_pp(VICI_inverse_model,y_data_test_h,x_data_train,0,normscales,samples,pos_test)

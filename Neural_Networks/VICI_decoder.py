@@ -21,7 +21,7 @@ class VariationalAutoencoder(object):
         self.name = name
         self.middle = middle
         self.bias_start = 0.0
-        self.drate = 0.3
+        self.drate = 0.0
 
         network_weights = self._create_weights()
         self.weights = network_weights
