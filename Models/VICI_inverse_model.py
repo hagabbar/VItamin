@@ -253,14 +253,6 @@ def train(params, x_data, y_data, siz_high_res, save_dir, plotter, y_data_test,t
     test_n = 100
     olvec = []
     for i in range(params['num_iterations']):
-        if params['do_load_in_chunks']:
-            # Get next set of training samples every 1000 iterations
-            if int(i) >= 1000 and int(i) % 1000 == 0:
-                x_data_train, y_data_train_l, y_data_train_h, x_data_train_h, y_data_train_lh =  chris_data.load_training_set(params,train_files,normscales)
-
-                x_data = x_data_train
-                y_data_train_l = y_data_train_l
-                
 
         next_indices = indices_generator.next_indices()
         
@@ -482,16 +474,6 @@ def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_file
     test_n = 100
     for i in range(params['num_iterations']):
         
-        if params['do_load_in_chunks']:
-            # Get next set of training samples every 1000 iterations
-            if int(i) >= 1000 and int(i) % 1000 == 0:
-                print('Getting training new set ...')
-                x_data_train, y_data_train_l, y_data_train_h, x_data_train_h, y_data_train_lh =  chris_data.load_training_set(params,train_files,normscales)
-
-                x_data = x_data_train
-                y_data_train_l = y_data_train_l
-        
-
         next_indices = indices_generator.next_indices()
 
         # Make 25 noise realizations
