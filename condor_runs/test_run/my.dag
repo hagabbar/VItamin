@@ -1,0 +1,75 @@
+JOB GW000000 GW.sub
+VARS GW000000 od="bilby_output" label="test_samp_0"
+
+JOB GW000001 GW.sub
+VARS GW000001 od="bilby_output" label="test_samp_1"
+
+JOB GW000002 GW.sub
+VARS GW000002 od="bilby_output" label="test_samp_2"
+
+JOB GW000003 GW.sub
+VARS GW000003 od="bilby_output" label="test_samp_3"
+
+JOB GW000004 GW.sub
+VARS GW000004 od="bilby_output" label="test_samp_4"
+
+JOB GW000005 GW.sub
+VARS GW000005 od="bilby_output" label="test_samp_5"
+
+JOB GW000006 GW.sub
+VARS GW000006 od="bilby_output" label="test_samp_6"
+
+JOB GW000007 GW.sub
+VARS GW000007 od="bilby_output" label="test_samp_7"
+
+JOB GW000008 GW.sub
+VARS GW000008 od="bilby_output" label="test_samp_8"
+
+JOB GW000009 GW.sub
+VARS GW000009 od="bilby_output" label="test_samp_9"
+
+JOB GW000010 GW.sub
+VARS GW000010 od="bilby_output" label="test_samp_10"
+
+JOB GW000011 GW.sub
+VARS GW000011 od="bilby_output" label="test_samp_11"
+
+JOB GW000012 GW.sub
+VARS GW000012 od="bilby_output" label="test_samp_12"
+
+JOB GW000013 GW.sub
+VARS GW000013 od="bilby_output" label="test_samp_13"
+
+JOB GW000014 GW.sub
+VARS GW000014 od="bilby_output" label="test_samp_14"
+
+JOB GW000015 GW.sub
+VARS GW000015 od="bilby_output" label="test_samp_15"
+
+JOB GW000016 GW.sub
+VARS GW000016 od="bilby_output" label="test_samp_16"
+
+JOB GW000017 GW.sub
+VARS GW000017 od="bilby_output" label="test_samp_17"
+
+JOB GW000018 GW.sub
+VARS GW000018 od="bilby_output" label="test_samp_18"
+
+JOB GW000019 GW.sub
+VARS GW000019 od="bilby_output" label="test_samp_19"
+
+JOB GW000020 GW.sub
+VARS GW000020 od="bilby_output" label="test_samp_20"
+
+JOB GW000021 GW.sub
+VARS GW000021 od="bilby_output" label="test_samp_21"
+
+JOB GW000022 GW.sub
+VARS GW000022 od="bilby_output" label="test_samp_22"
+
+JOB GW000023 GW.sub
+VARS GW000023 od="bilby_output" label="test_samp_23"
+
+JOB GW000024 GW.sub
+VARS GW000024 od="bilby_output" label="test_samp_24"
+

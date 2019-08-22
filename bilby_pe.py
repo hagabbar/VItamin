@@ -1,3 +1,5 @@
+#! /usr/bin/env python
+
 """
 Tutorial to demonstrate running parameter estimation on a reduced parameter
 space for an injected signal.
@@ -6,6 +8,7 @@ This example estimates the masses using a uniform prior in both component masses
 and distance using a uniform in comoving volume prior on luminosity distance
 between luminosity distances of 100Mpc and 5Gpc, the cosmology is Planck15.
 """
+
 from __future__ import division, print_function
 
 import numpy as np
@@ -22,6 +25,24 @@ import time
 import h5py
 from scipy.ndimage.interpolation import shift
 #from pylal import antenna, cosmography
+import argparse
+
+def parser():
+    """
+    Parses command line arguments
+    :return: arguments
+    """
+
+    #TODO: complete help sections
+    parser = argparse.ArgumentParser(prog='bilby_pe.py', description='script for generating bilby samples/posterior')
+
+    # arguments for data
+    parser.add_argument('-label', '--run-label', type=str, default='1',
+                        help='label that identifies which bilby results this is')
+    parser.add_argument('-od', '--outdir', type=str, default='test',
+                        help='Directory to store bilby results')
+
+    return parser.parse_args()
 
 def tukey(M,alpha=0.5):
     """ Tukey window code copied from scipy.
@@ -215,8 +236,8 @@ def gen_masses(m_min=5.0,M_max=100.0,mdist='metric'):
         new_m_min = m_min
         new_M_max = M_max
         while not flag:
-            m1 = np.random.uniform(low=35.0,high=80.0)
-            m2 = np.random.uniform(low=35.0,high=80.0)
+            m1 = np.random.uniform(low=new_m_min,high=M_max/2.0)
+            m2 = np.random.uniform(low=new_m_min,high=M_max/2.0)
             m12 = np.array([m1,m2]) 
             flag = True if (np.sum(m12)<new_M_max) and (np.all(m12>new_m_min)) and (m12[0]>=m12[1]) else False
         eta = m12[0]*m12[1]/(m12[0]+m12[1])**2
@@ -250,7 +271,7 @@ def gen_masses(m_min=5.0,M_max=100.0,mdist='metric'):
         mc = np.sum(m12)*eta**(3.0/5.0)
         return m12, mc, eta
 
-def gen_par(fs,T_obs,geocent_time,mdist='metric'):
+def gen_par(fs,T_obs,geocent_time,mdist='metric',train=False):
     """ Generates a random set of parameters
     
     Parameters
@@ -270,33 +291,50 @@ def gen_par(fs,T_obs,geocent_time,mdist='metric'):
     par: class object
         class containing parameters of waveform
     """
-    # define distribution params
-    m_min = 35.0         # 5 rest frame component masses
-    M_max = 160.0       # 100 rest frame total mass
 
-    m12, mc, eta = gen_masses(m_min,M_max,mdist=mdist)
-    M = np.sum(m12)
-    print('{}: selected bbh masses = {},{} (chirp mass = {})'.format(time.asctime(),m12[0],m12[1],mc))
+    if train == True:
+        # define distribution params
+        m_min = 35.0         # 5 rest frame component masses
+        M_max = 160.0       # 100 rest frame total mass
 
-    # generate reference phase
-    # TODO: Need to change this back to 2*np.pi eventually
-    phase = np.random.uniform(low=0.0,high=2*np.pi)
-    #phase = 0.0
-    print('{}: selected bbh reference phase = {}'.format(time.asctime(),phase))
-    # generate reference inclination angle
-    #theta_jn = np.random.uniform(low=0.0, high=2.0*np.pi)
-    #print('{}: selected bbh inc angle = {}'.format(time.asctime(),theta_jn))
+        m12, mc, eta = gen_masses(m_min,M_max,mdist=mdist)
+        M = np.sum(m12)
+        print('{}: selected bbh masses = {},{} (chirp mass = {})'.format(time.asctime(),m12[0],m12[1],mc))
 
-    geocent_time = np.random.uniform(low=geocent_time+0.15,high=geocent_time+0.35)
-    print('{}: selected bbh GPS time = {}'.format(time.asctime(),geocent_time))
+        # generate reference phase
+        phase = np.random.uniform(low=0.0,high=2*np.pi)
+        print('{}: selected bbh reference phase = {}'.format(time.asctime(),phase))
 
-    lum_dist = np.random.uniform(low=1e3, high=3e3)
-    #lum_dist = int(2e3)
-    print('{}: selected bbh luminosity distance = {}'.format(time.asctime(),lum_dist))
+        geocent_time = np.random.uniform(low=geocent_time+0.15,high=geocent_time+0.35)
+        print('{}: selected bbh GPS time = {}'.format(time.asctime(),geocent_time))
 
-    #theta_jn = np.random.uniform(low=0, high=np.pi)
-    theta_jn = 0.0
-    print('{}: selected bbh inclination angle = {}'.format(time.asctime(),theta_jn))
+        lum_dist = np.random.uniform(low=1e3, high=3e3)
+        print('{}: selected bbh luminosity distance = {}'.format(time.asctime(),lum_dist))
+
+        theta_jn = 0.0
+        print('{}: selected bbh inclination angle = {}'.format(time.asctime(),theta_jn))
+
+    elif train == False:
+        # define distribution params
+        m_min = 35.0         # 5 rest frame component masses
+        M_max = 130.0       # 100 rest frame total mass
+
+        m12, mc, eta = gen_masses(m_min,M_max,mdist=mdist)
+        M = np.sum(m12)
+        print('{}: selected bbh masses = {},{} (chirp mass = {})'.format(time.asctime(),m12[0],m12[1],mc))
+
+        # generate reference phase
+        phase = np.random.uniform(low=0.0,high=2*np.pi)
+        print('{}: selected bbh reference phase = {}'.format(time.asctime(),phase))
+
+        geocent_time = np.random.uniform(low=geocent_time+0.15,high=geocent_time+0.35)
+        print('{}: selected bbh GPS time = {}'.format(time.asctime(),geocent_time))
+
+        lum_dist = np.random.uniform(low=1e3, high=3e3)
+        print('{}: selected bbh luminosity distance = {}'.format(time.asctime(),lum_dist))
+
+        theta_jn = 0.0
+        print('{}: selected bbh inclination angle = {}'.format(time.asctime(),theta_jn))
 
     return m12[0], m12[1], mc, eta, phase, geocent_time, lum_dist, theta_jn
 
@@ -339,7 +377,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
         train_pars = []
         for i in range(N_gen):
             # choose waveform parameters here
-            pars['m1'], pars['m2'], mc, eta, pars['phase'], pars['geocent_time'], pars['lum_dist'], pars['theta_jn'] = gen_par(duration,sampling_frequency,geocent_time,mdist='uniform')
+            pars['m1'], pars['m2'], mc, eta, pars['phase'], pars['geocent_time'], pars['lum_dist'], pars['theta_jn'] = gen_par(duration,sampling_frequency,geocent_time,mdist='uniform',train=make_train_samp)
             if not make_noise:
                 train_samples.append(gen_template(duration,sampling_frequency,
                                      pars,ref_geocent_time)[0:2])
@@ -356,15 +394,16 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
         train_samples_noisy = np.array(train_samples)[:,1,:]
         return train_samples_noisy,train_samples_noisefree,np.array(train_pars)
 
-    # generate testing sample 
-    opt_snr = 0
-    if make_test_samp == True:
+
+    if make_train_samp == False:
+        # generate testing sample 
+        opt_snr = 0
         # ensure that signal is loud enough (e.g. > detection threshold)
         while opt_snr < 8:
             # generate parameters
-            pars['m1'], pars['m2'], mc, eta, pars['phase'], pars['geocent_time'], pars['lum_dist'], pars['theta_jn']=gen_par(duration,sampling_frequency,geocent_time,mdist='uniform')
+            pars['m1'], pars['m2'], mc, eta, pars['phase'], pars['geocent_time'], pars['lum_dist'], pars['theta_jn']=gen_par(duration,sampling_frequency,geocent_time,mdist='uniform',train=make_train_samp)
             # make gps time to be same as ref time
-            pars['geocent_time']=ref_geocent_time
+            #pars['geocent_time']=ref_geocent_time
             #pars['phase'] = pos_test[cnt,1]
             #mc = pos_test[cnt,0]
 
@@ -374,7 +413,6 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
 
             opt_snr = ifos[0].meta_data['optimal_SNR']
             print(ifos[0].meta_data['optimal_SNR'])
-
 
     # Set up a PriorDict, which inherits from dict.
     # By default we will sample all terms in the signal models.  However, this will
@@ -388,22 +426,22 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     # sampler.  If we do nothing, then the default priors get used.
     priors = bilby.gw.prior.BBHPriorDict()
     priors['geocent_time'] = bilby.core.prior.Uniform(
-        minimum=injection_parameters['geocent_time'] - 0.1,#duration/2,
-        maximum=injection_parameters['geocent_time'] + 0.1,#duration/2,
+        minimum=ref_geocent_time + 0.15,#duration/2,
+        maximum=ref_geocent_time + 0.35,#duration/2,
         name='geocent_time', latex_label='$t_c$', unit='$s$')
     # fix the following parameter priors
     #priors.pop('mass_1')
     #priors.pop('mass_2')
-    priors['mass_1'] = bilby.gw.prior.Uniform(name='mass_1', minimum=35.0, maximum=50.0,unit='$M_{\odot}$')
-    priors['mass_2'] = bilby.gw.prior.Uniform(name='mass_2', minimum=35.0, maximum=50.0,unit='$M_{\odot}$')
+    priors['mass_1'] = bilby.gw.prior.Uniform(name='mass_1', minimum=35.0, maximum=80.0,unit='$M_{\odot}$')
+    priors['mass_2'] = bilby.gw.prior.Uniform(name='mass_2', minimum=35.0, maximum=80.0,unit='$M_{\odot}$')
     priors['a_1'] = 0
     priors['a_2'] = 0
     priors['tilt_1'] = 0
     priors['tilt_2'] = 0
     priors['phi_12'] = 0
     priors['phi_jl'] = 0
-    priors['ra'] = 1.375
-    priors['dec'] = -1.2108
+    priors['ra'] = ra
+    priors['dec'] = dec
     priors['psi'] = 0.0
     #priors['theta_jn'] = bilby.gw.prior.Uniform(name='theta_jn', minimum=0.0, maximum=np.pi)
     priors['theta_jn'] = 0.0 # range -1 to 1
@@ -414,68 +452,126 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     priors['luminosity_distance'] =  bilby.gw.prior.Uniform(name='luminosity_distance', minimum=1e3, maximum=3e3, unit='Mpc')
     #priors['luminosity_distance'] = int(2e3)
 
-    # try only doing pe on 3 pars
-    #priors['phase'] = 1.3
-
-    # all pars not included from list above will have pe done on them
-    #for key in ['a_1', 'a_2', 'tilt_1', 'tilt_2', 'phi_12', 'phi_jl', 'theta_jn', 'psi', 'ra',
-    #            'dec']:
-    #    priors[key] = injection_parameters[key]
-
     # Initialise the likelihood by passing in the interferometer data (ifos) and
     # the waveform generator
     likelihood = bilby.gw.GravitationalWaveTransient(
         interferometers=ifos, waveform_generator=waveform_generator, phase_marginalization=False,
         priors=priors)
 
-    #likelihood = bilby.gw.GravitationalWaveTransient(
-    #interferometers=ifos, waveform_generator=waveform_generator, priors=priors,
-    #distance_marginalization=False, phase_marginalization=True, time_marginalization=False)
-
-    # Run sampler.  In this case we're going to use the `dynesty` sampler
-    #dynesty=bilby.core.sampler.dynesty.Dynesty(likelihood=likelihood,priors=priors,dlogz=100.)
-    #conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
+    run_startt = time.time()
+    # Run sampler dynesty 1 sampler
     result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
         likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
-        injection_parameters=injection_parameters, outdir=outdir, label=label,
+        injection_parameters=injection_parameters, outdir=outdir+'_dynesty1', label=label, dlogz=0.1,
         save='hdf5')
+    run_endt = time.time()
 
-    #converted_results=bilby.gw.conversion.generate_phase_sample_from_marginalized_likelihood(sample=dict(result.posterior),likelihood=likelihood)
-    #converted_result = result.samples_to_posterior(likelihood=likelihood,priors=priors,
-    #                                               conversion_function=bilby.gw.conversion.generate_phase_sample_from_marginalized_likelihood)
+    # save test sample waveform
+    hf = h5py.File('%s/%s.h5py' % (outdir+'_dynesty1',run_label), 'w')
+    hf.create_dataset('noisy_waveform', data=test_samp_noisy)
+    hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
+    hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
+    hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
+    hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
+    hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
+    hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
+    hf.create_dataset('mass_1', data=pars['m1'])
+    hf.create_dataset('mass_2', data=pars['m2'])
+    hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
+    hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
+    hf.create_dataset('phase', data=result.injection_parameters['phase'])
+    hf.create_dataset('runtime', data=(run_endt - run_startt))
+    hf.close()
 
-    #result = bilby.run_sampler(
-    #likelihood=likelihood, priors=priors, sampler='cpnest', npoints=2000,
-    #injection_parameters=injection_parameters, outdir=outdir,
-    #label=label, maxmcmc=2000,
-    #conversion_function=bilby.gw.conversion.generate_all_bbh_parameters)
+    run_startt = time.time()
+    # Run dynesty 2 sampler.
+    result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
+        likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
+        injection_parameters=injection_parameters, outdir=outdir+'_dynesty2', label=label, dlogz=0.1,
+        save='hdf5')
+    run_endt = time.time()
 
+    # save test sample waveform
+    hf = h5py.File('%s/%s.h5py' % (outdir+'_dynesty2',run_label), 'w')
+    hf.create_dataset('noisy_waveform', data=test_samp_noisy)
+    hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
+    hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
+    hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
+    hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
+    hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
+    hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
+    hf.create_dataset('mass_1', data=pars['m1'])
+    hf.create_dataset('mass_2', data=pars['m2'])
+    hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
+    hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
+    hf.create_dataset('phase', data=result.injection_parameters['phase'])
+    hf.create_dataset('runtime', data=(run_endt - run_startt))
+    hf.close()
+
+    run_startt = time.time()
+    # emcee sampler
+    result = bilby.run_sampler(
+        likelihood=likelihood, priors=priors, sampler='emcee',
+        nwalkers=750, nsteps=10000, nburn=1000,
+        injection_parameters=injection_parameters, outdir=outdir+'_emcee1', label=label,
+        save='hdf5')
+    run_endt = time.time()
 
     # Make a corner plot.
     result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance','theta_jn'])
 
     # save test sample waveform
-    hf = h5py.File('%s/%s.h5py' % (outdir,run_label), 'w')
+    hf = h5py.File('%s/%s.h5py' % (outdir+'_emcee1',run_label), 'w')
     hf.create_dataset('noisy_waveform', data=test_samp_noisy)
     hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
     hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
     hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
-    #hf.create_dataset('mc_post', data=np.array(result.posterior.chirp_mass))
     hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
     hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
     hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
-    #hf.create_dataset('theta_jn_post', data=np.array(result.posterior.theta_jn))
-
-
     hf.create_dataset('mass_1', data=pars['m1'])
     hf.create_dataset('mass_2', data=pars['m2'])
-    #hf.create_dataset('mc', data=mc)
     hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
     hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
-    #hf.create_dataset('theta_jn', data=result.injection_parameters['theta_jn'])
     hf.create_dataset('phase', data=result.injection_parameters['phase'])
-    
+    hf.create_dataset('runtime', data=(run_endt - run_startt))
+    hf.close()
+
+    run_startt = time.time()
+    # emcee sampler
+    result = bilby.run_sampler(
+        likelihood=likelihood, priors=priors, sampler='emcee',
+        nwalkers=750, nsteps=10000, nburn=1000,
+        injection_parameters=injection_parameters, outdir=outdir+'_emcee2', label=label,
+        save='hdf5')
+    run_endt = time.time()
+
+    # Make a corner plot.
+    result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance','theta_jn'])
+
+    # save test sample waveform
+    hf = h5py.File('%s/%s.h5py' % (outdir+'_emcee2',run_label), 'w')
+    hf.create_dataset('noisy_waveform', data=test_samp_noisy)
+    hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
+    hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
+    hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
+    hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
+    hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
+    hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
+    hf.create_dataset('mass_1', data=pars['m1'])
+    hf.create_dataset('mass_2', data=pars['m2'])
+    hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
+    hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
+    hf.create_dataset('phase', data=result.injection_parameters['phase'])
+    hf.create_dataset('runtime', data=(run_endt - run_startt))
     hf.close()
 
     print('finished running pe')
+
+def main(args):
+    run(run_label=args.run_label, outdir=args.outdir)
+
+if __name__ == '__main__':
+    args = parser()
+    main(args)
 
