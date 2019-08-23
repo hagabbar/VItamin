@@ -25,7 +25,7 @@ from Neural_Networks import batch_manager
 from data import chris_data
 import plots
 
-run_label='gpu2',            # label for run
+run_label='gpu5',            # label for run
 plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
 load_train_set = True       # if True, load previously made train samples.
@@ -44,10 +44,10 @@ def get_params():
         n_samples = 5000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,        # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=128,               # batch size inference model (inverse reconstruction)
+        batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
-        z_dimension=32,               # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        z_dimension=16,               # number of latent space dimensions inference model (inverse reconstruction)
+        n_weights = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         save_interval=500,           # interval at which to save inference model weights
         plot_interval=500000,           # interval over which plotting is done
 
@@ -81,7 +81,8 @@ def get_params():
         samplers=['vitamin','dynesty','emcee'],          # list of available bilby samplers to use
         use_samplers = [0,1,2],                  # number of Bilby samplers to use 
         kl_set_dir='condor_runs/final_run/bilby_output', # location of test set used for kl
-        do_only_test = False                  # if true, don't train but only run on test samples using pretrained network
+        do_only_test = True,                  # if true, don't train but only run on test samples using pretrained network
+        whitening_factor = np.sqrt(float(ndata))#/2.0) # whitening scale factor
     )
     return params
 
@@ -196,8 +197,8 @@ for i in range(params['r']):
 # Set test arrays
 pos_test = np.array(pos_test) # test parameters
 # TODO: move whitening terms to where whitening is done
-y_data_test_h = np.array(labels_test).reshape(int(r*r),ndata) * np.sqrt(float(params['ndata'])/2.0) # noisy y test
-sig_test = np.array(sig_test).reshape(int(r*r),ndata) * np.sqrt(float(params['ndata'])/2.0) # noise-free y test
+y_data_test_h = np.array(labels_test).reshape(int(r*r),ndata) * params['whitening_factor'] # noisy y test
+sig_test = np.array(sig_test).reshape(int(r*r),ndata) * params['whitening_factor'] # noise-free y test
 
 # Get list of training files
 train_files = []
@@ -237,19 +238,22 @@ if params['do_normscale']:
 
 # TODO: move this to whitening procedure in bilby
 x_data_train_h = data['x_data_train_h']
-y_data_train_lh = data['y_data_train_lh'] * np.sqrt(float(params['ndata'])/2.0)
-y_data_train_noisefree = data['y_data_train_noisefree'] * np.sqrt(float(params['ndata'])/2.0)
+y_data_train_lh = data['y_data_train_lh'] * params['whitening_factor']
+y_data_train_noisefree = data['y_data_train_noisefree'] * params['whitening_factor']
 
 # Remove phase parameter
 pos_test = pos_test[:,[0,2,3,4]]
 x_data_train_h = x_data_train_h[:,[0,2,3,4]]
 samples = samples[:,:,[0,2,3,4]]
 
+# TODO: always check this is right
 # rescale y data for training/testing by absolute max of training set
-#    y_normscale = [13.206409999486425]
-y_normscale = [np.max(np.abs(y_data_train_lh))]
+#y_normscale = [13.206409999486425] # when whiteing is divided by 2
+y_normscale = [18.964979983959807] # for when whitening isn't divided by 2
+#y_normscale = [np.max(np.abs(y_data_train_lh))]
 y_data_train_lh /= y_normscale[0]
 y_data_test_h /= y_normscale[0]
+sig_test /= y_normscale[0]
 
 if params['do_normscale']: 
     normscales = [normscales[0],normscales[2],normscales[3],normscales[4]]#,normscales[5]]
@@ -286,10 +290,10 @@ if params['do_only_test']:
     plotter = plots.make_plots(params,samples,XS,pos_test)
 
     # Make corner plots
-    plotter.make_corner_plot(sampler='dynesty1')
+#    plotter.make_corner_plot(sampler='dynesty1')
 
     # Make KL plot
-    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+#    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
 
     # Make pp plot
     plotter.plot_pp(VICI_inverse_model,y_data_test_h,x_data_train,0,normscales,samples,pos_test)
