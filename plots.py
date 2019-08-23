@@ -342,9 +342,6 @@ class make_plots:
         pp = np.zeros((self.params['r']**2)+2)
         pp[0] = 0.0
         pp[1] = 1.0
-        pp_bilby = np.zeros((self.params['r']**2)+2)
-        pp_bilby[0] = 0.0
-        pp[1] = 1.0
                 
          
         for cnt in range(Npp):
@@ -355,9 +352,9 @@ class make_plots:
             _, _, x, _, _ = model.run(self.params, y, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label']) # This runs the trained model using the weights stored in inverse_model_dir/inverse_model.ckpt
 
             # Convert XS back to unnormalized version
-            if self.params['do_normscale']:
-                for m in range(self.params['ndim_x']):
-                    x[:,m,:] = x[:,m,:]*normscales[m]
+#            if self.params['do_normscale']:
+#                for m in range(self.params['ndim_x']):
+#                    x[:,m,:] = x[:,m,:]*normscales[m]
 
             # Apply mask
             sampset_1 = x[0,:,:]
@@ -373,19 +370,29 @@ class make_plots:
                 set1.append(new_rev[:cur_max])
             set1 = np.array(set1)
 
-            set1 = set1.reshape(set1.shape[1],set1.shape[0])
+            set1 = set1.transpose()#.reshape(set1.shape[1],set1.shape[0])
             pp[cnt+2] = self.pp_plot(pos_test[cnt,:],set1)
             print('Computed p-p plot iteration %d/%d' % (int(cnt)+1,int(Npp)))
-        
-        # make bilby p-p plot
-        for cnt in range(self.params['r']**2):
-            pp_bilby[cnt+2] = self.pp_plot(pos_test[cnt,:],samples[cnt,:,:])
-            print('Computed Bilby p-p plot iteration %d/%d' % (int(cnt)+1,int(self.params['r']**2)))
-            
+         
+        # make bilby p-p plots
+        samplers = self.params['samplers']
+        for i in range(len(samplers)):
+            if samplers[i] == 'vitamin': continue
+            pp_bilby = np.zeros((self.params['r']**2)+2)
+            pp_bilby[0] = 0.0
+            pp_bilby[1] = 1.0
 
-        print(pp)
+            # load bilby sampler samples
+            samples,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=samplers[i]+'1')
+
+            for cnt in range(self.params['r']**2):
+                pp_bilby[cnt+2] = self.pp_plot(pos_test[cnt,:],samples[cnt,:,:].transpose())
+                print('Computed %s p-p plot iteration %d/%d' % (samplers[i],int(cnt)+1,int(self.params['r']**2)))
+                
+            # plot bilby sampler results
+            plt.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',label=samplers[i])
+        
         plt.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp),'-',label='vitamin')
-        plt.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',label='Bilby')
         plt.plot([0,1],[0,1],'--k')
         plt.xlim([0,1])
         plt.ylim([0,1])

@@ -458,11 +458,12 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
         interferometers=ifos, waveform_generator=waveform_generator, phase_marginalization=False,
         priors=priors)
 
+    
     run_startt = time.time()
     # Run sampler dynesty 1 sampler
     result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
         likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
-        injection_parameters=injection_parameters, outdir=outdir+'_dynesty1', label=label, dlogz=0.1,
+        injection_parameters=injection_parameters, outdir=outdir+'_dynesty1', label=label, dlogz=0.01,
         save='hdf5')
     run_endt = time.time()
 
@@ -487,7 +488,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     # Run dynesty 2 sampler.
     result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
         likelihood=likelihood, priors=priors, sampler='dynesty', npoints=1000,
-        injection_parameters=injection_parameters, outdir=outdir+'_dynesty2', label=label, dlogz=0.1,
+        injection_parameters=injection_parameters, outdir=outdir+'_dynesty2', label=label, dlogz=0.01,
         save='hdf5')
     run_endt = time.time()
 
@@ -507,12 +508,13 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     hf.create_dataset('phase', data=result.injection_parameters['phase'])
     hf.create_dataset('runtime', data=(run_endt - run_startt))
     hf.close()
+    
 
     run_startt = time.time()
     # emcee sampler
     result = bilby.run_sampler(
         likelihood=likelihood, priors=priors, sampler='emcee',
-        nwalkers=750, nsteps=10000, nburn=1000,
+        nwalkers=750, nsteps=5000, nburn=4000,
         injection_parameters=injection_parameters, outdir=outdir+'_emcee1', label=label,
         save='hdf5')
     run_endt = time.time()
@@ -541,7 +543,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     # emcee sampler
     result = bilby.run_sampler(
         likelihood=likelihood, priors=priors, sampler='emcee',
-        nwalkers=750, nsteps=10000, nburn=1000,
+        nwalkers=750, nsteps=5000, nburn=4000,
         injection_parameters=injection_parameters, outdir=outdir+'_emcee2', label=label,
         save='hdf5')
     run_endt = time.time()
