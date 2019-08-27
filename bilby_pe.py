@@ -458,7 +458,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
         interferometers=ifos, waveform_generator=waveform_generator, phase_marginalization=False,
         priors=priors)
 
-    
+    """
     run_startt = time.time()
     # Run sampler dynesty 1 sampler
     result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
@@ -508,13 +508,43 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     hf.create_dataset('phase', data=result.injection_parameters['phase'])
     hf.create_dataset('runtime', data=(run_endt - run_startt))
     hf.close()
-    
+    """
 
+    run_startt = time.time()
+    # ptemcee sampler
+    result = bilby.run_sampler(
+        likelihood=likelihood, priors=priors, sampler='ptemcee',
+        nwalkers=100, nsteps=500, nburnin=50, ntemps=2, 
+        injection_parameters=injection_parameters, outdir=outdir+'_ptemcee1', label=label,
+        save='hdf5')
+    run_endt = time.time()
+
+    # Make a corner plot.
+    result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance','theta_jn'])
+
+    # save test sample waveform
+    hf = h5py.File('%s/%s.h5py' % (outdir+'_ptemcee1',run_label), 'w')
+    hf.create_dataset('noisy_waveform', data=test_samp_noisy)
+    hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
+    hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
+    hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
+    hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
+    hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
+    hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
+    hf.create_dataset('mass_1', data=pars['m1'])
+    hf.create_dataset('mass_2', data=pars['m2'])
+    hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
+    hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
+    hf.create_dataset('phase', data=result.injection_parameters['phase'])
+    hf.create_dataset('runtime', data=(run_endt - run_startt))
+    hf.close()
+
+    """
     run_startt = time.time()
     # emcee sampler
     result = bilby.run_sampler(
         likelihood=likelihood, priors=priors, sampler='emcee',
-        nwalkers=750, nsteps=5000, nburn=4000,
+        nwalkers=100, nsteps=500, nburn=400,
         injection_parameters=injection_parameters, outdir=outdir+'_emcee1', label=label,
         save='hdf5')
     run_endt = time.time()
@@ -539,11 +569,12 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     hf.create_dataset('runtime', data=(run_endt - run_startt))
     hf.close()
 
+    
     run_startt = time.time()
     # emcee sampler
     result = bilby.run_sampler(
         likelihood=likelihood, priors=priors, sampler='emcee',
-        nwalkers=750, nsteps=5000, nburn=4000,
+        nwalkers=100, nsteps=5000, nburn=4000,
         injection_parameters=injection_parameters, outdir=outdir+'_emcee2', label=label,
         save='hdf5')
     run_endt = time.time()
@@ -567,7 +598,7 @@ def run(sampling_frequency=512.,cnt=1.0,pos_test=[],file_test='',duration=1.,m1=
     hf.create_dataset('phase', data=result.injection_parameters['phase'])
     hf.create_dataset('runtime', data=(run_endt - run_startt))
     hf.close()
-
+    """
     print('finished running pe')
 
 def main(args):
