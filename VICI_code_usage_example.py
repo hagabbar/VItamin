@@ -259,6 +259,7 @@ if params['load_plot_data'] == False:
 else:
     hf = h5py.File('plotting_data_%s/y_normscale_value.h5' % params['run_label'], 'r')
     y_normscale = np.array(hf['y_normscale'])
+    hf.close()
 
 y_data_train_lh /= y_normscale[0]
 y_data_test_h /= y_normscale[0]
@@ -297,6 +298,11 @@ if params['do_only_test']:
 
     # Generate final results plots
     plotter = plots.make_plots(params,samples,XS,pos_test)
+
+    if params['load_plot_data']  == False:
+        hf = h5py.File('plotting_data_%s/pos_test.h5' % params['run_label'], 'w')
+        hf.create_dataset('pos_test', data=pos_test)
+        hf.close()
 
     # Make KL plot
     plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)

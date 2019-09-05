@@ -412,10 +412,6 @@ class make_plots:
         ndim_y = self.params['ndata']
         outdir = self.params['plot_dir'][0]
         
-        if self.params['do_normscale']:
-            for m in range(self.params['ndim_x']):
-                par_test[:,m] = par_test[:,m] * normscales[m]
-        
         fig, axis = plt.subplots(1,1,figsize=(6,6))
 
         if self.params['load_plot_data'] == True:
@@ -683,13 +679,10 @@ class make_plots:
 #                    if samplers[usesamps[i]] == 'vitamin' and samplers[usesamps[::-1][j]] == 'vitamin':
 #                        continue
 #                    else:
-                    logbins = np.logspace(np.log(np.min(tot_kl)),np.log(np.max(tot_kl)),25)
-                    if samplers[usesamps[i]] == 'vitamin' and samplers[usesamps[::-1][j]] == 'emcee':
-                        axis_kl.hist(tot_kl,bins=logbins,alpha=1,histtype='bar',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[usesamps[::-1][j]]),zorder=50+print_cnt)
-                        axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=1,edgecolor=CB_color_cycle[print_cnt],zorder=50+print_cnt)
-                    else:
-                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='bar',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[usesamps[::-1][j]]),zorder=50+print_cnt)
-                        axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=1,edgecolor=CB_color_cycle[print_cnt],zorder=50+print_cnt)
+#                    logbins = np.logspace(np.log(np.min(tot_kl)),np.log(np.max(tot_kl)),25)
+                    logbins = 25
+                    axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='bar',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[usesamps[::-1][j]]),zorder=50+print_cnt)
+                    axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=1,edgecolor=CB_color_cycle[print_cnt],zorder=50+print_cnt)
                 else:
 #                    if samplers[usesamps[i]] == samplers[usesamps[::-1][j]]:
 #                        continue 
