@@ -19,6 +19,7 @@ def get_params():
         image_size = [1,ndata],       # Images Size
         print_values=True,            # optionally print values every report interval
         n_samples = 3000,             # number of posterior samples to save per reconstruction upon inference 
+        report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
 
         ndata = ndata,
         r = r,                                # the grid dimension for the output tests
@@ -60,6 +61,9 @@ plots.make_dirs(params,params['plot_dir'][0])
 
 # Declare plot class variables
 plotter = plots.make_plots(params,None,None,None)
+
+# plot losses
+plotter.make_loss_plot(None,None,params['report_interval'],fwd=False)
 
 # Make KL plot
 plotter.gen_kl_plots(VICI_inverse_model,None,None,None)

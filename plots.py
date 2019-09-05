@@ -522,7 +522,7 @@ class make_plots:
             ivec = np.array(hf['ivec'])
         else:
             hf = h5py.File('plotting_data_%s/loss_plot_data.h5' % self.params['run_label'], 'w')
-            N = loss.size
+        N = loss.size
         ivec = cad*np.arange(N)
         axes.semilogx(ivec,loss,alpha=0.8,linewidth=1.0)
         axes.semilogx(ivec,kl,alpha=0.8,linewidth=1.0)
@@ -543,7 +543,7 @@ class make_plots:
             hf.create_dataset('loss', data=loss)
             hf.create_dataset('kl', data=kl)
             hf.create_dataset('ivec', data=ivec)
-            hf.close()
+        hf.close()
         return
 
     def gen_kl_plots(self,model,sig_test,par_test,normscales):
