@@ -6,7 +6,7 @@ from Models import VICI_inverse_model
 import plots
 
 run_label='gpu4',            # label for run
-plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
+plot_dir="/data/public_html/chrism/VItamin_plots/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
 load_test_set = True         # if True, load previously made test samples (including bilby posterior)
 r = 16                        # the grid dimension for the output tests

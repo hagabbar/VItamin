@@ -485,22 +485,26 @@ class make_plots:
                     print('Made pp curve')
                 # plot bilby sampler results
                 if j == 0:
-                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],alpha=0.5,label=r'$\textrm{%s}$' % samplers[i])
+                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],label=r'$\textrm{%s}$' % samplers[i])
                 else:
-                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],alpha=0.5)
+                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1])
 
       
         matplotlib.rc('text', usetex=True) 
         # Remove whitespace on x-axis in all plots
         axis.margins(x=0,y=0)
 
-        axis.plot([0,1],[0,1],'-k')
+        axis.plot([0,1],[0,1],'--k')
         axis.set_xlim([0,1])
         axis.set_ylim([0,1])
-        axis.set_ylabel(r'$\textrm{Empirical Cumulative Distribution}$')
-        axis.set_xlabel(r'$\textrm{Theoretical Cumulative Distribution}$')
+        #axis.set_ylabel(r'$\textrm{Empirical Cumulative Distribution}$',fontsize=14)
+        #axis.set_xlabel(r'$\textrm{Theoretical Cumulative Distribution}$',fontsize=14)
+        axis.set_ylabel(r'$\textrm{Fraction of events within the Credible Interval}$',fontsize=14)
+        axis.set_xlabel(r'$\textrm{Probability within the Credible Interval}$',fontsize=14)
+        axis.tick_params(axis="x", labelsize=14)
+        axis.tick_params(axis="y", labelsize=14)
         #plt.axis('scaled')
-        leg = axis.legend(loc='bottom right', fontsize='medium')
+        leg = axis.legend(loc='lower right', fontsize=14)
         for l in leg.legendHandles:
             l.set_alpha(1.0)
         fig.savefig('%s/pp_plot_%04d.png' % (outdir,i_epoch),dpi=360)
@@ -528,10 +532,12 @@ class make_plots:
         axes.semilogx(ivec,kl,alpha=0.8,linewidth=1.0)
         axes.semilogx(ivec,kl+loss,alpha=0.8,linewidth=1.0)
         axes.grid()
-        axes.set_ylabel(r'$\textrm{Loss}$')
-        axes.set_xlabel(r'$\textrm{Iteration}$')
+        axes.set_xlabel(r'$\textrm{iteration}$',fontsize=14)
+        axes.set_ylabel(r'$\textrm{cost}$',fontsize=14)
         axes.set_xlim([100,cad*N])
-        axes.legend((r'$\textrm{loss 1 (L)}$',r'$\textrm{loss 2 (KL)}$',r'$\textrm{total loss}$'), fontsize='medium')
+        axes.legend((r'$\textrm{cost 1 (L)}$',r'$\textrm{cost 2 (KL)}$',r'$\textrm{total cost}$'), loc='lower left',fontsize=14)
+        axes.tick_params(axis="x", labelsize=14)
+        axes.tick_params(axis="y", labelsize=14)
         plt.grid(True, which="both")
         des = 'fwd' if fwd==True else 'inv'
         plt.savefig('%s/latest/%s_losses_log.png' % (self.params['plot_dir'][0],des),dpi=360)
@@ -681,18 +687,22 @@ class make_plots:
 #                    else:
 #                    logbins = np.logspace(np.log(np.min(tot_kl)),np.log(np.max(tot_kl)),25)
                     logbins = 25
-                    axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='bar',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[usesamps[::-1][j]]),zorder=50+print_cnt)
-                    axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=1,edgecolor=CB_color_cycle[print_cnt],zorder=50+print_cnt)
+                    logbins = np.logspace(-1,2.5,50)
+                    axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[usesamps[::-1][j]]),zorder=2)
+                    axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
                 else:
-#                    if samplers[usesamps[i]] == samplers[usesamps[::-1][j]]:
-#                        continue 
+                    #if samplers[usesamps[i]] == samplers[usesamps[::-1][j]]:
+                    #    continue 
+                    
                     if label_idx == 0:
-                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='bar',density=True,color='grey',label=r'$\textrm{other samplers}$')
+                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
                         label_idx += 1
                     else:
-                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='bar',density=True,color='grey')
-                    axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=1,edgecolor='grey')
-                
+                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color='grey',zorder=1)
+                    axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
+                    print(samplers[usesamps[i]],samplers[usesamps[::-1][j]])                 
+                    print(np.mean(tot_kl))
+
                 print('Completed KL calculation %d/%d' % (print_cnt,len(usesamps)*2))
                 print_cnt+=1
 
@@ -713,9 +723,11 @@ class make_plots:
                 print('%s sampler runtimes: %s' % (samplers[usesamps[i]]+'1',str(runtime[samplers[usesamps[i]]+'1'])))
 
         # Save KL corner plot
-        axis_kl.set_xlabel(r'$\mathrm{KL Statistic}$')
-        axis_kl.set_ylabel(r'$\mathrm{p(KL)}$')
-        leg = axis_kl.legend(loc='upper right', fontsize='medium')
+        axis_kl.set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
+        axis_kl.set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
+        axis_kl.tick_params(axis="x", labelsize=14)
+        axis_kl.tick_params(axis="y", labelsize=14)
+        leg = axis_kl.legend(loc='upper right', fontsize=14) #'medium')
         for l in leg.legendHandles: 
             l.set_alpha(1.0)
 
@@ -769,8 +781,19 @@ class make_plots:
         self.pos_test[:,2] = (self.pos_test[:,2] * (params['prior_max'][3] - params['prior_min'][3])) + (params['prior_min'][3])
         self.pos_test[:,3] = (self.pos_test[:,3] * (params['prior_max'][4] - params['prior_min'][4])) + (params['prior_min'][4])
 
+        pmin = np.zeros(4)
+        pmax = np.zeros(4)
+        pmin[0] = params['prior_min'][0]
+        pmin[1] = params['prior_min'][2] - (params['ref_geocent_time']-0.5)
+        pmin[2] = params['prior_min'][3]
+        pmin[3] = params['prior_min'][4] 
+        pmax[0] = params['prior_max'][0]
+        pmax[1] = params['prior_max'][2] - (params['ref_geocent_time']-0.5)
+        pmax[2] = params['prior_max'][3]
+        pmax[3] = params['prior_max'][4]
+
         # Iterate over test samples
-        for r in range(params['r']**2):
+        for r in range(1): #range(params['r']**2):
             print('Making corner plot %d ...' % r)
 
             # Declare figure object
@@ -806,13 +829,24 @@ class make_plots:
             set2[2,:] = (set2[2,:] * (params['prior_max'][3] - params['prior_min'][3])) + (params['prior_min'][3])
             set2[3,:] = (set2[3,:] * (params['prior_max'][4] - params['prior_min'][4])) + (params['prior_min'][4])
 
+            left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
+            ax2 = fig_corner.add_axes([left, bottom, width, height])
 
             # plot waveform in upper-right hand corner
-            axis_corner[0,params['ndim_x']-1].plot(np.linspace(0,1,params['ndata']),noisefreeY_test[r,:],color='cyan',zorder=50)
-            axis_corner[0,params['ndim_x']-1].plot(np.linspace(0,1,params['ndata']),noisyY_test[r,:],color='darkblue')
-            axis_corner[0,params['ndim_x']-1].set_xlabel(r"$\textrm{Time (s)}$")
-            axis_corner[0,params['ndim_x']-1].grid(False)
-            axis_corner[0,params['ndim_x']-1].margins(x=0,y=0)
+            #axis_corner[0,params['ndim_x']-1].plot(np.linspace(0,1,params['ndata']),noisefreeY_test[r,:],color='cyan',zorder=50)
+            #axis_corner[0,params['ndim_x']-1].plot(np.linspace(0,1,params['ndata']),noisyY_test[r,:],color='darkblue')
+            #axis_corner[0,params['ndim_x']-1].set_xlabel(r"$\textrm{Time (s)}$")
+            #axis_corner[0,params['ndim_x']-1].grid(False)
+            #axis_corner[0,params['ndim_x']-1].margins(x=0,y=0)
+            ax2.plot(np.linspace(0,1,params['ndata']),noisefreeY_test[r,:],color='cyan',zorder=50)
+            ax2.plot(np.linspace(0,1,params['ndata']),noisyY_test[r,:],color='darkblue')
+            ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
+            ax2.yaxis.set_visible(False)
+            ax2.tick_params(axis="x", labelsize=11)
+            ax2.tick_params(axis="y", labelsize=11)
+            ax2.set_ylim([-6,6])
+            ax2.grid(False)
+            ax2.margins(x=0,y=0)
 
             # Iterate over parameters
             tmp_idx=params['ndim_x']
@@ -822,7 +856,7 @@ class make_plots:
             for i in range(params['ndim_x']):
                 for j in range(tmp_idx):
                     overlap = data_maker.overlap(set1.T,set2.T,next_cnt=True)
-                    parnames = ['m_{1}','t_{0}','m_{2}','d_{\mathrm{L}}']
+                    parnames = ['m_{1}\,(\mathrm{M}_{\odot})','t_{0}\,(\mathrm{seconds})','m_{2}\,(\mathrm{M}_{\odot})','d_{\mathrm{L}}\,(\mathrm{Mpc})']
                     parname1 = parnames[i]
                     usepars_order = np.arange(0,len(params['usepars']))
                     parname2 = parnames[usepars_order[::-1][j]]
@@ -830,13 +864,26 @@ class make_plots:
                     axis_corner[params['ndim_x']-1-j,i].clear()
                     # Make histograms on diagonal
                     if (params['ndim_x']-1-j) == i:
-                        axis_corner[params['ndim_x']-1-j,i].hist(set1[i,:],bins=20,alpha=0.5,density=True,label='VItamin',color='r')
-                        axis_corner[params['ndim_x']-1-j,i].hist(set2[i,:],bins=20,alpha=0.5,density=True,label=sampler,color='b')
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.pos_test[r,i], linewidth=1.0, color='black')
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[0], linewidth=0.5, color='r')
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[1], linewidth=0.5, color='r')
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[0], linewidth=0.5, color='b')
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[1], linewidth=0.5, color='b')
+                        axis_corner[params['ndim_x']-1-j,i].hist(set1[i,:],bins=20,alpha=0.5,density=True,histtype='stepfilled',label='VItamin',color='r')
+                        axis_corner[params['ndim_x']-1-j,i].hist(set1[i,:],bins=20,lw=2,density=True,histtype='step',label='VItamin',color='r',zorder=20)
+                        axis_corner[params['ndim_x']-1-j,i].hist(set2[i,:],bins=20,alpha=0.5,density=True,histtype='stepfilled',label=sampler,color='b')
+                        axis_corner[params['ndim_x']-1-j,i].hist(set2[i,:],bins=20,lw=2,density=True,histtype='step',label=sampler,color='b',zorder=10)
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.pos_test[r,i], linewidth=1.0, color='black',zorder=30)
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[0], linewidth=1, color='r',zorder=30)
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[1], linewidth=1, color='r',zorder=30)
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[0], linewidth=1, color='b',zorder=30)
+                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[1], linewidth=1, color='b',zorder=30)
+
+                        xmin, xmax = axis_corner[params['ndim_x']-1-j,i].get_xlim()
+                        ymin, ymax = axis_corner[params['ndim_x']-1-j,i].get_ylim()
+                        #if ymin<pmin[params['ndim_x']-1-j]:
+                        #    axis_corner[params['ndim_x']-1-j,i].set_ylim(ymin=pmin[params['ndim_x']-1-j])
+                        #if ymax>pmax[params['ndim_x']-1-j]:
+                        axis_corner[params['ndim_x']-1-j,i].set_ylim(top=ymax*1.2)
+                        if xmin<pmin[i]:
+                            axis_corner[params['ndim_x']-1-j,i].set_xlim(left=pmin[i])
+                        if xmax>pmax[i]:
+                            axis_corner[params['ndim_x']-1-j,i].set_xlim(right=pmax[i])
 
                     # Make scatter plots on off-diagonal
                     else:
@@ -885,6 +932,23 @@ class make_plots:
                             testsamp_group.create_dataset('bilby_L_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont2_out[3])
                             print('Made dataset')
 
+                        xmin, xmax = axis_corner[params['ndim_x']-1-j,i].get_xlim()
+                        ymin, ymax = axis_corner[params['ndim_x']-1-j,i].get_ylim()
+                        if ymin<pmin[params['ndim_x']-1-j]:
+                            axis_corner[params['ndim_x']-1-j,i].set_ylim(ymin=pmin[params['ndim_x']-1-j])
+                        if ymax>pmax[params['ndim_x']-1-j]:
+                            axis_corner[params['ndim_x']-1-j,i].set_ylim(ymax=pmax[params['ndim_x']-1-j])
+                        if xmin<pmin[i]:
+                            axis_corner[params['ndim_x']-1-j,i].set_xlim(xmin=pmin[i])
+                        if xmax>pmax[i]:
+                            axis_corner[params['ndim_x']-1-j,i].set_xlim(xmax=pmax[i])
+
+                        if i==0 and j==1:
+                            xtemp = np.array([0,100])
+                            y1temp = np.array([0,100])
+                            y2temp = y1temp + 100
+                            axis_corner[params['ndim_x']-1-j,i].fill_between(xtemp, y1temp, y2temp, facecolor='gray', interpolate=True,zorder=100)
+
                     axis_corner[params['ndim_x']-1-j,i].grid(False)
 
                     axis_corner[params['ndim_x']-1-j,i].tick_params(labelrotation=45,labelsize=8.0,axis='x')
@@ -893,9 +957,12 @@ class make_plots:
 
                     # add labels
                     if i == 0 and params['ndim_x']-1-j != 0:
-                        axis_corner[params['ndim_x']-1-j,i].set_ylabel(r"$%s$" % parname2)
+                        axis_corner[params['ndim_x']-1-j,i].set_ylabel(r"$%s$" % parname2,fontsize=11)
+                        #axis_corner[params['ndim_x']-1-j,i].tick_params(axis="x", labelsize=12)
+                        axis_corner[params['ndim_x']-1-j,i].tick_params(axis="y", labelsize=11)
                     if params['ndim_x']-1-j == (params['ndim_x']-1):
-                        axis_corner[params['ndim_x']-1-j,i].set_xlabel(r"$%s$" % parname1)
+                        axis_corner[params['ndim_x']-1-j,i].set_xlabel(r"$%s$" % parname1,fontsize=11)
+                        axis_corner[params['ndim_x']-1-j,i].tick_params(axis="x", labelsize=11)
                     if i != 0:
                         # Turn off some some tick marks
                         axis_corner[params['ndim_x']-1-j,i].yaxis.set_visible(False)
@@ -915,7 +982,7 @@ class make_plots:
             # remove subplots not used 
             axis_corner[0,1].set_axis_off()
             axis_corner[0,2].set_axis_off()
-            #axis_corner[0,3].set_axis_off()
+            axis_corner[0,3].set_axis_off()
             axis_corner[1,2].set_axis_off()
             axis_corner[1,3].set_axis_off()
             axis_corner[2,3].set_axis_off()
@@ -1011,8 +1078,8 @@ class make_plots:
                                     transform=axes[i,j].transAxes)
                             matplotlib.rc('xtick', labelsize=8)
                             matplotlib.rc('ytick', labelsize=8)
-                            axes[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axes[i,j].set_xlabel('')
-                            axes[i,j].set_ylabel(parname2) if j==0 else axes[i,j].set_ylabel('')
+                            axes[i,j].set_xlabel(parname1,fontsize=14) if i==self.params['r']-1 else axes[i,j].set_xlabel('')
+                            axes[i,j].set_ylabel(parname2,fontsize=14) if j==0 else axes[i,j].set_ylabel('')
                             if i == 0 and j == 0: axes[i,j].legend(loc='upper left', fontsize='x-small')
 
                             def confidence_bd(samp_array):
@@ -1053,7 +1120,7 @@ class make_plots:
                                     transform=axes_1d[i,j].transAxes)
                             #matplotlib.rc('xtick', labelsize=4)
                             #matplotlib.rc('ytick', labelsize=4)
-                            axes_1d[i,j].set_xlabel(parname1) if i==self.params['r']-1 else axes_1d[i,j].set_xlabel('')
+                            axes_1d[i,j].set_xlabel(parname1,fontsize=14) if i==self.params['r']-1 else axes_1d[i,j].set_xlabel('')
 
                             # Plot statistic histograms
                             try:
