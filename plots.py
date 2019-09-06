@@ -334,13 +334,12 @@ class make_plots:
 
             else:
 #                if load_plot_data==False:
-                if (parnames[0] == 'm_{1}' and parnames[1]=='m_{2}') or (parnames[0]=='m_{2}' and parnames[1]=='m_{1}'):
+                if (parnames[0] == 'm_{1} (M_\odot)' and parnames[1]=='m_{2} (M_\odot)') or (parnames[0]=='m_{2} (M_\odot)' and parnames[1]=='m_{1} (M_\odot)'):
                     mass_flag=True
                 else:
                     mass_flag=False
                 # Get contours for plotting
                 Q,X,Y,L = get_contours(x,y,prior_min=prior_min,prior_max=prior_max,mass_flag=mass_flag)
-
 #                else:
 #                    Q = contours[0]
 #                    X = contours[1]
@@ -351,6 +350,8 @@ class make_plots:
                     ax.contour(X,Y,Q,levels=L,alpha=0.5,colors=color, origin='lower')
                 elif color == 'red':
                     ax.contourf(X,Y,Q,levels=L,alpha=1.0,colors=['#e61a0b','#f75448','#ff7a70'], origin='lower')
+                ax.set_xlim(np.min(X),np.max(X))
+                ax.set_ylim(np.min(Y),np.max(Y))
             return [Q,X,Y,L]
 
         # Store above declared functions to be used later
@@ -680,7 +681,8 @@ class make_plots:
                 if self.params['load_plot_data'] == False:
                     # Save results to h5py file
                     hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
-                
+               
+                logbins = np.histogram_bin_edges(tot_kl,bins='fd') 
                 if samplers[usesamps[i]] == 'vitamin' or samplers[usesamps[::-1][j]] == 'vitamin':
 #                    if samplers[usesamps[i]] == 'vitamin' and samplers[usesamps[::-1][j]] == 'vitamin':
 #                        continue
@@ -989,12 +991,13 @@ class make_plots:
 
             # plot corner plot
             plt.subplots_adjust(wspace=0, hspace=0)
+            plt.autoscale(tight=True)
 
             tmp_idx=params['ndim_x']
             fig_corner.align_ylabels(axis_corner[:, :])
             fig_corner.align_xlabels(axis_corner[:, :])
-            fig_corner.canvas.draw()
-            fig_corner.savefig('%s/latest/corner_testcase%s.png' % (self.params['plot_dir'][0],str(r)),dpi=360,bbox_inches='tight')
+            #fig_corner.canvas.draw()
+            fig_corner.savefig('%s/latest/corner_testcase%s.png' % (self.params['plot_dir'][0],str(r)),dpi=360,bbox_inches='tight',pad_inches=0)
             plt.close(fig_corner)
             plt.close('all')
 
