@@ -12,6 +12,7 @@ from scipy import stats
 import scipy
 from scipy.integrate import dblquad
 import h5py
+from ligo.skymap.plot import PPPlot
 
 from data import chris_data as data_maker
 from Models import VICI_inverse_model
@@ -464,6 +465,8 @@ class make_plots:
         samplers = self.params['samplers']
         CB_color_cycle=['blue','#4daf4a','#ff7f00','#4b0092']
 
+        test = np.zeros((16,256))
+        cnt = 0
         for i in range(len(self.params['use_samplers'])):
             if samplers[i] == 'vitamin': continue
 
@@ -489,8 +492,25 @@ class make_plots:
                     axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],label=r'$\textrm{%s}$' % samplers[i])
                 else:
                     axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1])
+                test[cnt,:] = pp_bilby[1:-1]
+                cnt += 1
 
       
+        fig = plt.figure(figsize=(6, 6))
+        ax = fig.add_subplot(111, projection='pp_plot')
+        ax.add_confidence_band(256, alpha=0.95) # Add 95% confidence band
+        ax.add_diagonal() # Add diagonal line
+        ax.add_lightning(256, 20) # Add some random realizations of n samples
+        ax.add_series(test[0,:],test[1,:],test[2,:],test[3,:]) # Add our data
+        ax.add_series(test[4,:],test[5,:],test[6,:],test[7,:]) # Add our data
+        ax.add_series(test[8,:],test[9,:],test[10,:],test[11,:]) # Add our data
+        ax.add_series(test[12,:],test[13,:],test[14,:],test[15,:]) # Add our data
+        fig.savefig('%s/pp_plot_%04d.png' % (outdir,i_epoch),dpi=360)
+        fig.savefig('%s/latest/latest_pp_plot.png' % outdir,dpi=360)
+        plt.close(fig)
+        hf.close()
+        return
+
         matplotlib.rc('text', usetex=True) 
         # Remove whitespace on x-axis in all plots
         axis.margins(x=0,y=0)
