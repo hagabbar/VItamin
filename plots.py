@@ -15,8 +15,8 @@ import h5py
 from ligo.skymap.plot import PPPlot
 
 from data import chris_data as data_maker
-from Models import VICI_inverse_model
-from Models import CVAE
+#from Models import VICI_inverse_model
+#from Models import CVAE
 
 def make_dirs(params,out_dir):
     """
