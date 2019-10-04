@@ -9,6 +9,7 @@ from the bilby Bayesian inference library.
 
 ## Table of contents
 - [Installation](#installation)
+- [Usage](#usage)
 - [License](#license)
 - [Links](#links)
 
@@ -27,11 +28,11 @@ the anaconda package manager.
 
 `conda update conda`
 
-`conda create -n yourenvname python=x.x anaconda`
+`conda create -n myenv python=3.6 anaconda`
 
-Source your environmet
+Source your environment
 
-`source activate yourenvname`
+`source activate myenv`
 
 Install required packages. Anaconda will also 
 handle all non-python packages needed.
@@ -59,6 +60,18 @@ Install the required packages via pip.
 
 `pip install requirements.txt`
 
+## Usage
+
+This section details instructions for performing your 
+own tests on sets of gravitational wave signals. Generation of 
+test sets will require access to a large CPU cluster.
+
+### Making Training sets
+
+In order to generate your own training sets, you will need 
+to edit the file `VICI_code_usage_example.py`. Within 
+`VICI_code_usage_example.py` there will be a function 
+at the top of the script titled `def get_params()`.
 
 ## License
 
