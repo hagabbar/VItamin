@@ -71,7 +71,32 @@ test sets will require access to a large CPU cluster.
 In order to generate your own training sets, you will need 
 to edit the file `VICI_code_usage_example.py`. Within 
 `VICI_code_usage_example.py` there will be a function 
-at the top of the script titled `def get_params()`.
+at the top of the script titled `def get_params()`. Make 
+sure that the following hyperparameters are set the values 
+listed below.
+
+```
+load_train_set = False
+train_set_dir = 'location/to/put/trainingset/data'
+do_only_test = False
+```
+
+Now to generate your training sets, simply run 
+the following command (attention, this will also 
+initiate training after training set has been 
+generated).
+
+`python VICI_code_usage_example.py`
+
+### Making Testing sets
+
+Test sets are generated currently using the 
+a large computing cluster at the LIGO Caltech site. 
+Make sure that you are first logged into a condor-enabled 
+computing cluster. Once on the cluster `cd` into the following 
+directory of this repository.
+
+`cd some/dir` 
 
 ## License
 
