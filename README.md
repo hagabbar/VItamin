@@ -15,11 +15,50 @@ from the bilby Bayesian inference library.
 ## Installation
 
 The prefered method of installation is via the 
-anaconda package manager. First, create a virtual 
+anaconda package manager. An alternative method 
+using pip and virtualenv may also be used. Instructions 
+using this alternative method will also be given 
+below. 
+
+### Anaconda Option
+
+Create a virtual environment using 
+the anaconda package manager. 
+
+`conda update conda`
+
+`conda create -n yourenvname python=x.x anaconda`
+
+Source your environmet
+
+`source activate yourenvname`
+
+Install required packages. Anaconda will also 
+handle all non-python packages needed.
+
+`conda install requirements.txt`
+
+### Alternative Option
+
+First, ensure that you have both CUDA and CUDNN 
+installed on your machine. This is required 
+in order to run tensorflow on a GPU (which 
+will speed up training).
+
+Create a virtual 
 environment where the required dependency packages 
 will be installed.
 
 `virtualenv -p python3.6 myenv`
+
+Source the virtual environment
+
+`source myenv`
+
+Install the required packages via pip.
+
+`pip install requirements.txt`
+
 
 ## License
 
