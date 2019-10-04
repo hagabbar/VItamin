@@ -14,6 +14,13 @@ from the bilby Bayesian inference library.
 
 ## Installation
 
+The prefered method of installation is via the 
+anaconda package manager. First, create a virtual 
+environment where the required dependency packages 
+will be installed.
+
+`virtualenv -p python3.6 myenv`
+
 ## License
 
 VItamin is licensed under the terms of the MIT Open Source
