@@ -109,9 +109,48 @@ to the condor computing cluster by runnin the following command.
 
 `condor_submit_dag my.dag`
 
-This will run the bilby_pe.py script for each test sample. 
+This will run the `bilby_pe.py` script for each test sample. 
 You may change the hyperparameters for each of the samplers 
-used by editing the bilby_pe.py script.
+used by editing the `bilby_pe.py` script.
+
+### Training Machine Learning Model
+
+To train, you must first specify the directory location of 
+your pre-made training and testing sets. This can be done 
+by defining the following hyperparameters in the `def main` 
+function of `VICI_code_usage_example.py`.
+
+```
+train_set_dir = /location/of/train/set/dir
+test_set_dir = /specific/test/set/sampler/dir/location
+kl_set_dir = /general/location/of/test/set/dir
+```
+
+Make sure that the following variables in `def main` are set 
+to these values.
+
+```
+load_train_set = True
+load_test_set = True
+do_only_test = False
+load_plot_data = False
+add_noise_real=True
+do_normscale=True
+do_mc_eta_conversion=False
+do_adkskl_test=False
+do_m1_m2_cut=False   # This is done in code, just hyperparameter is redundant
+do_extra_noise=True  # Also redundant and will need to be deleated at some point
+tot_dataset_size = total_size_of_your_training_set
+tset_split = number_of_training_samples_in_each_training_set_file
+r = square_root_of_total_number_of_testing_samples
+```
+
+Once these hyperparameters are set, all that is left to do is to  
+run the following command in the command line.
+
+`python VICI_code_usage_example.py`
+
+Now you should see that your model is training.
 
 ## License
 
