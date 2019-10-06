@@ -21,7 +21,7 @@ using pip and virtualenv may also be used. Instructions
 using this alternative method will also be given 
 below. 
 
-### Anaconda Option
+### Anaconda Installation Option
 
 Create a virtual environment using 
 the anaconda package manager. 
@@ -39,7 +39,7 @@ handle all non-python packages needed.
 
 `conda install requirements.txt`
 
-### Alternative Option
+### Alternative Installation Option
 
 First, ensure that you have both CUDA and CUDNN 
 installed on your machine. This is required 
@@ -96,7 +96,22 @@ Make sure that you are first logged into a condor-enabled
 computing cluster. Once on the cluster `cd` into the following 
 directory of this repository.
 
-`cd some/dir` 
+`cd condor_runs/base_scripts`
+
+Run the python script `make_dag.py`. This will generate a file 
+titled `my.dag`. You can choose the number of test samples 
+to generate by setting the `r` variable in the function 
+`def main` to the number of test samples desired squared 
+(e.g. r = 5 will make 25 test samples).
+
+To generate test sample posteriors, submit your dag file 
+to the condor computing cluster by runnin the following command.
+
+`condor_submit_dag my.dag`
+
+This will run the bilby_pe.py script for each test sample. 
+You may change the hyperparameters for each of the samplers 
+used by editing the bilby_pe.py script.
 
 ## License
 
