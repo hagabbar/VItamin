@@ -19,7 +19,10 @@ techniques.
 ## Table of contents
 - [Installation](#installation)
 - [Usage](#usage)
-- [Making Training Sets](#making\_training\_sets)
+- [Making Training Sets](#making-training-sets)
+- [Making Testing Sets](#making-testing-sets)
+- [Training Machine Learning Model](#training-machine-learning-model)
+- [Producing Results Plots](#producing-results-plots)
 - [License](#license)
 - [Links](#links)
 
