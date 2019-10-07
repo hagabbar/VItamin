@@ -1,5 +1,5 @@
 <a href="https://aimeos.org/">
-    <img src="BNS_merger.gif" alt="VItamin_logo" title="VItamin" align="right" height="75" />
+    <img src="BNS_merger.gif" alt="VItamin_logo" title="VItamin" align="right" height="95" width="150" />
 </a>
 
 # VItamin
