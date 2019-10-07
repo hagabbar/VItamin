@@ -1,4 +1,4 @@
-<a href="https://aimeos.org/">
+<a href="https://arxiv.org/abs/1909.06296">
     <img src="BNS_merger.gif" alt="VItamin_logo" title="VItamin" align="right" height="95" width="150" />
 </a>
 
@@ -15,6 +15,10 @@ from the bilby Bayesian inference library. Once trained,
 the machine learning model will be able to produce 
 posteriors 6-7 orders of magnitudes faster than existing 
 techniques.
+
+<a href="https://arxiv.org/abs/1909.06296">
+    <img src="corner_testcase0.png" alt="money_plot" title="main_result" height=""/>
+</a>
 
 ## Table of contents
 - [Installation](#installation)
