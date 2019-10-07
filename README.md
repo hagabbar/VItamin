@@ -6,14 +6,20 @@
 :star: Star us on GitHub — it helps!
 
 VItamin is a LIGO tool for predicting parameter 
-posteriors given a gravitational wave time series. 
+posteriors given a gravitational wave time series 
+using a form of machine learning known as conditional 
+variational autoencoders. 
 It produces training/testing sets, trains on those 
 sets and compares its predictions to those 
-from the bilby Bayesian inference library.
+from the bilby Bayesian inference library. Once trained, 
+the machine learning model will be able to produce 
+posteriors 6-7 orders of magnitudes faster than existing 
+techniques.
 
 ## Table of contents
 - [Installation](#installation)
 - [Usage](#usage)
+- [Making Training Sets](#making\_training\_sets)
 - [License](#license)
 - [Links](#links)
 
