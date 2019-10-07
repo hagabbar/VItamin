@@ -66,7 +66,7 @@ This section details instructions for performing your
 own tests on sets of gravitational wave signals. Generation of 
 test sets will require access to a large CPU cluster.
 
-### Making Training sets
+### Making Training Sets
 
 In order to generate your own training sets, you will need 
 to edit the file `VICI_code_usage_example.py`. Within 
@@ -88,7 +88,7 @@ generated).
 
 `python VICI_code_usage_example.py`
 
-### Making Testing sets
+### Making Testing Sets
 
 Test sets are generated currently using the 
 a large computing cluster at the LIGO Caltech site. 
