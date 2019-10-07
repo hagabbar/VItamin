@@ -1,3 +1,7 @@
+<a href="https://aimeos.org/">
+    <img src="BNS_merger.gif" alt="VItamin_logo" title="VItamin" align="right" height="75" />
+</a>
+
 # VItamin
 :star: Star us on GitHub — it helps!
 
