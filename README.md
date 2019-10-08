@@ -119,6 +119,8 @@ gif below.
 
 `python VICI_code_usage_example.py`
 
+<img src="gen_train_samp_VItamin.gif" alt="train_gen" title="train_gen" align="left" height="" />
+
 ### Making Testing Sets
 
 Test sets are generated currently using the 
