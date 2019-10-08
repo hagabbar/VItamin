@@ -194,6 +194,13 @@ which you used during training of the machine learning model. All generated
 plots will be stored in the plotting directory defined by the `plot_dir` 
 variable. 
 
+## Authors
+* **Hunter Gabbard** - *corresponding author*
+* **Chris Messenger**
+* **Ik Siong Heng**
+* **Francesco Tonolini**
+* **Roderick Murray-Smith**
+
 ## License
 
 VItamin is licensed under the terms of the MIT Open Source
