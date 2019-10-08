@@ -77,6 +77,8 @@ Install the required packages via pip.
 
 `pip install requirements.txt`
 
+<img src="installation_VItamin.gif" alt="install" title="install" align="left" height="" />
+
 ## Usage
 
 This section details instructions for performing your 
