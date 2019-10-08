@@ -143,8 +143,18 @@ to the condor computing cluster by runnin the following command.
 `condor_submit_dag my.dag`
 
 This will run the `bilby_pe.py` script for each test sample. 
-You may change the hyperparameters for each of the samplers 
-used by editing the `bilby_pe.py` script.
+You may check on the status of your condor jobs by running 
+
+`condor_q your-username`.
+
+To remove your jobs 
+
+`condor_rm your-username`.
+
+If you'd like to restart a failed run, you need 
+only resubmit your dag file.
+
+`condor_submit_dag my.dag`
 
 In the demo below, we generate 25 test sample posteriors 
 and waveforms using the following samplers: Dynesty, Emcee, 
