@@ -242,12 +242,16 @@ If your run as been successful, you should end up with a KL divergence
 plot, a p-p plot, a loss plot and r^2 corner plots. Some examples 
 are illustrated below.
 
+### Corner Plot Example
 <img src="corner_testcase0.png" alt="money_plot" title="main_result" height=""/>
 
+### KL Divergence Plot Example
 <img src="hist-kl.png" alt="kl" title="kl" align="left" height="" />
 
+### Loss Plot Example
 <img src="inv_losses_log.png" alt="losses" title="losses" align="left" height="" />
 
+### PP Plot Example
 <img src="latest_pp_plot.png" alt="pp" title="pp" align="left" height="" />
 
 ## Authors
