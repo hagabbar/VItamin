@@ -119,6 +119,8 @@ gif below.
 
 `python VICI_code_usage_example.py`
 
+<img src="gen_train_samp_VItamin.gif" alt="train_gen" title="train_gen" align="left" height="" />
+
 ### Making Testing Sets
 
 Test sets are generated currently using the 
@@ -141,8 +143,25 @@ to the condor computing cluster by runnin the following command.
 `condor_submit_dag my.dag`
 
 This will run the `bilby_pe.py` script for each test sample. 
-You may change the hyperparameters for each of the samplers 
-used by editing the `bilby_pe.py` script.
+You may check on the status of your condor jobs by running 
+
+`condor_q your-username`.
+
+To remove your jobs 
+
+`condor_rm your-username`.
+
+If you'd like to restart a failed run, you need 
+only resubmit your dag file.
+
+`condor_submit_dag my.dag`
+
+In the demo below, we generate 25 test sample posteriors 
+and waveforms using the following samplers: Dynesty, Emcee, 
+Ptemcee and CPnest. Generation of posteriors may take hours - 
+days depending on choice of hyperparameters in `bilby_pe.py` 
+script. Sampler hyperparameters may be adjusted in the 
+`def run()` function of `bilby_pe.py`.
 
 ### Training Machine Learning Model
 
