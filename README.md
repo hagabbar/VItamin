@@ -201,3 +201,8 @@ license and is available for free.
 
 ## Links
 * [arXiv paper](https://arxiv.org/abs/1909.06296)
+
+Any further questions regarding the code may be addressed to 
+Hunter Gabbard at [h.gabbard.1@research.gla.ac.uk][email].
+
+[email]: mailto:h.gabbard.1@research.gla.ac.uk
