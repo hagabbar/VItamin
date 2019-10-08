@@ -146,6 +146,13 @@ This will run the `bilby_pe.py` script for each test sample.
 You may change the hyperparameters for each of the samplers 
 used by editing the `bilby_pe.py` script.
 
+In the demo below, we generate 25 test sample posteriors 
+and waveforms using the following samplers: Dynesty, Emcee, 
+Ptemcee and CPnest. Generation of posteriors may take hours - 
+days depending on choice of hyperparameters in `bilby_pe.py` 
+script. Sampler hyperparameters may be adjusted in the 
+`def run()` function of `bilby_pe.py`.
+
 ### Training Machine Learning Model
 
 To train, you must first specify the directory location of 
