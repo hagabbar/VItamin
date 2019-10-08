@@ -16,10 +16,6 @@ the machine learning model will be able to produce
 posteriors 6-7 orders of magnitudes faster than existing 
 techniques.
 
-<a href="https://arxiv.org/abs/1909.06296">
-    <img src="corner_testcase0.png" alt="money_plot" title="main_result" height=""/>
-</a>
-
 ## Table of contents
 - [Installation](#installation)
 - [Usage](#usage)
@@ -241,6 +237,18 @@ In the demo below we are generating plots using 256 testing
 samples. Keep in mind that it may take a while to generate all plots.
 
 <img src="results_VItamin.gif" alt="results" title="results" align="left" height="" />
+
+If your run as been successful, you should end up with a KL divergence 
+plot, a p-p plot, a loss plot and r^2 corner plots. Some examples 
+are illustrated below.
+
+<img src="corner_testcase0.png" alt="money_plot" title="main_result" height=""/>
+
+<img src="hist-kl.png" alt="kl" title="kl" align="left" height="" />
+
+<img src="inv_losses_log.png" alt="losses" title="losses" align="left" height="" />
+
+<img src="latest_pp_plot.png" alt="pp" title="pp" align="left" height="" />
 
 ## Authors
 * **Hunter Gabbard** - *corresponding author*
