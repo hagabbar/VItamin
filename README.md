@@ -163,6 +163,8 @@ days depending on choice of hyperparameters in `bilby_pe.py`
 script. Sampler hyperparameters may be adjusted in the 
 `def run()` function of `bilby_pe.py`.
 
+<img src="gen_test_VItamin.gif" alt="gen_test" title="gen_test" align="left" height="" />
+
 ### Training Machine Learning Model
 
 To train, you must first specify the directory location of 
