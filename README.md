@@ -100,10 +100,22 @@ train_set_dir = 'location/to/put/trainingset/data'
 do_only_test = False
 ```
 
+The code by default will generate ~1e6 training samples, 
+but you may change the total number of training samples 
+by editing the `tot_dataset_size` variable. All training 
+samples will be saved in a user defined directory 
+(`train_set_dir`) accross multiple files. Each 
+file will contain a subset of the total training set. 
+The number of training samples within each subset 
+may be defined by the `tset_split` variable.
+
 Now to generate your training sets, simply run 
 the following command (attention, this will also 
 initiate training after training set has been 
-generated).
+generated). To stop the script immediately after 
+generating the training samples, insert an exit() 
+statement in the location defined by the demo 
+gif below.
 
 `python VICI_code_usage_example.py`
 
