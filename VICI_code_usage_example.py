@@ -25,14 +25,14 @@ from Neural_Networks import batch_manager
 from data import chris_data
 import plots
 
-run_label='gpu5',            # label for run
+run_label='gpu4',            # label for run
 plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
 load_train_set = True       # if True, load previously made train samples.
 load_test_set = True         # if True, load previously made test samples (including bilby posterior)
 tot_dataset_size=int(1e3)    # total number of training samples to use
 tset_split=int(1e3)          # number of training samples per saved data files
-r = 5                        # the grid dimension for the output tests
+r = 16                        # the grid dimension for the output tests
 n_noise=1                    # this is a redundant parameter. Needs to be removed TODO
 ref_geocent_time=1126259642.5            # reference gps time
 
@@ -41,22 +41,22 @@ def get_params():
     params = dict(
         image_size = [1,ndata],       # Images Size
         print_values=True,            # optionally print values every report interval
-        n_samples = 5000,             # number of posterior samples to save per reconstruction upon inference 
+        n_samples = 3000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,        # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
-        z_dimension=16,               # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        save_interval=500,           # interval at which to save inference model weights
-        plot_interval=500000,           # interval over which plotting is done
+        z_dimension=8,               # number of latent space dimensions inference model (inverse reconstruction)
+        n_weights = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        save_interval=5000,           # interval at which to save inference model weights
+        plot_interval=3000000,           # interval over which plotting is done
 
         
         ndata = ndata,
         r = r,                                # the grid dimension for the output tests
         ndim_x=4,                             # number of parameters to PE on
         sigma=1.0,                            # stadnard deviation of the noGise on signal
-        usepars=[0,1,2,3],                    # which parameters you want to do PE on
+        usepars=[0,2,3,4],                    # which parameters you want to do PE on
         prior_min=[35.0,0.0,ref_geocent_time+0.15,35.0,1000.0],                         # minimum prior range
         prior_max=[80.0,2*np.pi,ref_geocent_time+0.35,80.0,3000.0],                         # maximum prior range
         tot_dataset_size=tot_dataset_size,    # total size of training set
@@ -66,23 +66,24 @@ def get_params():
         plot_dir=plot_dir,                    # plot directory
         parnames=['m1','t0','m2','lum_dist'], # parameter names
         train_set_dir='training_sets_final/tset_tot-%d_split-%d_%dNoise' % (tot_dataset_size,tset_split,n_noise), #location of training set
-        test_set_dir='condor_runs/final_run/bilby_output_dynesty1', #location of test set for all plots ecept kl
+        test_set_dir='condor_runs/new_final_run/bilby_output_dynesty1', #location of test set for all plots ecept kl
         add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         n_noise=n_noise,                      # number of noise realizations
         ref_geocent_time=ref_geocent_time,            # reference gps time 
         do_normscale=True,                    # if true normalize parameters
         do_mc_eta_conversion=False,           # if True, convert m1 and m2 parameters into mc and eta
-        n_kl_samp=25,                        # number of iterations in statistic tests TODO: remove this
+        n_kl_samp=int(r*r),                        # number of iterations in statistic tests TODO: remove this
         do_adkskl_test=True,                  # if True, do statistic tests
         do_m1_m2_cut=False,                   # if True, make a cut on all m1 and m2 values    
         do_extra_noise=True,                  # add extra noise realizations during training
-        Npp = 25,                             # number of test signals per pp-plot. TODO: use same 
+        Npp = int(r*r),                             # number of test signals per pp-plot. TODO: use same 
                                               # use same samples as bilby
-        samplers=['vitamin','dynesty','emcee'],          # list of available bilby samplers to use
-        use_samplers = [0,1,2],                  # number of Bilby samplers to use 
-        kl_set_dir='condor_runs/final_run/bilby_output', # location of test set used for kl
+        samplers=['vitamin','dynesty','emcee','ptemcee','cpnest'],          # list of available bilby samplers to use
+        use_samplers = [0,1,2,3,4],                  # number of Bilby samplers to use 
+        kl_set_dir='condor_runs/new_final_run/bilby_output', # location of test set used for kl
         do_only_test = True,                  # if true, don't train but only run on test samples using pretrained network
-        whitening_factor = np.sqrt(float(ndata))#/2.0) # whitening scale factor
+        load_plot_data = True,                # if true, load in previously generated plot data, otherwise generate plots from scratch
+        whitening_factor = np.sqrt(float(ndata)) # whitening scale factor
     )
     return params
 
@@ -248,9 +249,18 @@ samples = samples[:,:,[0,2,3,4]]
 
 # TODO: always check this is right
 # rescale y data for training/testing by absolute max of training set
-#y_normscale = [13.206409999486425] # when whiteing is divided by 2
-y_normscale = [18.964979983959807] # for when whitening isn't divided by 2
-#y_normscale = [np.max(np.abs(y_data_train_lh))]
+#y_normscale = [18.964979983959807] # for when whitening isn't divided by 2
+
+if params['load_plot_data'] == False:
+    y_normscale = [np.max(np.abs(y_data_train_lh))]
+    hf = h5py.File('plotting_data_%s/y_normscale_value.h5' % params['run_label'], 'w')
+    hf.create_dataset('y_normscale', data=y_normscale)
+    hf.close()
+else:
+    hf = h5py.File('plotting_data_%s/y_normscale_value.h5' % params['run_label'], 'r')
+    y_normscale = np.array(hf['y_normscale'])
+    hf.close()
+
 y_data_train_lh /= y_normscale[0]
 y_data_test_h /= y_normscale[0]
 sig_test /= y_normscale[0]
@@ -260,7 +270,7 @@ if params['do_normscale']:
 x_data_train, y_data_train_l, y_data_train_h = x_data_train_h, y_data_train_lh, y_data_train_lh
 
 # Make directory for plots
-plots.make_dirs(params['plot_dir'][0])
+plots.make_dirs(params,params['plot_dir'][0])
 
 # Declare plot class variables
 plotter = plots.make_plots(params,samples,None,pos_test)
@@ -289,14 +299,19 @@ if params['do_only_test']:
     # Generate final results plots
     plotter = plots.make_plots(params,samples,XS,pos_test)
 
-    # Make corner plots
-#    plotter.make_corner_plot(sampler='dynesty1')
+    if params['load_plot_data']  == False:
+        hf = h5py.File('plotting_data_%s/pos_test.h5' % params['run_label'], 'w')
+        hf.create_dataset('pos_test', data=pos_test)
+        hf.close()
 
     # Make KL plot
-#    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
 
     # Make pp plot
     plotter.plot_pp(VICI_inverse_model,y_data_test_h,x_data_train,0,normscales,samples,pos_test)
+
+    # Make corner plots
+#    plotter.make_corner_plot(sig_test * y_normscale[0],y_data_test_h * y_normscale[0],sampler='dynesty1')
 
     # Geneerate overlap scatter plots
 #    plotter.make_overlap_plot(0,iterations,s,olvec,olvec_2d,adksVec)
