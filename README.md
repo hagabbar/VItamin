@@ -5,6 +5,8 @@
 ![Downloads tags](https://img.shields.io/github/downloads-pre/hagabbar/VItamin/0.0.1/total)
 ![Commits](https://img.shields.io/github/commit-activity/m/hagabbar/VItamin)
 ![License](https://img.shields.io/github/license/hagabbar/VItamin)
+![GitHub Stars](https://img.shields.io/github/stars/hagabbar/VItamin?style=social)
+![Twitter](https://img.shields.io/twitter/follow/gw_hunter?style=social)
 
 # VItamin
 :star: Star us on GitHub — it helps!
