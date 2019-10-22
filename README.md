@@ -5,6 +5,8 @@
 # VItamin
 :star: Star us on GitHub — it helps!
 
+![Downloads](https://shields.io/github/downloads/total)
+
 VItamin is a LIGO tool for predicting parameter 
 posteriors given a gravitational wave time series 
 using a form of machine learning known as conditional 
