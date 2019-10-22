@@ -2,8 +2,8 @@
     <img src="BNS_merger.gif" alt="VItamin_logo" title="VItamin" align="right" height="95" width="150" />
 </a>
 
-[![Downloads tags](https://img.shields.io/github/downloads-pre/hagabbar/VItamin/0.0.1/total)]
-[![Commits](https://img.shields.io/github/commit-activity/m/hagabbar/VItamin)]
+![Downloads tags](https://img.shields.io/github/downloads-pre/hagabbar/VItamin/0.0.1/total)
+![Commits](https://img.shields.io/github/commit-activity/m/hagabbar/VItamin)
 
 # VItamin
 :star: Star us on GitHub — it helps!
