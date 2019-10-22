@@ -4,6 +4,7 @@
 
 ![Downloads tags](https://img.shields.io/github/downloads-pre/hagabbar/VItamin/0.0.1/total)
 ![Commits](https://img.shields.io/github/commit-activity/m/hagabbar/VItamin)
+![License](https://img.shields.io/github/license/hagabbar/VItamin)
 
 # VItamin
 :star: Star us on GitHub — it helps!
