@@ -71,7 +71,7 @@ soupsieve==1.9.3
 tables==3.5.2
 tensorboard==1.14.0
 tensorflow-estimator==1.14.0
-tensorflow-gpu==1.14.0
+tensorflow-gpu==1.15.0
 termcolor==1.1.0
 Theano==1.0.4
 tqdm==4.34.0
