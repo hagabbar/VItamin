@@ -33,7 +33,7 @@ class VariationalAutoencoder(object):
             if self.middle == "bernoulli":
                 hidden1_pre = tf.add(tf.matmul(z, self.weights['ELBO_decoder']['W1_to_hidden']), self.weights['ELBO_decoder']['b1_to_hidden'])
                 hidden1_post = self.nonlinearity(hidden1_pre)
-                hidden1_dropout = tf.layers.dropout(hidden1_post,rate=0.5)
+                hidden1_dropout = tf.layers.dropout(hidden1_post,rate=self.drate)
                 
                 hidden3_pre = tf.add(tf.matmul(hidden1_dropout, self.weights['ELBO_decoder']['W1c_htoh']), self.weights['ELBO_decoder']['b1c_htoh'])
                 hidden3_post = self.nonlinearity(hidden3_pre)
