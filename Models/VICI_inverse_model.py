@@ -51,6 +51,7 @@
 import numpy as np
 import time
 import tensorflow as tf
+import tensorflow_probability as tfp
 import corner
 
 #from Neural_Networks import OELBO_decoder_difference
@@ -68,6 +69,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 #from data import make_samples
 
+tfd = tfp.distributions
+
 # NORMALISE DATASET FUNCTION
 def tf_normalise_dataset(xp):
     
@@ -81,14 +84,16 @@ def tf_normalise_dataset(xp):
     x_data = xp 
     return x_data
 
-def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):    
+def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_dir):    
 
     # USEFUL SIZES
     xsh = np.shape(x_data)
     ysh = np.shape(y_data)[1]
     z_dimension = params['z_dimension']
     bs = params['batch_size']
-    n_weights = params['n_weights']
+    n_weights_r1 = params['n_weights_r1']
+    n_weights_r2 = params['n_weights_r2']
+    n_weights_q = params['n_weights_q']
     nKL = params['KL_cycles']    
 
     graph = tf.Graph()
@@ -102,9 +107,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
         eps = tf.placeholder(dtype=tf.float32, shape=[None, z_dimension, nKL], name="eps")        
 
         # LOAD VICI NEURAL NETWORKS
-        autoencoder = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh[1], z_dimension+ysh, n_weights) # r2(x|z,y)
-        autoencoder_ENC = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights) # generates params for r1(z|y)
-        autoencoder_VAE = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh, z_dimension, n_weights) # used to sample from q(z|x,y)?
+        autoencoder = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh[1], z_dimension+ysh, n_weights_r2) # r2(x|z,y)
+        autoencoder_ENC = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
+        autoencoder_VAE = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh, z_dimension, n_weights_q) # used to sample from q(z|x,y)?
         
         #tf.set_random_seed(42)
         #tf.set_random_seed(42)
@@ -126,10 +131,10 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
         
         # GET r(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r(z|y)
-        zy_mean,zy_log_sig_sq = autoencoder_ENC._calc_z_mean_and_sigma(y_ph_n)        
+        zy_mean_a, zy_log_sig_sq_a, zy_mean_b, zy_log_sig_sq_b, ab = autoencoder_ENC._calc_z_mean_and_sigma(y_ph_n)        
 
         # DRAW FROM r(z|y) - given the Gaussian parameters generate z samples
-        rzy_samp = autoencoder_VAE._sample_from_gaussian_dist(bs_ph, z_dimension, zy_mean, zy_log_sig_sq)
+        rzy_samp = autoencoder_ENC._sample_from_gaussian_dist(bs_ph, z_dimension, zy_mean_a, zy_log_sig_sq_a, zy_mean_b, zy_log_sig_sq_b, ab)
         
         # GET r(x|z,y) from r(z|y) samples
         rzy_samp_y = tf.concat([rzy_samp,y_ph_n],1)
@@ -158,9 +163,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
         cost_R_vae = -1.0*tf.reduce_mean(reconstr_loss_x_vae)
         
         # KL(q(z|x,y)||r(z|y))
-        v_mean = zy_mean # means of r1
+        v_mean = zy_mean_a # means of r1
         aux_mean = zx_mean # means of q
-        v_log_sig_sq = tf.log(tf.exp(zy_log_sig_sq)+SMALL_CONSTANT) # log variances of r1
+        v_log_sig_sq = tf.log(tf.exp(zy_log_sig_sq_a)+SMALL_CONSTANT) # log variances of r1
         aux_log_sig_sq = tf.log(tf.exp(zx_log_sig_sq)+SMALL_CONSTANT) # log variances of q
         v_log_sig = tf.log(tf.sqrt(tf.exp(v_log_sig_sq))) # log stdevs of r1
         aux_log_sig = tf.log(tf.sqrt(tf.exp(aux_log_sig_sq))) # log stdevs of q
@@ -169,23 +174,33 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
         KL_vae = tf.reduce_mean(cost_VAE_b)                               # computes the mean over all tensor elements
 
         # compute quick montecarlo KL
-        quick_KL = 0.0
-        normalising_factor_r = - 0.5 * tf.log(SMALL_CONSTANT+tf.exp(zy_log_sig_sq)) - 0.5*tf.log(2.0*np.pi)
+        #quick_KL = 0.0
+        #normalising_factor_r = - 0.5 * tf.log(SMALL_CONSTANT+tf.exp(zy_log_sig_sq)) - 0.5*tf.log(2.0*np.pi)
         analytic_ent_q = -tf.log(tf.sqrt((SMALL_CONSTANT+tf.exp(zx_log_sig_sq))*2.0*np.pi*tf.exp(1.0)))
-        for i in range(nKL):
-            new_qzx_samp = tf.add(zx_mean, tf.multiply(tf.sqrt(tf.exp(zx_log_sig_sq)), eps[:,:,i]))
-            #new_qzx_samp = autoencoder_VAE._sample_from_gaussian_dist(bs_ph, z_dimension, zx_mean, zx_log_sig_sq)
+        #for i in range(nKL):
+            #new_qzx_samp = tf.add(zx_mean, tf.multiply(tf.sqrt(tf.exp(zx_log_sig_sq)), eps[:,:,i]))
+        new_qzx_samp = autoencoder_VAE._sample_from_gaussian_dist(bs_ph, z_dimension, zx_mean, zx_log_sig_sq)
+        bimix_gauss = tfd.MixtureSameFamily(
+                          mixture_distribution=tfd.Categorical(logits=ab),
+                          components_distribution=tfd.MultivariateNormalDiag(
+                              loc=tf.stack([zy_mean_a,zy_mean_b],axis=1),
+                              scale_diag=tf.stack([tf.sqrt(tf.exp(zy_log_sig_sq_a)),tf.sqrt(tf.exp(zy_log_sig_sq_b))],axis=1)))
+        temp = bimix_gauss.log_prob(new_qzx_samp)
             #normalising_factor_q = - 0.5 * tf.log(SMALL_CONSTANT+tf.exp(zx_log_sig_sq))
             #normalising_factor_r = - 0.5 * tf.log(SMALL_CONSTANT+tf.exp(zy_log_sig_sq)) - 0.5*tf.log(2.0*np.pi)
             #square_diff_between_q_and_q = tf.square(zx_mean - new_qzx_samp)         
-            square_diff_between_r_and_q = tf.square(zy_mean - new_qzx_samp)
+            #square_diff_between_ra_and_q = tf.square(zy_mean - new_qzx_samp)
+            #square_diff_between_rb_and_q = tf.square(zy_mean_b - new_qzx_samp)
             #inside_exp_q = -0.5 * tf.divide(square_diff_between_q_and_q,SMALL_CONSTANT+tf.exp(zx_log_sig_sq))
-            inside_exp_r = -0.5 * tf.divide(square_diff_between_r_and_q,SMALL_CONSTANT+tf.exp(zy_log_sig_sq))
+            #inside_exp_ra = -0.5 * tf.divide(square_diff_between_ra_and_q,SMALL_CONSTANT+tf.exp(zy_log_sig_sq))
+            #inside_exp_rb = -0.5 * tf.divide(square_diff_between_rb_and_q,SMALL_CONSTANT+tf.exp(zy_log_sig_sq_b))
+            #temp = ab*tf.exp() + tf.exp()
             #quick_KL_batch = tf.reduce_sum(normalising_factor_q - normalising_factor_r + inside_exp_q - inside_exp_r, 1)
             #analytic_ent_q = -tf.log(tf.sqrt((SMALL_CONSTANT+tf.exp(zx_log_sig_sq))*2.0*np.pi*tf.exp(1.0)))
-            quick_KL_batch = tf.reduce_sum(analytic_ent_q - normalising_factor_r - inside_exp_r, 1)
-            quick_KL += tf.reduce_mean(quick_KL_batch)
-        quick_KL /= tf.dtypes.cast(eps.shape[2],dtype=tf.float32),
+        #temp = bimix_gauss.log_prob([new_qzx_samp])
+        quick_KL_batch = tf.reduce_sum(analytic_ent_q, 1)
+        quick_KL = tf.reduce_mean(quick_KL_batch - temp)
+        #quick_KL /= tf.dtypes.cast(eps.shape[2],dtype=tf.float32),
 
         # THE VICI COST FUNCTION
         #lam_ph = tf.placeholder(dtype=tf.float32, name="lam_ph")
@@ -204,7 +219,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
         quick_minimize = optimizer.minimize(quick_COST,var_list = var_list_VICI)
 
         # DRAW FROM q(x|y)
-        qx_samp = autoencoder_ENC._sample_from_gaussian_dist(bs_ph, xsh[1], x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
+        #qx_samp = autoencoder_ENC._sample_from_gaussian_dist(bs_ph, xsh[1], x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
         
         # INITIALISE AND RUN SESSION
 #        init = tf.variables_initializer(var_list_VICI)
@@ -234,7 +249,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
         # Make noise realizations and add to training data
         next_x_data = x_data[next_indices,:]
         next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],params['ndata']))
-        
+        next_y_data /= y_normscale        
+
         # train to minimise the cost function
         #session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, yt_ph:next_y_data, eps:eps_data})
         session.run(quick_minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, yt_ph:next_y_data, eps:eps_data})
@@ -244,7 +260,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
             #ni = ni+1
                 
             #cost_value_vae, KL_VAE = session.run([cost_R_vae, KL_vae], feed_dict={bs_ph:bs, x_ph:next_x_data, yt_ph:next_y_data})
-            cost_value_vae, KL_VAE, old_KL = session.run([cost_R_vae, quick_KL, KL_vae], feed_dict={bs_ph:bs, x_ph:next_x_data, yt_ph:next_y_data, eps:eps_data})
+            cost_value_vae, KL_VAE, old_KL, AB = session.run([cost_R_vae, quick_KL, KL_vae, ab], feed_dict={bs_ph:bs, x_ph:next_x_data, yt_ph:next_y_data, eps:eps_data})
             plotdata.append([cost_value_vae,KL_VAE,cost_value_vae+KL_VAE])
             kldata.append([old_KL, KL_VAE])
             
@@ -266,14 +282,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
             for j in range(params['r']*params['r']):
 
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                XS, dt  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,-1]), np.shape(x_data_test)[1], 
+                XS, dt  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
+                                                 y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
 
                 # Make corner plot of VItamin posterior samples
                 figure = corner.corner(XS, labels=params['inf_pars'],
                        quantiles=[0.16, 0.5, 0.84],
-                       range=[[0,1]]*np.shape(x_data_test)[1],
+                       #range=[[0,1]]*np.shape(x_data_test)[1],
                        truths=x_data_test[j,:],
                        show_titles=True, title_kwargs={"fontsize": 12})
                 plt.savefig('%s/output_%s_%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
@@ -308,7 +325,25 @@ def train(params, x_data, y_data, x_data_test, y_data_test, save_dir):
             plt.ylabel('KL')
             plt.legend()
             plt.savefig('%s/kl_comp_%s_linear.png' % (params['plot_dir'],params['run_label']))
+ 
+            # plot the AB histogram
+            plt.figure()
+            nm = 1.0/(np.exp(AB[:,0]) + np.exp(AB[:,1]))
+            plt.hist(nm*np.exp(AB[:,0]),25,label='component 0')
+            plt.hist(nm*np.exp(AB[:,1]),25,label='component 1')
+            plt.xlabel('iteration')
+            plt.ylabel('KL')
+            plt.legend()
+            plt.savefig('%s/latest_%s/mixweights_%s_%d_linear.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
 
+            # plot the AB histogram
+            plt.figure()
+            plt.hist(AB[:,0],25,label='component 0')
+            plt.hist(AB[:,1],25,label='component 1')
+            plt.xlabel('iteration')
+            plt.ylabel('KL')
+            plt.legend()
+            plt.savefig('%s/latest_%s/mixweights_%s_%d_log.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
 
         #    # Convert XS back to unnormalized version
         #    if params['do_normscale']:
@@ -555,15 +590,17 @@ def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_file
     return COST_PLOT, KL_PLOT, train_files
 
 
-def run(params, y_data_test, siz_x_data, load_dir):
+def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
     # USEFUL SIZES
     xsh1 = siz_x_data
     ysh1 = np.shape(y_data_test)[1]
     
     z_dimension = params['z_dimension']
-    n_weights = params['n_weights']
-    
+    n_weights_r1 = params['n_weights_r1']
+    n_weights_r2 = params['n_weights_r2']
+    n_weights_q = params['n_weights_q']    
+
     graph = tf.Graph()
     session = tf.Session(graph=graph)
     with graph.as_default():
@@ -571,18 +608,18 @@ def run(params, y_data_test, siz_x_data, load_dir):
         SMALL_CONSTANT = 1e-6
         
         # LOAD VICI NEURAL NETWORKS
-        autoencoder = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh1, z_dimension+ysh1, n_weights)
-        autoencoder_ENC = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights)
-        autoencoder_VAE = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh1+ysh1, z_dimension, n_weights)
+        autoencoder = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh1, z_dimension+ysh1, n_weights_r2)
+        autoencoder_ENC = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
+        autoencoder_VAE = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh1+ysh1, z_dimension, n_weights_q)
         
         # GET r(z|y)
         y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="y_ph")
         #y_ph_n = tf_normalise_dataset(y_ph)
         y_ph_n = y_ph
-        zy_mean,zy_log_sig_sq = autoencoder_ENC._calc_z_mean_and_sigma(y_ph_n)
+        zy_mean_a, zy_log_sig_sq_a, zy_mean_b, zy_log_sig_sq_b, ab = autoencoder_ENC._calc_z_mean_and_sigma(y_ph_n)
         
         # DRAW FROM r(z|y)
-        rzy_samp = autoencoder_VAE._sample_from_gaussian_dist(tf.shape(y_ph_n)[0], z_dimension, zy_mean, zy_log_sig_sq)
+        rzy_samp = autoencoder_ENC._sample_from_gaussian_dist(tf.shape(y_ph_n)[0], z_dimension, zy_mean_a, zy_log_sig_sq_a, zy_mean_b, zy_log_sig_sq_b, ab)
         
         # GET r(x|z,y) from r(z|y) samples
         rzy_samp_y = tf.concat([rzy_samp,y_ph_n],1)
@@ -591,15 +628,15 @@ def run(params, y_data_test, siz_x_data, load_dir):
         x_log_sig_sq = reconstruction_xzy[1]
         
         # GET pseudo max
-        rzy_samp_y_pm = tf.concat([zy_mean,y_ph_n],1)
-        reconstruction_xzy_pm = autoencoder.calc_reconstruction(rzy_samp_y_pm)
-        x_pmax = reconstruction_xzy_pm[0]
+        #rzy_samp_y_pm = tf.concat([zy_mean,y_ph_n],1)
+        #reconstruction_xzy_pm = autoencoder.calc_reconstruction(rzy_samp_y_pm)
+        #x_pmax = reconstruction_xzy_pm[0]
         
         # VARIABLES LISTS
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
         
         # DRAW FROM q(x|y)
-        qx_samp = autoencoder_ENC._sample_from_gaussian_dist(tf.shape(y_ph_n)[0], xsh1, x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
+        qx_samp = autoencoder_VAE._sample_from_gaussian_dist(tf.shape(y_ph_n)[0], xsh1, x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
         
         # INITIALISE AND RUN SESSION
         init = tf.initialize_all_variables()
@@ -634,7 +671,7 @@ def run(params, y_data_test, siz_x_data, load_dir):
 
     #else:
 
-    y_data_test_exp = np.tile(y_data_test,(ns,1))
+    y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale
     run_startt = time.time()
     XS = session.run(qx_samp,feed_dict={y_ph:y_data_test_exp})
     run_endt = time.time()
@@ -747,7 +784,7 @@ def compute_ELBO(params, x_data, y_data_h, load_dir):
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
         
         # DRAW FROM q(x|y)
-        qx_samp = autoencoder_ENC._sample_from_gaussian_dist(bs_ph, xsh[1], x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
+        #qx_samp = autoencoder_ENC._sample_from_gaussian_dist(bs_ph, xsh[1], x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
         
         # INITIALISE AND RUN SESSION
         init = tf.initialize_all_variables()

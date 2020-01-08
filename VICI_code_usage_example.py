@@ -8,6 +8,7 @@
 import argparse
 import numpy as np
 import tensorflow as tf
+#tf.enable_eager_execution()
 import scipy.io as sio
 import scipy.misc as mis
 import h5py
@@ -28,9 +29,12 @@ from Neural_Networks import batch_manager
 from data import chris_data
 import plots
 
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
+
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 session = tf.Session(config=config)
+
 
 parser = argparse.ArgumentParser(description='A tutorial of argparse!')
 parser.add_argument("--gen_train", default=False, help="generate the training data")
@@ -78,7 +82,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
 # Defining the list of parameter that need to be fed into the models
 def get_params():
     ndata = 256
-    run_label = 'multi-modal12'
+    run_label = 'multi-modal16'
     r = 2
     tot_dataset_size = int(1e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
@@ -97,7 +101,9 @@ def get_params():
         batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
         z_dimension=8,                # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r1 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         save_interval=10000,           # interval at which to save inference model weights
         plot_interval=20000,           # interval over which plotting is done
         duration = 1.0,               # the timeseries length in seconds
@@ -106,7 +112,7 @@ def get_params():
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time'], # parameter names
+        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase'], # parameter names
         train_set_dir='/home/chrism/training_sets/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
         test_set_dir='/home/chrism/testing_sets/tset_tot-%d' % (r*r), #location of test set
         pe_dir='/home/chrism/bilby_outputs/bilby_output', #location of bilby PE results
@@ -167,7 +173,8 @@ def load_data(input_dir,inf_pars):
     x_data = data['x_data']
     y_data = data['y_data_noisefree']
     y_data_noisy = data['y_data_noisy']
-
+    y_normscale = np.max(np.abs(y_data_noisy))
+    
     # extract inference parameters
     idx = []
     for k in inf_pars:
@@ -178,7 +185,7 @@ def load_data(input_dir,inf_pars):
                 idx.append(i)
     x_data = x_data[:,idx]
 
-    return x_data, y_data, y_data_noisy
+    return x_data, y_data, y_data_noisy, y_normscale
 
 #####################################################
 # You will need two types of sets to train the model: 
@@ -358,10 +365,10 @@ if args.train:
     #    train_files.append(filename)
 
     # load the noisefree training data back in
-    x_data_train, y_data_train, _ = load_data(params['train_set_dir'],params['inf_pars'])
+    x_data_train, y_data_train, _, y_normscale = load_data(params['train_set_dir'],params['inf_pars'])
 
     # load the noisy testing data back in
-    x_data_test, _, y_data_test = load_data(params['test_set_dir'],params['inf_pars'])
+    x_data_test, _, y_data_test,_ = load_data(params['test_set_dir'],params['inf_pars'])
 
     # Make directory for plots
     os.system('mkdir -p %s/latest_%s' % (params['plot_dir'],params['run_label']))
@@ -422,7 +429,8 @@ if args.train:
     # forward model weights stored in forward_model_dir/forward_model.ckpt and saves 
     # the inverse model weights in inverse_model_dir/inverse_model.ckpt
     VICI_inverse_model.train(params, x_data_train, y_data_train,
-                             x_data_test, y_data_test, 
+                             x_data_test, y_data_test,
+                             y_normscale,
                              "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label']) 
     exit(0)
 
