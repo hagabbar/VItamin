@@ -377,7 +377,8 @@ class make_plots:
         cnt = 0
         r1 = int(np.sqrt(N))
         r2 = int(N/r1)
-        fig, axes = plt.subplots(r1,r2,figsize=(6,6),sharex='col',sharey='row')
+        print(r1,r2)
+        fig, axes = plt.subplots(r1,r2,figsize=(6,6),sharex='col',sharey='row',squeeze=False)
         for i in range(r1):
             for j in range(r2):
                 axes[i,j].plot(y[cnt,:],'-k')
@@ -1039,23 +1040,23 @@ class make_plots:
                     cnt = 0
 
                     # initialize 2D plot for showing testing results
-                    fig, axes = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all')
+                    fig, axes = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),sharex='all',sharey='all',squeeze=False)
 
                     # initialize 1D plots for showing testing results
-                    fig_1d, axes_1d = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    fig_1d, axes_1d = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),squeeze=False)
 
                     # initialize 1D plots for showing testing results for last 1d hist
-                    fig_1d_last, axes_1d_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    fig_1d_last, axes_1d_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),squeeze=False)
 
                     # initialize 1D plots for showing testing results
                     #fig_kl, axis_kl = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
-                    fig_ad, axis_ad = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
-                    fig_ks, axis_ks = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    fig_ad, axis_ad = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),squeeze=False)
+                    fig_ks, axis_ks = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),squeeze=False)
 
                     # initialize 1D plots for showing testing results for last 1d hist
                     #fig_kl_last, axis_kl_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
-                    fig_ad_last, axis_ad_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
-                    fig_ks_last, axis_ks_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6))
+                    fig_ad_last, axis_ad_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),squeeze=False)
+                    fig_ks_last, axis_ks_last = plt.subplots(self.params['r'],self.params['r'],figsize=(6,6),squeeze=False)
 
                     # Iterate over test cases
                     for i in range(self.params['r']):
