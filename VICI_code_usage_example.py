@@ -82,7 +82,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
 # Defining the list of parameter that need to be fed into the models
 def get_params():
     ndata = 256
-    run_label = 'multi-modal16'
+    run_label = 'multi-modal33'
     r = 2
     tot_dataset_size = int(1e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
@@ -100,19 +100,19 @@ def get_params():
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
-        z_dimension=8,                # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         save_interval=10000,           # interval at which to save inference model weights
         plot_interval=20000,           # interval over which plotting is done
+        z_dimension=4,                # number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
         rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase'],
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase'], # parameter names
+        inf_pars=['luminosity_distance','geocent_time','phase'], # parameter names
         train_set_dir='/home/chrism/training_sets/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
         test_set_dir='/home/chrism/testing_sets/tset_tot-%d' % (r*r), #location of test set
         pe_dir='/home/chrism/bilby_outputs/bilby_output', #location of bilby PE results
@@ -376,15 +376,24 @@ if args.train:
     # load up the posterior samples (if they exist)
     # load generated samples back in
     post_files = []
-    dataLocations = ["%s_dynesty1/*.h5py" % params['pe_dir']]
-    for i,filename in enumerate(glob.glob(dataLocations[0])):
+    #~/bilby_outputs/bilby_output_dynesty1/multi-modal3_0.h5py
+    dataLocations = '%s_dynesty1' % params['pe_dir']
+    #for i,filename in enumerate(glob.glob(dataLocations[0])):
+    for i in range(params['r']*params['r']):
+        filename = '%s/%d.h5py' % (dataLocations,i)
         print(filename)
         post_files.append(filename)
         data_temp = {} 
+        #bounds = {}
         n = 0
         for q in params['inf_pars']:
              p = q + '_post'
+             par_min = q + '_min'
+             par_max = q + '_max'
              data_temp[p] = h5py.File(filename, 'r')[p][:]
+             #bounds[par_max] = h5py.File(filename, 'r')[par_max][...].item()
+             #bounds[par_min] = h5py.File(filename, 'r')[par_min][...].item()
+             data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
              Nsamp = data_temp[p].shape[0]
              n = n + 1
         XS = np.zeros((Nsamp,n))
@@ -396,10 +405,10 @@ if args.train:
         # Make corner plot of VItamin posterior samples
         figure = corner.corner(XS, labels=params['inf_pars'],
                        quantiles=[0.16, 0.5, 0.84],
-                       #range=[[0,1]]*np.shape(x_data_test)[1],
-                       #truths=x_data_test[j,:],
+                       #range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
+                       truths=x_data_test[i,:],
                        show_titles=True, title_kwargs={"fontsize": 12})
-        plt.savefig('%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],i))
+        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
 
     #if params['load_plot_data'] == False:
     #    y_normscale = [np.max(np.abs(y_data_train_lh))]
