@@ -13,6 +13,7 @@ import scipy.io as sio
 import scipy.misc as mis
 import h5py
 from sys import exit
+import shutil
 import os
 import bilby
 import matplotlib
@@ -28,13 +29,6 @@ from bilby_pe import run
 from Neural_Networks import batch_manager
 from data import chris_data
 import plots
-
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
-
-config = tf.ConfigProto()
-config.gpu_options.allow_growth = True
-session = tf.Session(config=config)
-
 
 parser = argparse.ArgumentParser(description='A tutorial of argparse!')
 parser.add_argument("--gen_train", default=False, help="generate the training data")
@@ -79,10 +73,18 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'phi_jl_min':0.0, 'phi_jl_max':0.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
+# define which gpu to use during training
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
+
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+session = tf.Session(config=config)
+
 # Defining the list of parameter that need to be fed into the models
 def get_params():
     ndata = 256
-    run_label = 'multi-modal33'
+    run_label = 'multi-modal26'
+    bilby_results_label = 'multi-modal18_6-par'
     r = 2
     tot_dataset_size = int(1e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
@@ -91,9 +93,10 @@ def get_params():
         ndata = ndata,
         image_size = [1,ndata],        # Images Size
         run_label=run_label,            # label for run
+        bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
         tot_dataset_size = tot_dataset_size,
         tset_split = tset_split, 
-        plot_dir="/data/public_html/chrism/VItamin/gw_results/%s" % run_label,                 # plot directory
+        plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
         print_values=True,            # optionally print values every report interval
         n_samples = 10000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
@@ -101,21 +104,21 @@ def get_params():
         batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
         save_interval=10000,           # interval at which to save inference model weights
-        plot_interval=20000,           # interval over which plotting is done
-        z_dimension=4,                # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        plot_interval=15000,           # interval over which plotting is done
+        z_dimension=8,                # number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
-        rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase'],
+        rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn'],
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        inf_pars=['luminosity_distance','geocent_time','phase'], # parameter names
-        train_set_dir='/home/chrism/training_sets/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
-        test_set_dir='/home/chrism/testing_sets/tset_tot-%d' % (r*r), #location of test set
-        pe_dir='/home/chrism/bilby_outputs/bilby_output', #location of bilby PE results
+        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn'], # parameter names
+        train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_6par/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
+        test_set_dir='/home/hunter.gabbard/CBC/VItamin/testing_sets_second_sub_6par/tset_tot-%d' % (r*r), #location of test set
+        pe_dir='/home/hunter.gabbard/CBC/VItamin/bilby_outputs_second_sub_6par', #location of bilby PE results
         KL_cycles = 1,                       # number of cycles to repeat for the KL approximation
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         #do_normscale=True,                    # if true normalize parameters
@@ -247,7 +250,7 @@ if args.gen_train:
         hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
         hf.close()
 
-    exit(0)
+#    exit(0)
 
 # Make testing set directory
 if args.gen_test:
@@ -290,7 +293,7 @@ if args.gen_test:
     hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
     hf.close()
 
-    exit(0)
+#    exit(0)
 
 # if we are now training the network
 if args.train:
@@ -380,7 +383,7 @@ if args.train:
     dataLocations = '%s_dynesty1' % params['pe_dir']
     #for i,filename in enumerate(glob.glob(dataLocations[0])):
     for i in range(params['r']*params['r']):
-        filename = '%s/%d.h5py' % (dataLocations,i)
+        filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
         print(filename)
         post_files.append(filename)
         data_temp = {} 
@@ -437,11 +440,12 @@ if args.train:
     # Train model - This trains the inverse model to recover posteriors using the 
     # forward model weights stored in forward_model_dir/forward_model.ckpt and saves 
     # the inverse model weights in inverse_model_dir/inverse_model.ckpt
+#    shutil.rmtree("inverse_model_dir_%s" % params['run_label'])
     VICI_inverse_model.train(params, x_data_train, y_data_train,
                              x_data_test, y_data_test,
                              y_normscale,
                              "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label']) 
-    exit(0)
+#    exit(0)
 
 # Test model
 if params['do_only_test']:

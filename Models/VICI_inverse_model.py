@@ -123,20 +123,26 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
         r2_xzy = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh[1], z_dimension+ysh, n_weights_r2) # r2(x|z,y)
         r1_zy_a = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
         r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
+        r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
+        r1_zy_d = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh, z_dimension, n_weights_q) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
   
         SMALL_CONSTANT = 1e-6
+        ramp_start = 1.5e4
+        ramp_stop = 1e6
         #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
-        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(5e5))/(tf.log(1e6)-tf.log(5e5))
+        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_stop)-tf.log(ramp_start))
         ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
 
         # GET r1(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
         r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa = r1_zy_a._calc_z_mean_and_sigma(y_ph)        
         r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
-        r1_zy_weights = tf.concat([r1_zy_wa,r1_zy_wb],1)
+        r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
+        r1_zy_mean_d, r1_zy_log_sig_sq_d, r1_zy_wd = r1_zy_d._calc_z_mean_and_sigma(y_ph)
+        r1_zy_weights = tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc,r1_zy_wd],1)
         r1_zy_weights = tf_normalise_sum_dataset(r1_zy_weights)
 
         # define the r1(z|y) mixture model
@@ -145,8 +151,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                           components_distribution=tfd.MultivariateNormalDiag(
                               #loc=tf.expand_dims(r1_zy_mean_a,1),
                               #scale_diag=tf.expand_dims(tf.sqrt(tf.exp(r1_zy_log_sig_sq_a)),1)))
-                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b],axis=1),
-                              scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b))],axis=1))) 
+                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1),
+                              scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),
+                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),
+                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),
+                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1))) 
 
         # DRAW FROM r1(z|y) - given the Gaussian parameters generate z samples
         r1_zy_samp = bimix_gauss.sample()        
@@ -193,10 +202,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
         r2_xzy_samp_testpath_temp = q_zxy._sample_from_gaussian_dist(tf.shape(y_ph)[0], xsh[1], r2_xzy_mean_testpath, tf.log(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_testpath)))
 
         # apply boundary conditions (hardcoded to be on x2 = phase)
-        temp_0 = r2_xzy_samp_testpath_temp[:,0]
-        temp_1 = r2_xzy_samp_testpath_temp[:,1]
-        temp_2 = tf.math.mod(r2_xzy_samp_testpath_temp[:,2],1.0)
-        r2_xzy_samp_testpath = tf.concat([tf.reshape(temp_0,[-1,1]),tf.reshape(temp_1,[-1,1]),tf.reshape(temp_2,[-1,1])],1)
+        for i in range(len(params['inf_pars'])):
+            if i == 0 and params['inf_pars'][i] != 'phase':
+                r2_xzy_samp_testpath = tf.reshape(r2_xzy_samp_testpath_temp[:,i],[-1,1])
+            elif i == 0 and params['inf_pars'][i] == 'phase':
+                r2_xzy_samp_testpath = tf.reshape(tf.math.mod(r2_xzy_samp_testpath_temp[:,i],1.0),[-1,1])
+            elif params['inf_pars'][i] == 'phase' and i != 0:
+                r2_xzy_samp_testpath = tf.concat([r2_xzy_samp_testpath,tf.reshape(tf.math.mod(r2_xzy_samp_testpath_temp[:,i],1.0),[-1,1])],1)
+            else:
+                r2_xzy_samp_testpath = tf.concat([r2_xzy_samp_testpath,tf.reshape(r2_xzy_samp_testpath_temp[:,i],[-1,1])],1)
 
         # THE VICI COST FUNCTION
         COST = cost_R + ramp*KL
@@ -253,11 +267,12 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 
                 # run a training pass and extract parameters (do it multiple times for ease of reading)
                 q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-                r1_z_a_plot_data, r1_z_b_plot_data, r1_z_log_sig_sq_a_plot_data, r1_z_log_sig_sq_b_plot_data, r1_z_weights_plot_data = session.run([r1_zy_mean_a,r1_zy_mean_b,r1_zy_log_sig_sq_a,r1_zy_log_sig_sq_b,r1_zy_weights], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+                r1_z_a_plot_data, r1_z_b_plot_data, r1_z_c_plot_data, r1_z_d_plot_data, r1_z_log_sig_sq_a_plot_data, r1_z_log_sig_sq_b_plot_data, r1_z_log_sig_sq_c_plot_data, r1_z_log_sig_sq_d_plot_data, r1_z_weights_plot_data = session.run([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d,r1_zy_log_sig_sq_a,r1_zy_log_sig_sq_b,r1_zy_log_sig_sq_c,r1_zy_log_sig_sq_d,r1_zy_weights], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                 q_samp, r1_samp = session.run([q_zxy_samp, r1_zy_samp], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})  
                 r2_mean, r2_log_sig_sq = session.run([r2_xzy_mean, r2_xzy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                 r2_mean_testpath, r2_log_sig_sq_testpath, r2_samp_testpath = session.run([r2_xzy_mean_testpath, r2_xzy_log_sig_sq_testpath, r2_xzy_samp_testpath], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
 
+                """
                 try:
                     # Make corner plot of latent space samples from the q distribution
                     figure = corner.corner(q_z_plot_data, #labels=params['inf_pars'],
@@ -413,6 +428,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 plt.savefig('%s/latest_%s/mixweights_%s_train%d_linear.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                 plt.close()
 
+                """
+
             # just run the network on the test data
             for j in range(params['r']*params['r']):
 
@@ -426,13 +443,14 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                     # Make corner plot of VItamin posterior samples
                     figure = corner.corner(XS, labels=params['inf_pars'],
                        quantiles=[0.16, 0.5, 0.84],
-                       range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
+                       range=[[0.0,1.0]]*np.shape(x_data_test)[1],
                        truths=x_data_test[j,:],
                        show_titles=True, title_kwargs={"fontsize": 12})
                     plt.savefig('%s/output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
                     plt.savefig('%s/latest_%s/output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))            
                     plt.close()
-                except:
+                except Exception as e:
+                    print(e)
                     pass 
 
             # Make loss plot
@@ -451,6 +469,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
             except:
                 pass            
 
+            """
             # plot the AB histogram
             try:
                 density_flag = False
@@ -479,6 +498,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 plt.close()
             except:
                 pass
+            """
 
         if i % params['save_interval'] == 0 and i > 0:
         
@@ -508,6 +528,8 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         r2_xzy = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh1, z_dimension+ysh1, n_weights_r2)
         r1_zy_a = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
+        r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
+        r1_zy_d = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh1+ysh1, z_dimension, n_weights_q)
 
         # PLACEHOLDERS
@@ -516,7 +538,9 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         # GET r1(z|y)
         r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa  = r1_zy_a._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
-        r1_zy_weights = 0.0*tf.concat([r1_zy_wa, r1_zy_wb],1)
+        r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
+        r1_zy_mean_d, r1_zy_log_sig_sq_d, r1_zy_wd = r1_zy_d._calc_z_mean_and_sigma(y_ph)
+        r1_zy_weights = 0.0*tf.concat([r1_zy_wa, r1_zy_wb, r1_zy_wc, r1_zy_wd],1)
         r1_zy_weights = tf_normalise_sum_dataset(r1_zy_weights)
 
         # define the r1(z|y) mixture model
@@ -525,8 +549,11 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
                           components_distribution=tfd.MultivariateNormalDiag(
                               #loc=tf.expand_dims(r1_zy_mean_a,1),
                               #scale_diag=tf.expand_dims(tf.sqrt(tf.exp(r1_zy_log_sig_sq_a)),1)))
-                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b],axis=1),
-                              scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b))],axis=1)))
+                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1),
+                              scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),
+                                                   tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),
+                                                   tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),
+                                                   tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1)))
 
         # DRAW FROM r1(z|y)
         r1_zy_samp = bimix_gauss.sample()
@@ -539,11 +566,16 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         # draw from r2(x|z,y)
         r2_xzy_samp_temp = q_zxy._sample_from_gaussian_dist(tf.shape(y_ph)[0], xsh1, r2_xzy_mean, tf.log(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq)))
 
-        # apply boundary conditions (hardcoded to be on x2 = phase)
-        temp_0 = r2_xzy_samp_temp[:,0]
-        temp_1 = r2_xzy_samp_temp[:,1]
-        temp_2 = tf.math.mod(r2_xzy_samp_temp[:,2],1.0)
-        r2_xzy_samp = tf.concat([tf.reshape(temp_0,[-1,1]),tf.reshape(temp_1,[-1,1]),tf.reshape(temp_2,[-1,1])],1) 
+        # apply boundary conditions (hardcoded to be on x2 = phase)    
+        for i in range(len(params['inf_pars'])):
+            if i == 0 and params['inf_pars'][i] != 'phase':
+                r2_xzy_samp = tf.reshape(r2_xzy_samp_temp[:,i],[-1,1])
+            elif i == 0 and params['inf_pars'][i] == 'phase':
+                r2_xzy_samp = tf.reshape(tf.math.mod(r2_xzy_samp_temp[:,i],1.0),[-1,1])
+            elif params['inf_pars'][i] == 'phase' and i != 0:
+                r2_xzy_samp = tf.concat([r2_xzy_samp,tf.reshape(tf.math.mod(r2_xzy_samp_temp[:,i],1.0),[-1,1])],1)
+            else:
+                r2_xzy_samp = tf.concat([r2_xzy_samp,tf.reshape(r2_xzy_samp_temp[:,i],[-1,1])],1)
 
         # VARIABLES LISTS
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]

@@ -442,7 +442,8 @@ def run(sampling_frequency=256.0,
         else:
             priors['psi'] = fixed_vals['psi']
         if np.any([r=='theta_jn' for r in inf_pars]):
-            priors['theta_jn'] = bilby.gw.prior.Sine(name='theta_jn', minimum=bounds['theta_jn_min'], maximum=bounds['theta_jn_max'], boundary='reflective')
+#            priors['theta_jn'] = bilby.gw.prior.Sine(name='theta_jn', minimum=bounds['theta_jn_min'], maximum=bounds['theta_jn_max'], boundary='reflective')
+             pass
         else:
             priors['theta_jn'] = fixed_vals['theta_jn']
         if np.any([r=='phase' for r in inf_pars]):
