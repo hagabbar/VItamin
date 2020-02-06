@@ -93,11 +93,14 @@ def tf_normalise_sum_dataset(xp):
     #norm = tf.reduce_sum(xp,1)
     log_normr = tf.reshape(log_norm,[Xs[0],1])
     #x_data = tf.divide(xp,normr)
-    x_data = tf.add(xp,-log_normr)    
+    x_data = tf.add(xp,-log_normr)
 
     return x_data
 
-def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_dir):    
+def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefree, y_normscale, save_dir, truth_test, bounds, fixed_vals, posterior_truth_test):    
+
+    # if True, do multi-modal
+    multi_modal = True
 
     # USEFUL SIZES
     xsh = np.shape(x_data)
@@ -127,14 +130,16 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
         r1_zy_d = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh, z_dimension, n_weights_q) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
-  
+
+          
         SMALL_CONSTANT = 1e-6
-        ramp_start = 1.5e4
+        ramp_start = 1e4
         ramp_stop = 1e6
         #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
         ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_stop)-tf.log(ramp_start))
         ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
+#        ramp = 1.0
 
         # GET r1(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
@@ -142,20 +147,32 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
         r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_d, r1_zy_log_sig_sq_d, r1_zy_wd = r1_zy_d._calc_z_mean_and_sigma(y_ph)
-        r1_zy_weights = tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc,r1_zy_wd],1)
+        if multi_modal == True:
+            r1_zy_weights = tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc],1)
+        else:
+            r1_zy_weights = tf.concat([r1_zy_wa],1)
         r1_zy_weights = tf_normalise_sum_dataset(r1_zy_weights)
 
+        
         # define the r1(z|y) mixture model
-        bimix_gauss = tfd.MixtureSameFamily(
+        if multi_modal == True:
+            bimix_gauss = tfd.MixtureSameFamily(
                           mixture_distribution=tfd.Categorical(logits=r1_zy_weights),
                           components_distribution=tfd.MultivariateNormalDiag(
-                              #loc=tf.expand_dims(r1_zy_mean_a,1),
-                              #scale_diag=tf.expand_dims(tf.sqrt(tf.exp(r1_zy_log_sig_sq_a)),1)))
-                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1),
+                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c],axis=1),#,r1_zy_mean_d],axis=1),
                               scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),
                                                   tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),
-                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),
-                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1))) 
+                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c))],axis=1)))
+                                                  #tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1))) 
+        
+
+        else:
+            bimix_gauss = tfd.MixtureSameFamily(
+                          mixture_distribution=tfd.Categorical(logits=r1_zy_weights),
+                          components_distribution=tfd.MultivariateNormalDiag(
+                              loc=tf.stack([r1_zy_mean_a],axis=1),#,r1_zy_mean_d],axis=1),
+                              scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a))],axis=1)))
+
 
         # DRAW FROM r1(z|y) - given the Gaussian parameters generate z samples
         r1_zy_samp = bimix_gauss.sample()        
@@ -234,10 +251,10 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
     for i in range(params['num_iterations']):
 
         next_indices = indices_generator.next_indices()
- 
+
         # Make noise realizations and add to training data
         next_x_data = x_data[next_indices,:]
-        next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],params['ndata']))
+        next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
         next_y_data /= y_normscale  # required for fast convergence
 
         # train to minimise the cost function
@@ -263,14 +280,21 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 # make spcific data for plots that contains a training data sample with lots of different noise
                 x_data_zplot = np.tile(x_data[j,:],(params['n_samples'],1))
                 y_data_zplot = np.tile(y_data[j,:],(params['n_samples'],1))
-                y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],params['ndata']))
+                y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],int(params['ndata']*len(fixed_vals['det']))))
                 
                 # run a training pass and extract parameters (do it multiple times for ease of reading)
                 q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-                r1_z_a_plot_data, r1_z_b_plot_data, r1_z_c_plot_data, r1_z_d_plot_data, r1_z_log_sig_sq_a_plot_data, r1_z_log_sig_sq_b_plot_data, r1_z_log_sig_sq_c_plot_data, r1_z_log_sig_sq_d_plot_data, r1_z_weights_plot_data = session.run([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d,r1_zy_log_sig_sq_a,r1_zy_log_sig_sq_b,r1_zy_log_sig_sq_c,r1_zy_log_sig_sq_d,r1_zy_weights], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-                q_samp, r1_samp = session.run([q_zxy_samp, r1_zy_samp], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})  
-                r2_mean, r2_log_sig_sq = session.run([r2_xzy_mean, r2_xzy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-                r2_mean_testpath, r2_log_sig_sq_testpath, r2_samp_testpath = session.run([r2_xzy_mean_testpath, r2_xzy_log_sig_sq_testpath, r2_xzy_samp_testpath], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+                if multi_modal == True:
+                    r1_z_a_plot_data, r1_z_b_plot_data, r1_z_c_plot_data, r1_z_log_sig_sq_a_plot_data, r1_z_log_sig_sq_b_plot_data, r1_z_log_sig_sq_c_plot_data, r1_z_weights_plot_data = session.run([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_log_sig_sq_a,r1_zy_log_sig_sq_b,r1_zy_log_sig_sq_c,r1_zy_weights], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+                    q_samp, r1_samp = session.run([q_zxy_samp, r1_zy_samp], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})  
+                    r2_mean, r2_log_sig_sq = session.run([r2_xzy_mean, r2_xzy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+                    r2_mean_testpath, r2_log_sig_sq_testpath, r2_samp_testpath = session.run([r2_xzy_mean_testpath, r2_xzy_log_sig_sq_testpath, r2_xzy_samp_testpath], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+
+                else:
+                    r1_z_a_plot_data, r1_z_log_sig_sq_a_plot_data, r1_z_weights_plot_data = session.run([r1_zy_mean_a,r1_zy_log_sig_sq_a,r1_zy_weights], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+                    q_samp, r1_samp = session.run([q_zxy_samp, r1_zy_samp], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+                    r2_mean, r2_log_sig_sq = session.run([r2_xzy_mean, r2_xzy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+                    r2_mean_testpath, r2_log_sig_sq_testpath, r2_samp_testpath = session.run([r2_xzy_mean_testpath, r2_xzy_log_sig_sq_testpath, r2_xzy_samp_testpath], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
 
                 """
                 try:
@@ -439,8 +463,18 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
 
+                # Generate final results plots
+                plotter = plots.make_plots(params,posterior_truth_test,np.expand_dims(XS, axis=0),np.expand_dims(truth_test[j],axis=0))
+
+                # Make corner plots
+                plotter.make_corner_plot(y_data_test_noisefree[j,:params['ndata']],y_data_test[j,:params['ndata']],bounds,j,i,sampler='dynesty1')
+
+                del plotter
+
+                """
                 try:
-                    # Make corner plot of VItamin posterior samples
+                    
+                    # Make Chris corner plot of VItamin posterior samples
                     figure = corner.corner(XS, labels=params['inf_pars'],
                        quantiles=[0.16, 0.5, 0.84],
                        range=[[0.0,1.0]]*np.shape(x_data_test)[1],
@@ -449,9 +483,14 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                     plt.savefig('%s/output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
                     plt.savefig('%s/latest_%s/output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))            
                     plt.close()
+                    
                 except Exception as e:
                     print(e)
+                    exit()
+                    exit()
+                    exi(t)
                     pass 
+                """
 
             # Make loss plot
             try:
@@ -509,6 +548,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
 
 def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
+    multi_modal = True
+
     # USEFUL SIZES
     xsh1 = siz_x_data
     ysh1 = np.shape(y_data_test)[1]
@@ -540,20 +581,36 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_d, r1_zy_log_sig_sq_d, r1_zy_wd = r1_zy_d._calc_z_mean_and_sigma(y_ph)
-        r1_zy_weights = 0.0*tf.concat([r1_zy_wa, r1_zy_wb, r1_zy_wc, r1_zy_wd],1)
+        if multi_modal == True:
+            r1_zy_weights = 0.0*tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc],1) # this was multiplied by zero before???
+        else:
+            r1_zy_weights = 0.0*tf.concat([r1_zy_wa],1) # this was multiplied by zero before???
         r1_zy_weights = tf_normalise_sum_dataset(r1_zy_weights)
 
-        # define the r1(z|y) mixture model
-        bimix_gauss = tfd.MixtureSameFamily(
-                          mixture_distribution=tfd.Categorical(logits=r1_zy_weights),
-                          components_distribution=tfd.MultivariateNormalDiag(
-                              #loc=tf.expand_dims(r1_zy_mean_a,1),
-                              #scale_diag=tf.expand_dims(tf.sqrt(tf.exp(r1_zy_log_sig_sq_a)),1)))
-                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1),
-                              scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),
-                                                   tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),
-                                                   tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),
-                                                   tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1)))
+ 
+        if multi_modal == True:       
+            # define the r1(z|y) mixture model
+            bimix_gauss = tfd.MixtureSameFamily(
+                              mixture_distribution=tfd.Categorical(logits=r1_zy_weights),
+                              components_distribution=tfd.MultivariateNormalDiag(
+                                  #loc=tf.expand_dims(r1_zy_mean_a,1),
+                                  #scale_diag=tf.expand_dims(tf.sqrt(tf.exp(r1_zy_log_sig_sq_a)),1)))
+                                  loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c],axis=1),
+                                  scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),
+                                                       tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),
+                                                       tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c))],axis=1)))
+                                                       #tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1)))
+
+        else:
+            # define the r1(z|y) mixture model
+            bimix_gauss = tfd.MixtureSameFamily(
+                              mixture_distribution=tfd.Categorical(logits=r1_zy_weights),
+                              components_distribution=tfd.MultivariateNormalDiag(
+                                  #loc=tf.expand_dims(r1_zy_mean_a,1),
+                                  #scale_diag=tf.expand_dims(tf.sqrt(tf.exp(r1_zy_log_sig_sq_a)),1)))
+                                  loc=tf.stack([r1_zy_mean_a],axis=1),
+                                  scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a))],axis=1)))
+        
 
         # DRAW FROM r1(z|y)
         r1_zy_samp = bimix_gauss.sample()
