@@ -34,6 +34,7 @@ parser = argparse.ArgumentParser(description='A tutorial of argparse!')
 parser.add_argument("--gen_train", default=False, help="generate the training data")
 parser.add_argument("--gen_test", default=False, help="generate the testing data")
 parser.add_argument("--train", default=False, help="train the network")
+parser.add_argument("--test", default=False, help="test the network")
 args = parser.parse_args()
 
 # fixed parameter values
@@ -53,7 +54,7 @@ fixed_vals = {'mass_1':50.0,
 	'tilt_2':0.0,
         'phi_12':0.0,
         'phi_jl':0.0,
-        'det':'H1'}
+        'det':['H1','L1','V1']}
 
 # prior bounds
 bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
@@ -74,7 +75,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -82,10 +83,10 @@ session = tf.Session(config=config)
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
-    ndata = 256
-    run_label = 'multi-modal26'
-    bilby_results_label = 'multi-modal18_6-par'
-    r = 2
+    ndata = 256 # length of input to NN == fs * num_detectors
+    run_label = 'multi-modal_3det_9par_run3'
+    bilby_results_label = '9par_256Hz_3det_case'
+    r = 1
     tot_dataset_size = int(1e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
@@ -98,28 +99,32 @@ def get_params():
         tset_split = tset_split, 
         plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
         print_values=True,            # optionally print values every report interval
-        n_samples = 10000,             # number of posterior samples to save per reconstruction upon inference 
+        n_samples = 500,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=512,               # batch size inference model (inverse reconstruction)
+        batch_size=64,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
-        save_interval=10000,           # interval at which to save inference model weights
-        plot_interval=15000,           # interval over which plotting is done
-        z_dimension=8,                # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        save_interval=1000,           # interval at which to save inference model weights
+        plot_interval=20000,           # interval over which plotting is done
+        z_dimension=24,                # number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
-        rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn'],
+        rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec'],
+        corner_parnames = ['m_{1}\,(\mathrm{M}_{\odot})','m_{2}\,(\mathrm{M}_{\odot})','d_{\mathrm{L}}\,(\mathrm{Mpc})','t_{0}\,(\mathrm{seconds})','{\phi}','\Theta_{jn}','{\psi}','\mathrm{RA}','\mathrm{DEC}'],
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn'], # parameter names
-        train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_6par/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
-        test_set_dir='/home/hunter.gabbard/CBC/VItamin/testing_sets_second_sub_6par/tset_tot-%d' % (r*r), #location of test set
-        pe_dir='/home/hunter.gabbard/CBC/VItamin/bilby_outputs_second_sub_6par', #location of bilby PE results
-        KL_cycles = 1,                       # number of cycles to repeat for the KL approximation
+        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
+        train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_3det_9par/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
+        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/9par_256Hz_3det_case/test_waveforms', #location of test set
+        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/9par_256Hz_3det_case/test',    # location of bilby PE results
+        KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
+        load_plot_data=False,                                                  # use old plotting data
+        samplers=['vitamin', 'dynesty'],#,'emcee','ptemcee','cpnest'],          # samplers to use when plotting
+
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         #do_normscale=True,                    # if true normalize parameters
         #do_mc_eta_conversion=False,           # if True, convert m1 and m2 parameters into mc and eta
@@ -129,7 +134,6 @@ def get_params():
         #do_extra_noise=True,                  # add extra noise realizations during training
         #Npp = int(r*r),                             # number of test signals per pp-plot. TODO: use same 
                                               # use same samples as bilby
-        #samplers=['vitamin','dynesty','emcee','ptemcee','cpnest'],          # list of available bilby samplers to use
         #use_samplers = [0,1],                  # number of Bilby samplers to use 
         #kl_set_dir='/home/chrism/kl_output', # location of test set used for kl
         #do_only_test = False,                  # if true, don't train but only run on test samples using pretrained network
@@ -139,23 +143,29 @@ def get_params():
     )
     return params
 
-def load_data(input_dir,inf_pars):
+def load_data(input_dir,inf_pars,load_condor=False):
  
     # load generated samples back in
     train_files = []
     if type("%s" % input_dir) is str:
         dataLocations = ["%s" % input_dir]
         data={'x_data': [], 'y_data_noisefree': [], 'y_data_noisy': [], 'rand_pars': []}
-    for filename in os.listdir(dataLocations[0]):
+
+    if load_condor == True:
+        filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))
+    else:
+        filenames = os.listdir(dataLocations[0])
+    for filename in filenames:
         train_files.append(filename)
         data_temp={'x_data': h5py.File(dataLocations[0]+'/'+filename, 'r')['x_data'][:],
               'y_data_noisefree': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisefree'][:],
               'y_data_noisy': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisy'][:],
               'rand_pars': h5py.File(dataLocations[0]+'/'+filename, 'r')['rand_pars'][:]}
         data['x_data'].append(data_temp['x_data'])
-        data['y_data_noisefree'].append(data_temp['y_data_noisefree'])
-        data['y_data_noisy'].append(data_temp['y_data_noisy'])
+        data['y_data_noisefree'].append(np.expand_dims(data_temp['y_data_noisefree'], axis=0))
+        data['y_data_noisy'].append(np.expand_dims(data_temp['y_data_noisy'], axis=0))
         data['rand_pars'] = data_temp['rand_pars']
+
 
     # extract the prior bounds
     bounds = {}
@@ -167,6 +177,7 @@ def load_data(input_dir,inf_pars):
     data['x_data'] = np.concatenate(np.array(data['x_data']), axis=0).squeeze()
     data['y_data_noisefree'] = np.concatenate(np.array(data['y_data_noisefree']), axis=0)
     data['y_data_noisy'] = np.concatenate(np.array(data['y_data_noisy']), axis=0)
+    
 
     # normalise the data parameters
     for i,k in enumerate(data_temp['rand_pars']):
@@ -224,7 +235,7 @@ if args.gen_train:
     # Iterate over number of requested training samples
     for i in range(0,params['tot_dataset_size'],params['tset_split']):
 
-        _, signal_train, signal_train_pars = run(sampling_frequency=params['ndata']/params['duration'],
+        _, signal_train, signal_train_pars,snrs = run(sampling_frequency=params['ndata']/params['duration'],
                                                           duration=params['duration'],
                                                           N_gen=params['tset_split'],
                                                           ref_geocent_time=params['ref_geocent_time'],
@@ -248,14 +259,25 @@ if args.gen_train:
         hf.create_dataset('y_data_noisy', data=signal_train)
         hf.create_dataset('y_data_noisefree', data=signal_train)
         hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
+        hf.create_dataset('snrs', data=snrs)
         hf.close()
+
+        # plot snr distribution
+        for j in range(len(fixed_vals['det'])):
+            plt.hist(snrs[:,j],bins=20, label=fixed_vals['det'][j], alpha=0.65)
+        plt.xlabel('Optimal SNR')
+        plt.legend()
+        plt.savefig('%s/latest_%s/training_snr_dist.png' % (params['plot_dir'],params['run_label']))
+        plt.close()
+        print('Generated SNR distribution on training set ...')
+        exit()
 
 #    exit(0)
 
 # Make testing set directory
 if args.gen_test:
 
-    # Make training set directory
+    # Make testing set directory
     os.system('mkdir -p %s' % params['test_set_dir'])
 
     # Maketesting samples
@@ -298,80 +320,17 @@ if args.gen_test:
 # if we are now training the network
 if args.train:
 
-    # Load test samples
-    #pos_test, labels_test, sig_test = [], [], []
-    #samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndim_x']))
-    #cnt=0
-    #for i in range(params['r']):
-    #    for j in range(params['r']):
-    #    
-    #        # Load test sample file
-    #        f = h5py.File('%s/%s_%s.h5py' % (params['test_set_dir'],params['run_label'],str(cnt)), 'r+')
-    
-    #        # rescale all parameters to 0->1
-    #        
-    #
-    #        # select samples from posterior randomly
-    #        phase = (f['phase_post'][:] - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
-    #     
-    #        if params['do_mc_eta_conversion']:
-    #            m1 = f['mass_1_post'][:]
-    #            m2 = f['mass_2_post'][:]
-    #            eta = (m1*m2)/(m1+m2)**2
-    #            mc = np.sum([m1,m2], axis=0)*eta**(3.0/5.0)
-    #        else: 
-    #            m1 = (f['mass_1_post'][:] - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
-    #            m2 = (f['mass_2_post'][:] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
-    #        t0 = (f['geocent_time_post'][:] - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
-    #        dist=(f['luminosity_distance_post'][:] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
-    #
-    #        if params['do_mc_eta_conversion']:
-    #            f_new=np.array([mc,phase,t0,eta]).T
-    #        else:
-    #            f_new=np.array([m1,phase,t0,m2,dist]).T
-    #        f_new=f_new[:params['n_samples'],:]
-    #        print(f_new.shape)
-    #        samples[cnt,:,:]=f_new
-    #
-    #        # get true scalar parameters
-    #        if params['do_mc_eta_conversion']:
-    #            m1 = np.array(f['mass_1'])
-    #            m2 = np.array(f['mass_2'])
-    #            eta = (m1*m2)/(m1+m2)**2
-    #            mc = np.sum([m1,m2])*eta**(3.0/5.0)
-    #            pos_test.append([mc,np.array(f['phase']),(np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2]),eta])
-    #        else:
-    #            m1 = (np.array(f['mass_1']) - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
-    #            m2 = (np.array(f['mass_2']) - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
-    #            t0 = (np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
-    #            dist = (np.array(f['luminosity_distance']) - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
-    #            phase = (np.array(f['phase']) - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
-    #            pos_test.append([m1,phase,t0,m2,dist])
-    #        labels_test.append([np.array(f['noisy_waveform'])])
-    #        sig_test.append([np.array(f['noisefree_waveform'])])
-    #
-    #        cnt += 1
-    #        f.close()
-
-    # Set test arrays
-    #pos_test = np.array(pos_test) # test parameters
-    # TODO: move whitening terms to where whitening is done
-    #y_data_test_h = np.array(labels_test).reshape(int(r*r),ndata) * params['whitening_factor'] # noisy y test
-    #sig_test = np.array(sig_test).reshape(int(r*r),ndata) * params['whitening_factor'] # noise-free y test
-
-    # Get list of training files
-    #train_files = []
-    #if type("%s" % params['train_set_dir']) is str:
-    #    dataLocations = ["%s" % params['train_set_dir']]
-    #    data={'x_data_train_h': [], 'y_data_train_lh': [], 'y_data_test_h': []}
-    #for filename in os.listdir(dataLocations[0]):
-    #    train_files.append(filename)
-
     # load the noisefree training data back in
     x_data_train, y_data_train, _, y_normscale = load_data(params['train_set_dir'],params['inf_pars'])
 
     # load the noisy testing data back in
-    x_data_test, _, y_data_test,_ = load_data(params['test_set_dir'],params['inf_pars'])
+    x_data_test, y_data_test_noisefree, y_data_test,_ = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
+
+    # reshape arrays for multi-detector
+    y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
+#    y_data_train = y_data_train.reshape(y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
+    y_data_test = y_data_test.reshape(y_data_test.shape[0],y_data_test.shape[1]*y_data_test.shape[2])
+    y_data_test_noisefree = y_data_test_noisefree.reshape(y_data_test_noisefree.shape[0],y_data_test_noisefree.shape[1]*y_data_test_noisefree.shape[2])
 
     # Make directory for plots
     os.system('mkdir -p %s/latest_%s' % (params['plot_dir'],params['run_label']))
@@ -380,10 +339,23 @@ if args.train:
     # load generated samples back in
     post_files = []
     #~/bilby_outputs/bilby_output_dynesty1/multi-modal3_0.h5py
-    dataLocations = '%s_dynesty1' % params['pe_dir']
+    dataLocations = '%s_%s1' % (params['pe_dir'],params['samplers'][1])
     #for i,filename in enumerate(glob.glob(dataLocations[0])):
+    i_idx = 0
+    i = 0
+    i_idx_use = []
+#    while i_idx < params['r']*params['r']:
     for i in range(params['r']*params['r']):
         filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
+
+        # If file does not exist, skip to next file
+#        try:
+#            h5py.File(filename, 'r')
+#        except Exception as e:
+#            i+=1
+#            print(e)
+#            continue
+
         print(filename)
         post_files.append(filename)
         data_temp = {} 
@@ -396,6 +368,11 @@ if args.train:
              data_temp[p] = h5py.File(filename, 'r')[p][:]
              #bounds[par_max] = h5py.File(filename, 'r')[par_max][...].item()
              #bounds[par_min] = h5py.File(filename, 'r')[par_min][...].item()
+             if p == 'geocent_time_post':
+                 data_temp[p] = data_temp[p] - params['ref_geocent_time']
+#                 Nsamp = data_temp[p].shape[0]
+#                 n = n + 1
+#                 continue
              data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
              Nsamp = data_temp[p].shape[0]
              n = n + 1
@@ -408,75 +385,153 @@ if args.train:
         # Make corner plot of VItamin posterior samples
         figure = corner.corner(XS, labels=params['inf_pars'],
                        quantiles=[0.16, 0.5, 0.84],
-                       #range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
+                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
                        truths=x_data_test[i,:],
                        show_titles=True, title_kwargs={"fontsize": 12})
+
+        if i_idx == 0:
+            XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
+        else:
+            # save all posteriors in array
+            XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
+
+
+        for q_idx,q in enumerate(params['inf_pars']):
+            par_min = q + '_min'
+            par_max = q + '_max'
+
+            # rescale parameters back to their physical values
+#            if par_min == 'geocent_time_min':
+#                continue
+
+            x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+
+        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
+#        i+=1
+#        i_idx+=1
+#        i_idx_use.append(i)
+
+#    y_data_test = y_data_test[i_idx_use,:]
+#    y_data_test_noisefree = y_data_test_noisefree[i_idx_use,:]
+#    x_data_test = x_data_test[i_idx_use,:]
+
+    VICI_inverse_model.train(params, x_data_train, y_data_train,
+                             x_data_test, y_data_test, y_data_test_noisefree,
+                             y_normscale,
+                             "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'],
+                             x_data_test, bounds, fixed_vals,
+                             XS_all) 
+
+# if we are now testing the network
+if args.test:
+
+    # load the noisefree training data back in
+    x_data_train, y_data_train, _, y_normscale = load_data(params['train_set_dir'],params['inf_pars'])
+
+    # load the noisy testing data back in
+    x_data_test, y_data_test_noisefree, y_data_test,_ = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
+
+    # reshape arrays for multi-detector
+    y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
+#    y_data_train = y_data_train.reshape(y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
+    y_data_test = y_data_test.reshape(y_data_test.shape[0],y_data_test.shape[1]*y_data_test.shape[2])
+    y_data_test_noisefree = y_data_test_noisefree.reshape(y_data_test_noisefree.shape[0],y_data_test_noisefree.shape[1]*y_data_test_noisefree.shape[2])
+
+    # Make directory for plots
+    os.system('mkdir -p %s/latest_%s' % (params['plot_dir'],params['run_label']))
+
+    # load up the posterior samples (if they exist)
+    # load generated samples back in
+    post_files = []
+    #~/bilby_outputs/bilby_output_dynesty1/multi-modal3_0.h5py
+    dataLocations = '%s_%s1' % (params['pe_dir'],params['samplers'][1])
+    #for i,filename in enumerate(glob.glob(dataLocations[0])):
+    i_idx = 0
+    i = 0
+    i_idx_use = []
+#    while i_idx < params['r']*params['r']:
+
+    for i in range(params['r']*params['r']):
+        filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
+
+        # If file does not exist, skip to next file
+#        try:
+#            h5py.File(filename, 'r')
+#        except Exception as e:
+#            i+=1
+#            print(e)
+#            continue
+
+        print(filename)
+        post_files.append(filename)
+        data_temp = {}
+        #bounds = {}
+        n = 0
+        for q in params['inf_pars']:
+             p = q + '_post'
+             par_min = q + '_min'
+             par_max = q + '_max'
+             data_temp[p] = h5py.File(filename, 'r')[p][:]
+             #bounds[par_max] = h5py.File(filename, 'r')[par_max][...].item()
+             #bounds[par_min] = h5py.File(filename, 'r')[par_min][...].item()
+             if p == 'geocent_time_post':
+                 data_temp[p] = data_temp[p] - params['ref_geocent_time']
+#                 Nsamp = data_temp[p].shape[0]
+#                 n = n + 1
+#                 continue
+             data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
+             Nsamp = data_temp[p].shape[0]
+             n = n + 1
+        XS = np.zeros((Nsamp,n))
+        j = 0
+        for p,d in data_temp.items():
+            XS[:,j] = d
+            j += 1
+
+        # Make corner plot of VItamin posterior samples
+        figure = corner.corner(XS, labels=params['inf_pars'],
+                       quantiles=[0.16, 0.5, 0.84],
+                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
+                       truths=x_data_test[i,:],
+                       show_titles=True, title_kwargs={"fontsize": 12})
+
+        if i_idx == 0:
+            XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
+        else:
+            # save all posteriors in array
+            XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
+
+
+        for q_idx,q in enumerate(params['inf_pars']):
+            par_min = q + '_min'
+            par_max = q + '_max'
+
+            # rescale parameters back to their physical values
+#            if par_min == 'geocent_time_min':
+#                continue
+
+            x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+
         plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
 
-    #if params['load_plot_data'] == False:
-    #    y_normscale = [np.max(np.abs(y_data_train_lh))]
-    #    hf = h5py.File('plotting_data_%s/y_normscale_value.h5' % params['run_label'], 'w')
-    #    hf.create_dataset('y_normscale', data=y_normscale)
-    #    hf.close()
-    #else:
-    #    hf = h5py.File('plotting_data_%s/y_normscale_value.h5' % params['run_label'], 'r')
-    #    y_normscale = np.array(hf['y_normscale'])
-    #    hf.close()
+    VI_pred_all = []
+    for i in range(params['r']*params['r']):
+        # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+        VI_pred, dt  = VICI_inverse_model.run(params, np.expand_dims(y_data_test[i],axis=0), np.shape(x_data_test)[1],
+                                                         y_normscale,
+                                                         "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+        VI_pred_all.append(VI_pred)
 
-    #y_data_train_lh /= y_normscale[0]
-    #y_data_test_h /= y_normscale[0]
-    #sig_test /= y_normscale[0]
-
-    #if params['do_normscale']: 
-    #    normscales = [normscales[0],normscales[1],normscales[2],normscales[3],normscales[4]]
-    #x_data_train, y_data_train_l, y_data_train_h = x_data_train_h, y_data_train_lh, y_data_train_lh
-
-    # Declare plot class variables
-    #plotter = plots.make_plots(params,samples,None,pos_test)
-
-    # Plot test sample time series
-    #plotter.plot_testdata((y_data_test),sig_test,params['r']**2,params['plot_dir'])
-
-    # Train model - This trains the inverse model to recover posteriors using the 
-    # forward model weights stored in forward_model_dir/forward_model.ckpt and saves 
-    # the inverse model weights in inverse_model_dir/inverse_model.ckpt
-#    shutil.rmtree("inverse_model_dir_%s" % params['run_label'])
-    VICI_inverse_model.train(params, x_data_train, y_data_train,
-                             x_data_test, y_data_test,
-                             y_normscale,
-                             "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label']) 
-#    exit(0)
-
-# Test model
-if params['do_only_test']:
-    # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-    xm, xsx, XS, pmax, _ = VICI_inverse_model.run(params, y_data_test_h, np.shape(x_data_train)[1], "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label']) # This runs the trained model using the weights stored in inverse_model_dir/inverse_model.ckpt
-
-    # TODO: remove this later
-#    normscales = [79.99998770493086, 0.5999996662139893, 79.95626661877512, 2999.9996467099486]
-
-    # Convert XS back to unnormalized version
-    if params['do_normscale']:
-        for m in range(params['ndim_x']):
-            XS[:,m,:] = XS[:,m,:] * normscales[m]
+    VI_pred_all = np.array(VI_pred_all)
 
     # Generate final results plots
-    plotter = plots.make_plots(params,samples,XS,pos_test)
-
-    if params['load_plot_data']  == False:
-        hf = h5py.File('plotting_data_%s/pos_test.h5' % params['run_label'], 'w')
-        hf.create_dataset('pos_test', data=pos_test)
-        hf.close()
+    plotter = plots.make_plots(params,XS_all,VI_pred_all,x_data_test)
 
     # Make KL plot
-    plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
+    plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_train,y_normscale)
+    exit()
 
     # Make pp plot
     plotter.plot_pp(VICI_inverse_model,y_data_test_h,x_data_train,0,normscales,samples,pos_test)
 
-    # Make corner plots
-#    plotter.make_corner_plot(sig_test * y_normscale[0],y_data_test_h * y_normscale[0],sampler='dynesty1')
-
-    # Geneerate overlap scatter plots
-#    plotter.make_overlap_plot(0,iterations,s,olvec,olvec_2d,adksVec)
 

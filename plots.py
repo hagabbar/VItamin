@@ -127,24 +127,30 @@ class make_plots:
 
             return ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr, 0, 0
 
-        def load_test_set(model,sig_test,par_test,normscales,sampler='dynesty1'):
+        def load_test_set(model,sig_test,par_test,y_normscale,sampler='dynesty1'):
             """
             load requested test set
             """
 
             if sampler=='vitamin1' or sampler=='vitamin2':
-                # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                _, _, x, _, timet  = model.run(self.params, sig_test, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
 
-                # Convert XS back to unnormalized version
-                if self.params['do_normscale']:
-                    for m in range(self.params['ndim_x']):
-                        x[:,m,:] = x[:,m,:]*normscales[m]
-                return x, [timet,timet,timet]
+                VI_pred_all = []
+                for i in range(params['r']*params['r']):
+                    # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+                    VI_pred, dt  = model.run(params, np.expand_dims(sig_test[i],axis=0), np.shape(par_test)[1],
+                                                             y_normscale,
+                                                             "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+                    VI_pred_all.append(VI_pred)
 
+                VI_pred_all = np.array(VI_pred_all)
+
+                return VI_pred_all, dt
+
+            print('not vitamin')
+            exit()
             # Define variables
             pos_test = []
-            samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndim_x']+1))
+            samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndata']+1))
             cnt=0
             test_set_dir = params['kl_set_dir'] + '_' + sampler
 
@@ -209,8 +215,6 @@ class make_plots:
             # rescale all samples to be from 0 to 1
             samples
 
-            pos_test = pos_test[:,[0,2,3,4]]
-            samples = samples[:,:,[0,2,3,4]]
             new_samples = []
             for i in range(samples.shape[0]):
                 new_samples.append(samples[i].T)
@@ -651,7 +655,7 @@ class make_plots:
    
         # Define variables 
         params = self.params
-        usesamps = params['use_samplers']
+        usesamps = params['inf_pars']
         samplers = params['samplers']
         fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
         
@@ -676,16 +680,17 @@ class make_plots:
         
         for i in range(len(usesamps)):
             for j in range(tmp_idx):
+
                 # Load appropriate test sets
-                if samplers[usesamps[i]] == samplers[usesamps[::-1][j]]:
+                if samplers[i] == samplers[::-1][j]:
                     print_cnt+=1
-                    sampler1, sampler2 = samplers[usesamps[i]]+'1', samplers[usesamps[::-1][j]]+'2'
+                    sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'2'
                     if self.params['load_plot_data'] == False:
                         set1,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
                         set2,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
                     continue
                 else:
-                    sampler1, sampler2 = samplers[usesamps[i]]+'1', samplers[usesamps[::-1][j]]+'2'
+                    sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'2'
                     if self.params['load_plot_data'] == False:
                         set1,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
                         set2,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
@@ -693,6 +698,7 @@ class make_plots:
                 if self.params['load_plot_data'] == True:
                     tot_kl = np.array(hf['%s-%s' % (sampler1,sampler2)])
                 else:
+
                     # Iterate over test cases
                     tot_kl = []
                     for r in range(self.params['r']**2):
@@ -700,22 +706,19 @@ class make_plots:
                     tot_kl = np.array(tot_kl)
 
                 if self.params['load_plot_data'] == False:
+
                     # Save results to h5py file
                     hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
                
                 logbins = np.histogram_bin_edges(tot_kl,bins='fd') 
-                if samplers[usesamps[i]] == 'vitamin' or samplers[usesamps[::-1][j]] == 'vitamin':
-#                    if samplers[usesamps[i]] == 'vitamin' and samplers[usesamps[::-1][j]] == 'vitamin':
-#                        continue
-#                    else:
-#                    logbins = np.logspace(np.log(np.min(tot_kl)),np.log(np.max(tot_kl)),25)
+
+                if samplers[i] == 'vitamin' or samplers[::-1][j] == 'vitamin':
+
                     logbins = 25
                     logbins = np.logspace(-1,2.5,50)
-                    axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[usesamps[::-1][j]]),zorder=2)
+                    axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[::-1][j]),zorder=2)
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
                 else:
-                    #if samplers[usesamps[i]] == samplers[usesamps[::-1][j]]:
-                    #    continue 
                     
                     if label_idx == 0:
                         axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
@@ -723,7 +726,7 @@ class make_plots:
                     else:
                         axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color='grey',zorder=1)
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
-                    print(samplers[usesamps[i]],samplers[usesamps[::-1][j]])                 
+                    print(samplers[i],samplers[::-1][j])                 
                     print(np.mean(tot_kl))
 
                 print('Completed KL calculation %d/%d' % (print_cnt,len(usesamps)*2))
@@ -742,8 +745,8 @@ class make_plots:
     #                print('%s sampler runtimes: %s' % (samplers[usesamps[i]]+'1',str(runetime)))
     #            else:
                     # Save runtime information
-                hf.create_dataset('%s_runtime' % (samplers[usesamps[i]]), data=np.array(runtime[samplers[usesamps[i]]+'1']))
-                print('%s sampler runtimes: %s' % (samplers[usesamps[i]]+'1',str(runtime[samplers[usesamps[i]]+'1'])))
+                hf.create_dataset('%s_runtime' % (samplers[i]), data=np.array(runtime[samplers[i]+'1']))
+                print('%s sampler runtimes: %s' % (samplers[i]+'1',str(runtime[samplers[i]+'1'])))
 
         # Save KL corner plot
         axis_kl.set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
@@ -766,7 +769,7 @@ class make_plots:
 
         return
 
-    def make_corner_plot(self,noisefreeY_test,noisyY_test,sampler='dynesty1'):
+    def make_corner_plot(self,noisefreeY_test,noisyY_test,bounds,test_sample_idx,epoch_idx,sampler='dynesty1'):
         """
         Function to generate a corner plot for n-test GW samples. Corner plot has posteriors 
         from two samplers (usually VItamin and some other Bayesian sampler). The 4D overlap 
@@ -778,6 +781,8 @@ class make_plots:
         # Define variables
         params = self.params
 
+        # make directory to store original plotting data
+
         if self.params['load_plot_data'] == True:
             hf = h5py.File('plotting_data_%s/corner_plot_data.h5' % params['run_label'], 'r')
             Vitamin_preds = np.array(hf['Vitamin_preds'])
@@ -787,17 +792,25 @@ class make_plots:
             noisyY_test = np.array(hf['noisyY_test'])
         else:
             Vitamin_preds = self.rev_x
-            sampler_preds,_ = self.load_test_set(None,None,None,None,sampler=sampler)
+            #sampler_preds,_ = self.load_test_set(None,None,None,None,sampler=sampler)
+            sampler_preds = np.array(self.samples, copy=True)
 
-            # Save data for later plotting use
+            try:
+                # Save data for later plotting use
+                os.mkdir('plotting_data_%s' % params['run_label'])
+            except Exception as e:
+                print(e)
+                pass
             hf = h5py.File('plotting_data_%s/corner_plot_data.h5' % params['run_label'], 'w')
             hf.create_dataset('Vitamin_preds', data=Vitamin_preds)
             hf.create_dataset('sampler_preds', data=sampler_preds)
             hf.create_dataset('pos_test', data=self.pos_test)
-            hf.create_dataset('noisefreeY_test', data=noisefreeY_test)
-            hf.create_dataset('noisyY_test', data=noisyY_test)
+            if noisefreeY_test is not None and noisyY_test is not None:
+                hf.create_dataset('noisefreeY_test', data=noisefreeY_test)
+                hf.create_dataset('noisyY_test', data=noisyY_test)
             contour_info = hf.create_group('contour_info')
 
+        """
         # rescale truths
         self.pos_test[:,0] = (self.pos_test[:,0] * (params['prior_max'][0] - params['prior_min'][0])) + (params['prior_min'][0])
         self.pos_test[:,1] = (self.pos_test[:,1] * (params['prior_max'][2] - params['prior_min'][2])) + (params['prior_min'][2]) - (params['ref_geocent_time']-0.5)
@@ -814,55 +827,51 @@ class make_plots:
         pmax[1] = params['prior_max'][2] - (params['ref_geocent_time']-0.5)
         pmax[2] = params['prior_max'][3]
         pmax[3] = params['prior_max'][4]
+        """
 
         # Iterate over test samples
         for r in range(1): #range(params['r']**2):
-            print('Making corner plot %d ...' % r)
+            print('Making corner plot %d ...' % test_sample_idx)
 
             # Declare figure object
-            fig_corner, axis_corner = plt.subplots(params['ndim_x'],params['ndim_x'],figsize=(6,6))#,sharex='col')
+            fig_corner, axis_corner = plt.subplots(len(params['inf_pars']),len(params['inf_pars']),figsize=(6,6))#,sharex='col')
+
+            set1 = Vitamin_preds[r].T
+            set2 = sampler_preds[r].T
 
             # Apply mask
-            sampset_1 = Vitamin_preds[r]
-            sampset_2 = sampler_preds[r]
-            cur_max = self.params['n_samples']
-            set1 = []
-            set2 = []
-            for i in range(sampset_1.shape[0]):
-                mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 0.0) & (sampset_1[3,:] <= 1.0) & (sampset_1[1,:] >= 0.0) & (sampset_1[1,:] <= 1.0) & (sampset_1[0,:] >= 0.0) & (sampset_1[0,:] <= 1.0) & (sampset_1[2,:] <= 1.0) & (sampset_1[2,:] >= 0.0)]
-                mask = np.argwhere(mask[0])
-                new_rev = sampset_1[i,mask]
-                new_rev = new_rev.reshape(new_rev.shape[0])
-                new_samples = sampset_2[i,:]
-                new_samples = new_samples.reshape(new_samples.shape[0])
-                tmp_max = new_rev.shape[0]
-                if tmp_max < cur_max: cur_max = tmp_max
-                set1.append(new_rev[:cur_max])
-                set2.append(new_samples[:cur_max])
-            set1 = np.array(set1)
-            set2 = np.array(set2)
-
-            # rescale parameters back to their physical values
-            set1[0,:] = (set1[0,:] * (params['prior_max'][0] - params['prior_min'][0])) + (params['prior_min'][0])
-            set1[1,:] = (set1[1,:] * (params['prior_max'][2] - params['prior_min'][2])) + (params['prior_min'][2]) - (params['ref_geocent_time']-0.5)
-            set1[2,:] = (set1[2,:] * (params['prior_max'][3] - params['prior_min'][3])) + (params['prior_min'][3])
-            set1[3,:] = (set1[3,:] * (params['prior_max'][4] - params['prior_min'][4])) + (params['prior_min'][4])
-            set2[0,:] = (set2[0,:] * (params['prior_max'][0] - params['prior_min'][0])) + (params['prior_min'][0])
-            set2[1,:] = (set2[1,:] * (params['prior_max'][2] - params['prior_min'][2])) + (params['prior_min'][2]) - (params['ref_geocent_time']-0.5)
-            set2[2,:] = (set2[2,:] * (params['prior_max'][3] - params['prior_min'][3])) + (params['prior_min'][3])
-            set2[3,:] = (set2[3,:] * (params['prior_max'][4] - params['prior_min'][4])) + (params['prior_min'][4])
+            sampset_1 = set1
+            sampset_2 = set2
+            print(sampset_1.shape)
+            del_cnt = 0
+            # iterate over each sample
+            for i in range(sampset_1.shape[1]):
+                # iterate over each parameter
+                for j,q in enumerate(params['inf_pars']):
+                    # if sample out of range, delete the sample
+                    if sampset_1[j,i] < 0.0 or sampset_1[j,i] > 1.0:
+                        set1 = np.delete(set1,del_cnt,axis=1)
+                        set2 = np.delete(set2,del_cnt,axis=1)
+                        del_cnt-=1
+                        break
+                    # check m1 > m2
+                    elif q == 'mass_1' or q == 'mass_2':
+                        m1_idx = np.argwhere(params['inf_pars']=='mass_1') 
+                        m2_idx = np.argwhere(params['inf_pars']=='mass_2')
+                        if sampset_1[m1_idx,i] < sampset_1[m2_idx,i]:
+                            set1 = np.delete(set1,del_cnt,axis=1)
+                            set2 = np.delete(set2,del_cnt,axis=1)
+                            del_cnt-=1
+                            break
+                del_cnt+=1
 
             left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
             ax2 = fig_corner.add_axes([left, bottom, width, height])
 
+           
             # plot waveform in upper-right hand corner
-            #axis_corner[0,params['ndim_x']-1].plot(np.linspace(0,1,params['ndata']),noisefreeY_test[r,:],color='cyan',zorder=50)
-            #axis_corner[0,params['ndim_x']-1].plot(np.linspace(0,1,params['ndata']),noisyY_test[r,:],color='darkblue')
-            #axis_corner[0,params['ndim_x']-1].set_xlabel(r"$\textrm{Time (s)}$")
-            #axis_corner[0,params['ndim_x']-1].grid(False)
-            #axis_corner[0,params['ndim_x']-1].margins(x=0,y=0)
-            ax2.plot(np.linspace(0,1,params['ndata']),noisefreeY_test[r,:],color='cyan',zorder=50)
-            ax2.plot(np.linspace(0,1,params['ndata']),noisyY_test[r,:],color='darkblue')
+            ax2.plot(np.linspace(0,1,params['ndata']),noisefreeY_test[:],color='cyan',zorder=50)
+            ax2.plot(np.linspace(0,1,params['ndata']),noisyY_test[:],color='darkblue')
             ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
             ax2.yaxis.set_visible(False)
             ax2.tick_params(axis="x", labelsize=11)
@@ -871,159 +880,206 @@ class make_plots:
             ax2.grid(False)
             ax2.margins(x=0,y=0)
 
+            # get the mins and maxs for the prior bounds being plotted
+            usepar_priormax = np.zeros((len(params['inf_pars'])))
+            usepar_priormin = np.zeros((len(params['inf_pars'])))
+            pos_test_copy = self.pos_test
+            for q_idx,q in enumerate(params['inf_pars']):
+                par_min = q + '_min'
+                par_max = q + '_max'
+                usepar_priormax[q_idx] = bounds[par_max]
+                usepar_priormin[q_idx] = bounds[par_min]
+
+                # rescale parameters back to their physical values
+#                if par_min == 'geocent_time_min':
+#                    set1[q_idx,:] = (set1[q_idx,:] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+                    #self.pos_test[r,q_idx] = (self.pos_test[r,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+#                    continue
+                    
+                set1[q_idx,:] = (set1[q_idx,:] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+                set2[q_idx,:] = (set2[q_idx,:] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+                #pos_test_copy[r,q_idx] = (pos_test_copy[r,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+
             # Iterate over parameters
-            tmp_idx=params['ndim_x']
+            tmp_idx=len(params['inf_pars'])
             
+            # Get corner parnames to use in plotting labels
+            parnames = []
+            for k_idx,k in enumerate(params['rand_pars']):
+                if np.isin(k, params['inf_pars']):
+                    parnames.append(params['corner_parnames'][k_idx])
+            
+
             if self.params['load_plot_data'] == False:
                 testsamp_group = contour_info.create_group('testsamp%d' % r)
-            for i in range(params['ndim_x']):
+            for i in range(len(params['inf_pars'])):
                 for j in range(tmp_idx):
-                    overlap = data_maker.overlap(set1.T,set2.T,next_cnt=True)
-                    parnames = ['m_{1}\,(\mathrm{M}_{\odot})','t_{0}\,(\mathrm{seconds})','m_{2}\,(\mathrm{M}_{\odot})','d_{\mathrm{L}}\,(\mathrm{Mpc})']
+#                    overlap = data_maker.overlap(set1.T,set2.T,next_cnt=True)
                     parname1 = parnames[i]
-                    usepars_order = np.arange(0,len(params['usepars']))
+                    usepars_order = np.arange(0,len(params['inf_pars']))
                     parname2 = parnames[usepars_order[::-1][j]]
 
-                    axis_corner[params['ndim_x']-1-j,i].clear()
+                    axis_corner[len(params['inf_pars'])-1-j,i].clear()
                     # Make histograms on diagonal
-                    if (params['ndim_x']-1-j) == i:
-                        axis_corner[params['ndim_x']-1-j,i].hist(set1[i,:],bins=20,alpha=0.5,density=True,histtype='stepfilled',label='VItamin',color='r')
-                        axis_corner[params['ndim_x']-1-j,i].hist(set1[i,:],bins=20,lw=2,density=True,histtype='step',label='VItamin',color='r',zorder=20)
-                        axis_corner[params['ndim_x']-1-j,i].hist(set2[i,:],bins=20,alpha=0.5,density=True,histtype='stepfilled',label=sampler,color='b')
-                        axis_corner[params['ndim_x']-1-j,i].hist(set2[i,:],bins=20,lw=2,density=True,histtype='step',label=sampler,color='b',zorder=10)
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.pos_test[r,i], linewidth=1.0, color='black',zorder=30)
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[0], linewidth=1, color='r',zorder=30)
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[1], linewidth=1, color='r',zorder=30)
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[0], linewidth=1, color='b',zorder=30)
-                        axis_corner[params['ndim_x']-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[1], linewidth=1, color='b',zorder=30)
+                    if (len(params['inf_pars'])-1-j) == i:
+                        axis_corner[len(params['inf_pars'])-1-j,i].hist(set1[i,:],bins=20,alpha=0.5,density=True,histtype='stepfilled',label='VItamin',color='r')
+                        axis_corner[len(params['inf_pars'])-1-j,i].hist(set1[i,:],bins=20,lw=2,density=True,histtype='step',label='VItamin',color='r',zorder=20)
+                        axis_corner[len(params['inf_pars'])-1-j,i].hist(set2[i,:],bins=20,alpha=0.5,density=True,histtype='stepfilled',label=sampler,color='b')
+                        axis_corner[len(params['inf_pars'])-1-j,i].hist(set2[i,:],bins=20,lw=2,density=True,histtype='step',label=sampler,color='b',zorder=10)
+                        axis_corner[len(params['inf_pars'])-1-j,i].axvline(x=pos_test_copy[r,i], linewidth=1.0, color='black',zorder=30)
+                        axis_corner[len(params['inf_pars'])-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[0], linewidth=1, color='r',zorder=30)
+                        axis_corner[len(params['inf_pars'])-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[1], linewidth=1, color='r',zorder=30)
+                        axis_corner[len(params['inf_pars'])-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[0], linewidth=1, color='b',zorder=30)
+                        axis_corner[len(params['inf_pars'])-1-j,i].axvline(x=self.confidence_bd(set2[i,:])[1], linewidth=1, color='b',zorder=30)
 
-                        xmin, xmax = axis_corner[params['ndim_x']-1-j,i].get_xlim()
-                        ymin, ymax = axis_corner[params['ndim_x']-1-j,i].get_ylim()
+                        xmin, xmax = axis_corner[len(params['inf_pars'])-1-j,i].get_xlim()
+                        ymin, ymax = axis_corner[len(params['inf_pars'])-1-j,i].get_ylim()
                         #if ymin<pmin[params['ndim_x']-1-j]:
                         #    axis_corner[params['ndim_x']-1-j,i].set_ylim(ymin=pmin[params['ndim_x']-1-j])
                         #if ymax>pmax[params['ndim_x']-1-j]:
-                        axis_corner[params['ndim_x']-1-j,i].set_ylim(top=ymax*1.2)
-                        if xmin<pmin[i]:
-                            axis_corner[params['ndim_x']-1-j,i].set_xlim(left=pmin[i])
-                        if xmax>pmax[i]:
-                            axis_corner[params['ndim_x']-1-j,i].set_xlim(right=pmax[i])
+                        axis_corner[len(params['inf_pars'])-1-j,i].set_ylim(top=ymax*1.2)
+                        if xmin<usepar_priormin[i]:
+                            axis_corner[len(params['inf_pars'])-1-j,i].set_xlim(left=usepar_priormin[i])
+                        if xmax>usepar_priormax[i]:
+                            axis_corner[len(params['inf_pars'])-1-j,i].set_xlim(right=usepar_priormax[i])
 
                     # Make scatter plots on off-diagonal
                     else:
                         # Load contour info if it already exists
                         if self.params['load_plot_data'] == True:
-                            vi_contour_info = [np.array(hf['contour_info']['testsamp%d' % r]['vi_Q_%d-%d_contours' % (params['ndim_x']-1-j,i)]),
-                                               np.array(hf['contour_info']['testsamp%d' % r]['vi_X_%d-%d_contours' % (params['ndim_x']-1-j,i)]),
-                                               np.array(hf['contour_info']['testsamp%d' % r]['vi_Y_%d-%d_contours' % (params['ndim_x']-1-j,i)]),
-                                               np.array(hf['contour_info']['testsamp%d' % r]['vi_L_%d-%d_contours' % (params['ndim_x']-1-j,i)])]
-                            bilby_contour_info = [np.array(hf['contour_info']['testsamp%d' % r]['bilby_Q_%d-%d_contours' % (params['ndim_x']-1-j,i)]),
-                                               np.array(hf['contour_info']['testsamp%d' % r]['bilby_Q_%d-%d_contours' % (params['ndim_x']-1-j,i)]),
-                                               np.array(hf['contour_info']['testsamp%d' % r]['bilby_Q_%d-%d_contours' % (params['ndim_x']-1-j,i)]),
-                                               np.array(hf['contour_info']['testsamp%d' % r]['bilby_Q_%d-%d_contours' % (params['ndim_x']-1-j,i)])]
+                            vi_contour_info = [np.array(hf['contour_info']['testsamp%d' % r]['vi_Q_%d-%d_contours' % (len(params['inf_pars'])-1-j,i)]),
+                                               np.array(hf['contour_info']['testsamp%d' % r]['vi_X_%d-%d_contours' % (len(params['inf_pars'])-1-j,i)]),
+                                               np.array(hf['contour_info']['testsamp%d' % r]['vi_Y_%d-%d_contours' % (len(params['inf_pars'])-1-j,i)]),
+                                               np.array(hf['contour_info']['testsamp%d' % r]['vi_L_%d-%d_contours' % (len(params['inf_pars'])-1-j,i)])]
+                            bilby_contour_info = [np.array(hf['contour_info']['testsamp%d' % r]['bilby_Q_%d-%d_contours' % (len(params['inf_pars'])-1-j,i)]),
+                                               np.array(hf['contour_info']['testsamp%d' % r]['bilby_Q_%d-%d_contours' % (len(params['inf_pars'])-1-j,i)]),
+                                               np.array(hf['contour_info']['testsamp%d' % r]['bilby_Q_%d-%d_contours' % (len(params['inf_pars'])-1-j,i)]),
+                                               np.array(hf['contour_info']['testsamp%d' % r]['bilby_Q_%d-%d_contours' % (len(params['inf_pars'])-1-j,i)])]
                         else:
                             vi_contour_info = None
                             bilby_contour_info = None
 
 #                        axis_corner[params['ndim_x']-1-j,i].scatter(set1[i,:], set1[params['usepars'][::-1][j],:],c='r',s=0.2,alpha=0.5, label='VItamin')
 #                        axis_corner[params['ndim_x']-1-j,i].scatter(set2[i,:], set2[params['usepars'][::-1][j],:],c='b',s=0.2,alpha=0.5, label=sampler)
-                        usepar_priormin = np.array(params['prior_min'])[params['usepars']]
-                        usepar_priormax = np.array(params['prior_max'])[params['usepars']]
-                        usepar_priormin[1] = 0.65000000000000000
-                        usepar_priormax[1] = 0.85000000000000000
-                        minimum_prior = [usepar_priormin[i],usepar_priormin[usepars_order[::-1][j]]]
-                        maximum_prior = [usepar_priormax[i],usepar_priormax[usepars_order[::-1][j]]]
-                        comb_set1 = np.array([set1[i,:],set1[usepars_order[::-1][j],:]])
-                        cont1_out = self.make_contour_plot(axis_corner[params['ndim_x']-1-j,i],set1[i,:],set1[usepars_order[::-1][j],:],
-                                                           comb_set1,[parname1,parname2],minimum_prior,maximum_prior,'red',
-                                                           self.params['load_plot_data'],vi_contour_info)
-                        comb_set2 = np.array([set2[i,:],set2[usepars_order[::-1][j],:]])
-                        cont2_out = self.make_contour_plot(axis_corner[params['ndim_x']-1-j,i],set2[i,:],set2[usepars_order[::-1][j],:],
-                                                           comb_set2,[parname1,parname2],minimum_prior,maximum_prior,'blue',
-                                                           self.params['load_plot_data'],bilby_contour_info)
-                        axis_corner[params['ndim_x']-1-j,i].plot(self.pos_test[r,i],self.pos_test[r,usepars_order[::-1][j]],'+k',markersize=8, label='Truth')
 
-                        if self.params['load_plot_data'] == False:
-                            # Save contour calculations in h5py files
-                            testsamp_group.create_dataset('vi_Q_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont1_out[0])
-                            testsamp_group.create_dataset('vi_X_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont1_out[1])
-                            testsamp_group.create_dataset('vi_Y_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont1_out[2])
-                            testsamp_group.create_dataset('vi_L_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont1_out[3])
+#                        usepar_priormin = np.array(params['prior_min'])[params['usepars']]
+#                        usepar_priormax = np.array(params['prior_max'])[params['usepars']]
+#                        usepar_priormin[1] = 0.65000000000000000
+#                        usepar_priormax[1] = 0.85000000000000000
+#                        minimum_prior = [usepar_priormin[i],usepar_priormin[usepars_order[::-1][j]]]
+#                        maximum_prior = [usepar_priormax[i],usepar_priormax[usepars_order[::-1][j]]]
+                        minimum_prior = [usepar_priormin[i],usepar_priormin[::-1][j]]
+                        maximum_prior = [usepar_priormax[i],usepar_priormax[::-1][j]]
+                        comb_set1 = np.array([set1[i,:],set1[::-1,:][j,:]])
+                        try:
+                            cont1_out = self.make_contour_plot(axis_corner[len(params['inf_pars'])-1-j,i],set1[i,:],set1[::-1,:][j,:],
+                                                               comb_set1,[parname1,parname2],minimum_prior,maximum_prior,'red',
+                                                               self.params['load_plot_data'],vi_contour_info)
 
-                            testsamp_group.create_dataset('bilby_Q_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont2_out[0])
-                            testsamp_group.create_dataset('bilby_X_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont2_out[1])
-                            testsamp_group.create_dataset('bilby_Y_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont2_out[2])
-                            testsamp_group.create_dataset('bilby_L_%d-%d_contours' % (params['ndim_x']-1-j,i), data=cont2_out[3])
-                            print('Made dataset')
+                            if self.params['load_plot_data'] == False:
+                                # Save contour calculations in h5py files
+                                testsamp_group.create_dataset('vi_Q_%d-%d_contours' % (len(params['inf_pars'])-1-j,i), data=cont1_out[0])
+                                testsamp_group.create_dataset('vi_X_%d-%d_contours' % (len(params['inf_pars'])-1-j,i), data=cont1_out[1])
+                                testsamp_group.create_dataset('vi_Y_%d-%d_contours' % (len(params['inf_pars'])-1-j,i), data=cont1_out[2])
+                                testsamp_group.create_dataset('vi_L_%d-%d_contours' % (len(params['inf_pars'])-1-j,i), data=cont1_out[3])
+                        except Exception as e:
+                            print(e)
+                            pass
+                        comb_set2 = np.array([set2[i,:],set2[::-1,:][j,:]])
 
-                        xmin, xmax = axis_corner[params['ndim_x']-1-j,i].get_xlim()
-                        ymin, ymax = axis_corner[params['ndim_x']-1-j,i].get_ylim()
-                        if ymin<pmin[params['ndim_x']-1-j]:
-                            axis_corner[params['ndim_x']-1-j,i].set_ylim(ymin=pmin[params['ndim_x']-1-j])
-                        if ymax>pmax[params['ndim_x']-1-j]:
-                            axis_corner[params['ndim_x']-1-j,i].set_ylim(ymax=pmax[params['ndim_x']-1-j])
-                        if xmin<pmin[i]:
-                            axis_corner[params['ndim_x']-1-j,i].set_xlim(xmin=pmin[i])
-                        if xmax>pmax[i]:
-                            axis_corner[params['ndim_x']-1-j,i].set_xlim(xmax=pmax[i])
+                        try:
+                            cont2_out = self.make_contour_plot(axis_corner[len(params['inf_pars'])-1-j,i],set2[i,:],set2[::-1,:][j,:],
+                                                               comb_set2,[parname1,parname2],minimum_prior,maximum_prior,'blue',
+                                                               self.params['load_plot_data'],bilby_contour_info)
+                            if self.params['load_plot_data'] == False:
+                                testsamp_group.create_dataset('bilby_Q_%d-%d_contours' % (len(params['inf_pars'])-1-j,i), data=cont2_out[0])
+                                testsamp_group.create_dataset('bilby_X_%d-%d_contours' % (len(params['inf_pars'])-1-j,i), data=cont2_out[1])
+                                testsamp_group.create_dataset('bilby_Y_%d-%d_contours' % (len(params['inf_pars'])-1-j,i), data=cont2_out[2])
+                                testsamp_group.create_dataset('bilby_L_%d-%d_contours' % (len(params['inf_pars'])-1-j,i), data=cont2_out[3])
+                        except Exception as e:
+                            print(e)
+                            pass
+                        axis_corner[len(params['inf_pars'])-1-j,i].plot(pos_test_copy[r,i],pos_test_copy[r,::-1][j],'+k',markersize=8, label='Truth')
+
+                        print('Made dataset')
+
+                        xmin, xmax = axis_corner[len(params['inf_pars'])-1-j,i].get_xlim()
+                        ymin, ymax = axis_corner[len(params['inf_pars'])-1-j,i].get_ylim()
+                        if ymin<usepar_priormin[len(params['inf_pars'])-1-j]:
+                            axis_corner[len(params['inf_pars'])-1-j,i].set_ylim(ymin=usepar_priormin[len(params['inf_pars'])-1-j])
+                        if ymax>usepar_priormax[len(params['inf_pars'])-1-j]:
+                            axis_corner[len(params['inf_pars'])-1-j,i].set_ylim(ymax=usepar_priormax[len(params['inf_pars'])-1-j])
+                        if xmin<usepar_priormin[i]:
+                            axis_corner[len(params['inf_pars'])-1-j,i].set_xlim(xmin=usepar_priormin[i])
+                        if xmax>usepar_priormax[i]:
+                            axis_corner[len(params['inf_pars'])-1-j,i].set_xlim(xmax=usepar_priormax[i])
 
                         if i==0 and j==1:
                             xtemp = np.array([0,100])
                             y1temp = np.array([0,100])
                             y2temp = y1temp + 100
-                            axis_corner[params['ndim_x']-1-j,i].fill_between(xtemp, y1temp, y2temp, facecolor='gray', interpolate=True,zorder=100)
+                            axis_corner[len(params['inf_pars'])-1-j,i].fill_between(xtemp, y1temp, y2temp, facecolor='gray', interpolate=True,zorder=100)
 
-                    axis_corner[params['ndim_x']-1-j,i].grid(False)
+                    axis_corner[len(params['inf_pars'])-1-j,i].grid(False)
 
-                    axis_corner[params['ndim_x']-1-j,i].tick_params(labelrotation=45,labelsize=8.0,axis='x')
-                    axis_corner[params['ndim_x']-1-j,i].tick_params(labelsize=8.0,axis='y')
+                    axis_corner[len(params['inf_pars'])-1-j,i].tick_params(labelrotation=45,labelsize=8.0,axis='x')
+                    axis_corner[len(params['inf_pars'])-1-j,i].tick_params(labelsize=8.0,axis='y')
 
 
                     # add labels
-                    if i == 0 and params['ndim_x']-1-j != 0:
-                        axis_corner[params['ndim_x']-1-j,i].set_ylabel(r"$%s$" % parname2,fontsize=11)
+                    if i == 0 and len(params['inf_pars'])-1-j != 0:
+                        axis_corner[len(params['inf_pars'])-1-j,i].set_ylabel(r"$%s$" % parname2,fontsize=9)
                         #axis_corner[params['ndim_x']-1-j,i].tick_params(axis="x", labelsize=12)
-                        axis_corner[params['ndim_x']-1-j,i].tick_params(axis="y", labelsize=11)
-                    if params['ndim_x']-1-j == (params['ndim_x']-1):
-                        axis_corner[params['ndim_x']-1-j,i].set_xlabel(r"$%s$" % parname1,fontsize=11)
-                        axis_corner[params['ndim_x']-1-j,i].tick_params(axis="x", labelsize=11)
+                        axis_corner[len(params['inf_pars'])-1-j,i].tick_params(axis="y", labelsize=9)
+                    if len(params['inf_pars'])-1-j == (len(params['inf_pars'])-1):
+                        axis_corner[len(params['inf_pars'])-1-j,i].set_xlabel(r"$%s$" % parname1,fontsize=9)
+                        axis_corner[len(params['inf_pars'])-1-j,i].tick_params(axis="x", labelsize=9)
                     if i != 0:
                         # Turn off some some tick marks
-                        axis_corner[params['ndim_x']-1-j,i].yaxis.set_visible(False)
-                    if i == 0 and params['ndim_x']-1-j == 0:
-                        axis_corner[params['ndim_x']-1-j,i].yaxis.set_visible(False)
-                    if params['ndim_x']-1-j != params['ndim_x']-1:
-                        axis_corner[params['ndim_x']-1-j,i].xaxis.set_visible(False)
+                        axis_corner[len(params['inf_pars'])-1-j,i].yaxis.set_visible(False)
+                    if i == 0 and len(params['inf_pars'])-1-j == 0:
+                        axis_corner[len(params['inf_pars'])-1-j,i].yaxis.set_visible(False)
+                    if len(params['inf_pars'])-1-j != len(params['inf_pars'])-1:
+                        axis_corner[len(params['inf_pars'])-1-j,i].xaxis.set_visible(False)
 
                     # set tick labels to not use scientific notation
-                    axis_corner[params['ndim_x']-1-j,i].ticklabel_format(axis='both',useOffset=False,style='plain')
+                    axis_corner[len(params['inf_pars'])-1-j,i].ticklabel_format(axis='both',useOffset=False,style='plain')
 
                     # Remove whitespace on x-axis in all plots
-                    axis_corner[params['ndim_x']-1-j,i].margins(x=0,y=0)
+                    axis_corner[len(params['inf_pars'])-1-j,i].margins(x=0,y=0)
 
                 tmp_idx -= 1
-            
+
+            tmp_idx = len(params['inf_pars'])
+
+            for i in range(len(params['inf_pars'])-1):
+                for j in range(tmp_idx-1):
+                    axis_corner[i,j+i+1].set_axis_off()
+                tmp_idx -= 1
+
             # remove subplots not used 
-            axis_corner[0,1].set_axis_off()
-            axis_corner[0,2].set_axis_off()
-            axis_corner[0,3].set_axis_off()
-            axis_corner[1,2].set_axis_off()
-            axis_corner[1,3].set_axis_off()
-            axis_corner[2,3].set_axis_off()
+#            axis_corner[0,1].set_axis_off()
+#            axis_corner[0,2].set_axis_off()
+#            axis_corner[1,2].set_axis_off()
 
             # plot corner plot
             plt.subplots_adjust(wspace=0, hspace=0)
             plt.autoscale(tight=True)
 
-            tmp_idx=params['ndim_x']
+            tmp_idx=len(params['inf_pars'])
             fig_corner.align_ylabels(axis_corner[:, :])
             fig_corner.align_xlabels(axis_corner[:, :])
             #fig_corner.canvas.draw()
-            fig_corner.savefig('%s/latest/corner_testcase%s.png' % (self.params['plot_dir'][0],str(r)),dpi=360,bbox_inches='tight',pad_inches=0)
+            fig_corner.savefig('%s/output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],test_sample_idx,epoch_idx),dpi=360,bbox_inches='tight',pad_inches=0)
+            fig_corner.savefig('%s/latest_%s/output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],test_sample_idx),dpi=360,bbox_inches='tight',pad_inches=0)
             plt.close(fig_corner)
             plt.close('all')
 
         hf.close()
-        
+        print('Finished corner plotting routine')
+        del set2
+        del set1
+
         return
 
     def make_overlap_plot(self,epoch,iterations,s,olvec,olvec_2d,adksVec):

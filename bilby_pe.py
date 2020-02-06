@@ -45,7 +45,7 @@ condor_fixed_vals = {'mass_1':50.0,
         'tilt_2':0.0,
         'phi_12':0.0,
         'phi_jl':0.0,
-        'det':['H1']}
+        'det':['H1','L1','V1']}
 
 # prior bounds
 condor_bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
@@ -214,6 +214,7 @@ def gen_template(duration,
     # inject signal
     ifos.inject_signal(waveform_generator=waveform_generator,
                        parameters=injection_parameters)
+
 
     whitened_signal_td_all = []
     whitened_h_td_all = [] 
@@ -400,6 +401,7 @@ def run(sampling_frequency=256.0,
     if training == True:
         train_samples = []
         train_pars = []
+        snrs = []
         for i in range(N_gen):
             
             # choose waveform parameters here
@@ -415,12 +417,17 @@ def run(sampling_frequency=256.0,
         
             # make the data - shift geocent time to correct reference
             pars['geocent_time'] += ref_geocent_time
-            train_samples.append(gen_template(duration,sampling_frequency,pars,ref_geocent_time)[0:2])
+            train_samp_noisefree, train_samp_noisy,_,ifos,_ = gen_template(duration,sampling_frequency,pars,ref_geocent_time)
+            train_samples.append([train_samp_noisefree,train_samp_noisy])
+            small_snr_list = [ifos[j].meta_data['optimal_SNR'] for j in range(len(pars['det']))]
+            snrs.append(small_snr_list)
+            #train_samples.append(gen_template(duration,sampling_frequency,pars,ref_geocent_time)[0:2])
             print('Made waveform %d/%d' % (i,N_gen)) 
 
         train_samples_noisefree = np.array(train_samples)[:,0,:]
         train_samples_noisy = np.array(train_samples)[:,1,:]
-        return train_samples_noisy,train_samples_noisefree,np.array(train_pars)
+        snrs = np.array(snrs) 
+        return train_samples_noisy,train_samples_noisefree,np.array(train_pars),snrs
 
     # otherwise we are doing test data 
     else:
@@ -442,7 +449,11 @@ def run(sampling_frequency=256.0,
         if not do_pe:
             return test_samples_noisy,test_samples_noisefree,np.array([temp])
 
-        bilby.core.utils.setup_logger(outdir=out_dir, label=label)
+        try:
+            bilby.core.utils.setup_logger(outdir=out_dir, label=label)
+        except Exception as e:
+            print(e)
+            pass
 
         # Set up a PriorDict, which inherits from dict.
         # By default we will sample all terms in the signal models.  However, this will
@@ -499,7 +510,8 @@ def run(sampling_frequency=256.0,
         else:
             priors['ra'] = fixed_vals['ra']
         if np.any([r=='dec' for r in inf_pars]):
-            priors['dec'] = bilby.gw.prior.Cosine(name='dec', boundary='reflective')
+#            priors['dec'] = bilby.gw.prior.Cosine(name='dec', boundary='reflective')
+            pass
         else:    
             priors['dec'] = fixed_vals['dec']
         if np.any([r=='psi' for r in inf_pars]):
@@ -533,20 +545,22 @@ def run(sampling_frequency=256.0,
             print(e)
             pass
 
-        hf = h5py.File('%s/data_%d.h5py' % (out_dir+'_waveforms',int(label.split('_')[-1])),'w')
-        for k, v in params.items():
-            try:
-                hf.create_dataset(k,data=v)
-            except:
-                pass
 
-        hf.create_dataset('x_data', data=np.array([temp]))
-        for k, v in bounds.items():
-            hf.create_dataset(k,data=v)
-        hf.create_dataset('y_data_noisefree', data=test_samples_noisefree)
-        hf.create_dataset('y_data_noisy', data=test_samples_noisy)
-        hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
-        hf.close()
+        if params != None:
+            hf = h5py.File('%s/data_%d.h5py' % (out_dir+'_waveforms',int(label.split('_')[-1])),'w')
+            for k, v in params.items():
+                try:
+                    hf.create_dataset(k,data=v)
+                except:
+                    pass
+
+            hf.create_dataset('x_data', data=np.array([temp]))
+            for k, v in bounds.items():
+                hf.create_dataset(k,data=v)
+            hf.create_dataset('y_data_noisefree', data=test_samples_noisefree)
+            hf.create_dataset('y_data_noisy', data=test_samples_noisy)
+            hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
+            hf.close()
 
         # look for dynesty sampler option
         if np.any([r=='dynesty' for r in samplers]):
@@ -576,7 +590,10 @@ def run(sampling_frequency=256.0,
 
             # return samples if not doing a condor run
             if condor_run == False:
+                # Make a corner plot.
+                result.plot_corner()
                 print('finished running pe')
+                exit()
                 return test_samples_noisy,test_samples_noisefree,np.array([temp])
 
             run_startt = time.time()
@@ -591,114 +608,6 @@ def run(sampling_frequency=256.0,
             hf = h5py.File('%s/%s.h5py' % (out_dir+'_dynesty2',label), 'w')
             hf.create_dataset('noisy_waveform', data=test_samples_noisy)
             hf.create_dataset('noisefree_waveform', data=test_samples_noisy)
-
-            # loop over randomised params and save samples
-            for p in inf_pars:
-                for q,qi in result.posterior.items():
-                    if p==q:
-                        name = p + '_post'
-                        print('saving PE samples for parameter {}'.format(q))
-                        hf.create_dataset(name, data=np.array(qi))
-            hf.create_dataset('runtime', data=(run_endt - run_startt))
-            hf.close()
-
-        # look for ptemcee sampler option
-        if np.any([r=='ptemcee' for r in samplers]):
-
-            # run ptemcee sampler 1
-            result = bilby.run_sampler(
-                likelihood=likelihood, priors=priors, sampler='ptemcee',
-                nwalkers=100, nsteps=9000, nburn=8000, ntemps=2, 
-                injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee1', label=label,
-                save='hdf5')
-            run_endt = time.time()
-
-            # save test sample waveform
-            hf = h5py.File('%s/%s.h5py' % (out_dir+'_ptemcee1',label), 'w')
-            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
-            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
-
-            # loop over randomised params and save samples
-            for p in inf_pars:
-                for q,qi in result.posterior.items():
-                    if p==q:
-                        name = p + '_post'
-                        print('saving PE samples for parameter {}'.format(q))
-                        hf.create_dataset(name, data=np.array(qi))
-            hf.create_dataset('runtime', data=(run_endt - run_startt))
-            hf.close()
-
-            # return samples if not doing a condor run
-            if condor_run == False:
-                print('finished running pe')
-                return test_samples_noisy,test_samples_noisefree,np.array([temp])
-
-            # run ptemcee sampler 2
-            result = bilby.run_sampler(
-                likelihood=likelihood, priors=priors, sampler='ptemcee',
-                nwalkers=100, nsteps=9000, nburn=8000, ntemps=2, 
-                injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee2', label=label,
-                save='hdf5')
-            run_endt = time.time()
-
-            # save test sample waveform
-            hf = h5py.File('%s/%s.h5py' % (out_dir+'_ptemcee2',label), 'w')
-            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
-            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
-
-            # loop over randomised params and save samples
-            for p in inf_pars:
-                for q,qi in result.posterior.items():
-                    if p==q:
-                        name = p + '_post'
-                        print('saving PE samples for parameter {}'.format(q))
-                        hf.create_dataset(name, data=np.array(qi))
-            hf.create_dataset('runtime', data=(run_endt - run_startt))
-            hf.close()
-
-        # look for emcee sampler option
-        if np.any([r=='emcee' for r in samplers]):
-
-            # run emcee sampler 1
-            result = bilby.run_sampler(
-            likelihood=likelihood, priors=priors, sampler='emcee',
-            nwalkers=100, nsteps=9000, nburn=8000,
-            injection_parameters=injection_parameters, outdir=out_dir+'_emcee1', label=label,
-            save='hdf5')
-            run_endt = time.time()
-
-            # save test sample waveform
-            hf = h5py.File('%s/%s.h5py' % (out_dir+'_emcee1',label), 'w')
-            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
-            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
-
-            # loop over randomised params and save samples
-            for p in inf_pars:
-                for q,qi in result.posterior.items():
-                    if p==q:
-                        name = p + '_post'
-                        print('saving PE samples for parameter {}'.format(q))
-                        hf.create_dataset(name, data=np.array(qi))
-            hf.create_dataset('runtime', data=(run_endt - run_startt))
-            hf.close()
-
-            # return samples if not doing a condor run
-            if condor_run == False:
-                print('finished running pe')
-                return test_samples_noisy,test_samples_noisefree,np.array([temp])
-
-            # run emcee sampler 2
-            result = bilby.run_sampler(
-            likelihood=likelihood, priors=priors, sampler='emcee',
-            nwalkers=100, nsteps=9000, nburn=8000,
-            injection_parameters=injection_parameters, outdir=out_dir+'_emcee2', label=label,
-            save='hdf5')
-            run_endt = time.time()
-
-            # save test sample waveform
-            hf = h5py.File('%s/%s.h5py' % (out_dir+'_emcee2',label), 'w')
-            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
-            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
 
             # loop over randomised params and save samples
             for p in inf_pars:
@@ -765,7 +674,119 @@ def run(sampling_frequency=256.0,
                         hf.create_dataset(name, data=np.array(qi))
             hf.create_dataset('runtime', data=(run_endt - run_startt))
             hf.close()
- 
+
+        # look for ptemcee sampler option
+        if np.any([r=='ptemcee' for r in samplers]):
+
+            # run ptemcee sampler 1
+            run_startt = time.time()
+            result = bilby.run_sampler(
+                likelihood=likelihood, priors=priors, sampler='ptemcee',
+                nwalkers=100, nsteps=5000, nburn=4000, ntemps=2, 
+                injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee1', label=label,
+                save='hdf5')
+            run_endt = time.time()
+
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_ptemcee1',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
+
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
+
+            # return samples if not doing a condor run
+            if condor_run == False:
+                print('finished running pe')
+                return test_samples_noisy,test_samples_noisefree,np.array([temp])
+
+            # run ptemcee sampler 2
+            run_startt = time.time()
+            result = bilby.run_sampler(
+                likelihood=likelihood, priors=priors, sampler='ptemcee',
+                nwalkers=100, nsteps=5000, nburn=4000, ntemps=2, 
+                injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee2', label=label,
+                save='hdf5')
+            run_endt = time.time()
+
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_ptemcee2',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
+
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
+
+        # look for emcee sampler option
+        if np.any([r=='emcee' for r in samplers]):
+
+            # run emcee sampler 1
+            run_startt = time.time()
+            result = bilby.run_sampler(
+            likelihood=likelihood, priors=priors, sampler='emcee',
+            nwalkers=100, nsteps=5000, nburn=4000,
+            injection_parameters=injection_parameters, outdir=out_dir+'_emcee1', label=label,
+            save='hdf5')
+            run_endt = time.time()
+
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_emcee1',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
+
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
+
+            # return samples if not doing a condor run
+            if condor_run == False:
+                print('finished running pe')
+                return test_samples_noisy,test_samples_noisefree,np.array([temp])
+
+            # run emcee sampler 2
+            run_startt = time.time()
+            result = bilby.run_sampler(
+            likelihood=likelihood, priors=priors, sampler='emcee',
+            nwalkers=100, nsteps=5000, nburn=4000,
+            injection_parameters=injection_parameters, outdir=out_dir+'_emcee2', label=label,
+            save='hdf5')
+            run_endt = time.time()
+
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_emcee2',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
+
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
+
     print('finished running pe')
 
 def main(args):
