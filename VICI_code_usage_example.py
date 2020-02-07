@@ -75,7 +75,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="4"
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -84,7 +84,7 @@ session = tf.Session(config=config)
 # Defining the list of parameter that need to be fed into the models
 def get_params():
     ndata = 256 # length of input to NN == fs * num_detectors
-    run_label = 'multi-modal_3det_9par_run3'
+    run_label = 'multi-modal_3det_9par_run5'
     bilby_results_label = '9par_256Hz_3det_case'
     r = 1
     tot_dataset_size = int(1e5)    # total number of training samples to use
@@ -102,14 +102,14 @@ def get_params():
         n_samples = 500,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=64,               # batch size inference model (inverse reconstruction)
+        batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
         save_interval=1000,           # interval at which to save inference model weights
         plot_interval=20000,           # interval over which plotting is done
         z_dimension=24,                # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r1 = 768,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 768,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 768,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
         rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec'],
@@ -183,6 +183,7 @@ def load_data(input_dir,inf_pars,load_condor=False):
     for i,k in enumerate(data_temp['rand_pars']):
         par_min = k.decode('utf-8') + '_min'
         par_max = k.decode('utf-8') + '_max'
+
         data['x_data'][:,i]=(data['x_data'][:,i] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
     x_data = data['x_data']
     y_data = data['y_data_noisefree']
@@ -270,7 +271,6 @@ if args.gen_train:
         plt.savefig('%s/latest_%s/training_snr_dist.png' % (params['plot_dir'],params['run_label']))
         plt.close()
         print('Generated SNR distribution on training set ...')
-        exit()
 
 #    exit(0)
 
