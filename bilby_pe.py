@@ -346,7 +346,7 @@ def gen_par(pars,
 
     # generate declination
     if np.any([r=='dec' for r in rand_pars]):
-        pars['dec'] = np.arcsin(np.random.uniform(low=np.sin(bounds['phase_min']),high=np.sin(bounds['dec_max'])))
+        pars['dec'] = np.arcsin(np.random.uniform(low=np.sin(bounds['dec_min']),high=np.sin(bounds['dec_max'])))
         print('{}: selected bbh declination = {}'.format(time.asctime(),pars['dec']))
 
     # make geocentric arrival time

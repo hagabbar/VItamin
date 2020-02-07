@@ -133,7 +133,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
           
         SMALL_CONSTANT = 1e-6
-        ramp_start = 1e4
+        ramp_start = 5e5
         ramp_stop = 1e6
         #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
@@ -148,7 +148,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_d, r1_zy_log_sig_sq_d, r1_zy_wd = r1_zy_d._calc_z_mean_and_sigma(y_ph)
         if multi_modal == True:
-            r1_zy_weights = tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc],1)
+            r1_zy_weights = tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc,r1_zy_wd],1)
         else:
             r1_zy_weights = tf.concat([r1_zy_wa],1)
         r1_zy_weights = tf_normalise_sum_dataset(r1_zy_weights)
@@ -159,11 +159,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             bimix_gauss = tfd.MixtureSameFamily(
                           mixture_distribution=tfd.Categorical(logits=r1_zy_weights),
                           components_distribution=tfd.MultivariateNormalDiag(
-                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c],axis=1),#,r1_zy_mean_d],axis=1),
+                              loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1),#,r1_zy_mean_d],axis=1),
                               scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),
                                                   tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),
-                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c))],axis=1)))
-                                                  #tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1))) 
+                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),
+                                                  tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1))) 
         
 
         else:
@@ -285,7 +285,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 # run a training pass and extract parameters (do it multiple times for ease of reading)
                 q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                 if multi_modal == True:
-                    r1_z_a_plot_data, r1_z_b_plot_data, r1_z_c_plot_data, r1_z_log_sig_sq_a_plot_data, r1_z_log_sig_sq_b_plot_data, r1_z_log_sig_sq_c_plot_data, r1_z_weights_plot_data = session.run([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_log_sig_sq_a,r1_zy_log_sig_sq_b,r1_zy_log_sig_sq_c,r1_zy_weights], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+                    r1_z_a_plot_data, r1_z_b_plot_data,  r1_z_c_plot_data, r1_z_d_plot_data, r1_z_log_sig_sq_a_plot_data, r1_z_log_sig_sq_b_plot_data, r1_z_log_sig_sq_c_plot_data, r1_z_log_sig_sq_d_plot_data, r1_z_weights_plot_data = session.run([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d,r1_zy_log_sig_sq_a,r1_zy_log_sig_sq_b,r1_zy_log_sig_sq_c,r1_zy_log_sig_sq_d,r1_zy_weights], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                     q_samp, r1_samp = session.run([q_zxy_samp, r1_zy_samp], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})  
                     r2_mean, r2_log_sig_sq = session.run([r2_xzy_mean, r2_xzy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                     r2_mean_testpath, r2_log_sig_sq_testpath, r2_samp_testpath = session.run([r2_xzy_mean_testpath, r2_xzy_log_sig_sq_testpath, r2_xzy_samp_testpath], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
@@ -582,7 +582,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_d, r1_zy_log_sig_sq_d, r1_zy_wd = r1_zy_d._calc_z_mean_and_sigma(y_ph)
         if multi_modal == True:
-            r1_zy_weights = 0.0*tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc],1) # this was multiplied by zero before???
+            r1_zy_weights = 0.0*tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc,r1_zy_wd],1) # this was multiplied by zero before???
         else:
             r1_zy_weights = 0.0*tf.concat([r1_zy_wa],1) # this was multiplied by zero before???
         r1_zy_weights = tf_normalise_sum_dataset(r1_zy_weights)
@@ -595,11 +595,11 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
                               components_distribution=tfd.MultivariateNormalDiag(
                                   #loc=tf.expand_dims(r1_zy_mean_a,1),
                                   #scale_diag=tf.expand_dims(tf.sqrt(tf.exp(r1_zy_log_sig_sq_a)),1)))
-                                  loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c],axis=1),
+                                  loc=tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1),
                                   scale_diag=tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),
                                                        tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),
-                                                       tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c))],axis=1)))
-                                                       #tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1)))
+                                                       tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),
+                                                       tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1)))
 
         else:
             # define the r1(z|y) mixture model
