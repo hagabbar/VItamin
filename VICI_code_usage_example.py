@@ -75,7 +75,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="4"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -83,9 +83,10 @@ session = tf.Session(config=config)
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
-    ndata = 256 # length of input to NN == fs * num_detectors
-    run_label = 'multi-modal_3det_9par_run5'
-    bilby_results_label = '9par_256Hz_3det_case'
+    ndata = 1024 # length of input to NN == fs * num_detectors
+    rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run2' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    bilby_results_label = '%dpar_%dHz_%ddet_case' % (len(rand_pars),ndata,len(fixed_vals['det']))
     r = 1
     tot_dataset_size = int(1e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
@@ -99,28 +100,28 @@ def get_params():
         tset_split = tset_split, 
         plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
         print_values=True,            # optionally print values every report interval
-        n_samples = 500,             # number of posterior samples to save per reconstruction upon inference 
+        n_samples = 1000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
-        save_interval=1000,           # interval at which to save inference model weights
-        plot_interval=20000,           # interval over which plotting is done
-        z_dimension=24,                # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = 768,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 768,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 768,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        save_interval=35000,           # interval at which to save inference model weights
+        plot_interval=35000,           # interval over which plotting is done
+        z_dimension=48,                # 24 number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
-        rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec'],
+        rand_pars=rand_pars,
         corner_parnames = ['m_{1}\,(\mathrm{M}_{\odot})','m_{2}\,(\mathrm{M}_{\odot})','d_{\mathrm{L}}\,(\mathrm{Mpc})','t_{0}\,(\mathrm{seconds})','{\phi}','\Theta_{jn}','{\psi}','\mathrm{RA}','\mathrm{DEC}'],
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
-        train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_3det_9par/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
-        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/9par_256Hz_3det_case/test_waveforms', #location of test set
-        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/9par_256Hz_3det_case/test',    # location of bilby PE results
+        train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
+        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det'])), #location of test set
+        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case/test' % (len(rand_pars),ndata,len(fixed_vals['det'])),    # location of bilby PE results
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
         load_plot_data=False,                                                  # use old plotting data
         samplers=['vitamin', 'dynesty'],#,'emcee','ptemcee','cpnest'],          # samplers to use when plotting
@@ -233,6 +234,9 @@ if args.gen_train:
     # Make training set directory
     os.system('mkdir -p %s' % params['train_set_dir'])
 
+    # Make directory for plots
+    os.system('mkdir -p %s/latest_%s' % (params['plot_dir'],params['run_label']))
+
     # Iterate over number of requested training samples
     for i in range(0,params['tot_dataset_size'],params['tset_split']):
 
@@ -344,17 +348,17 @@ if args.train:
     i_idx = 0
     i = 0
     i_idx_use = []
-#    while i_idx < params['r']*params['r']:
-    for i in range(params['r']*params['r']):
+    while i_idx < params['r']*params['r']:
+#    for i in range(params['r']*params['r']):
         filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
 
         # If file does not exist, skip to next file
-#        try:
-#            h5py.File(filename, 'r')
-#        except Exception as e:
-#            i+=1
-#            print(e)
-#            continue
+        try:
+            h5py.File(filename, 'r')
+        except Exception as e:
+            i+=1
+            print(e)
+            continue
 
         print(filename)
         post_files.append(filename)
@@ -407,13 +411,14 @@ if args.train:
             x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
 
         plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
-#        i+=1
-#        i_idx+=1
-#        i_idx_use.append(i)
+        i_idx_use.append(i)
+        i+=1
+        i_idx+=1
 
-#    y_data_test = y_data_test[i_idx_use,:]
-#    y_data_test_noisefree = y_data_test_noisefree[i_idx_use,:]
-#    x_data_test = x_data_test[i_idx_use,:]
+
+    y_data_test = y_data_test[i_idx_use,:]
+    y_data_test_noisefree = y_data_test_noisefree[i_idx_use,:]
+    x_data_test = x_data_test[i_idx_use,:]
 
     VICI_inverse_model.train(params, x_data_train, y_data_train,
                              x_data_test, y_data_test, y_data_test_noisefree,
@@ -449,18 +454,18 @@ if args.test:
     i_idx = 0
     i = 0
     i_idx_use = []
-#    while i_idx < params['r']*params['r']:
+    while i_idx < params['r']*params['r']:
 
-    for i in range(params['r']*params['r']):
+    #for i in range(params['r']*params['r']):
         filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
 
         # If file does not exist, skip to next file
-#        try:
-#            h5py.File(filename, 'r')
-#        except Exception as e:
-#            i+=1
-#            print(e)
-#            continue
+        try:
+            h5py.File(filename, 'r')
+        except Exception as e:
+            i+=1
+            print(e)
+            continue
 
         print(filename)
         post_files.append(filename)
@@ -513,6 +518,9 @@ if args.test:
             x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
 
         plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
+        i_idx_use.append(i)
+        i+=1
+        i_idx+=1
 
     VI_pred_all = []
     for i in range(params['r']*params['r']):
@@ -528,10 +536,11 @@ if args.test:
     plotter = plots.make_plots(params,XS_all,VI_pred_all,x_data_test)
 
     # Make KL plot
-    plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_train,y_normscale)
-    exit()
+#    plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_train,y_normscale)
+#    exit()
 
     # Make pp plot
-    plotter.plot_pp(VICI_inverse_model,y_data_test_h,x_data_train,0,normscales,samples,pos_test)
+    plotter.plot_pp(VICI_inverse_model,y_data_test,x_data_train,0,y_normscale,x_data_test,bounds)
+    exit()
 
 
