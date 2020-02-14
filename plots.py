@@ -127,7 +127,7 @@ class make_plots:
 
             return ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr, 0, 0
 
-        def load_test_set(model,sig_test,par_test,y_normscale,sampler='dynesty1'):
+        def load_test_set(model,sig_test,par_test,y_normscale,bounds,sampler='dynesty1'):
             """
             load requested test set
             """
@@ -146,8 +146,63 @@ class make_plots:
 
                 return VI_pred_all, dt
 
-            print('not vitamin')
-            exit()
+
+            # load up the posterior samples (if they exist)
+            # load generated samples back in
+            post_files = []
+            dataLocations = '%s_%s' % (self.params['pe_dir'],sampler)
+            #for i,filename in enumerate(glob.glob(dataLocations[0])):
+            i_idx = 0
+            i = 0
+            i_idx_use = []
+            while i_idx < self.params['r']*self.params['r']:
+
+                filename = '%s/%s_%d.h5py' % (dataLocations,self.params['bilby_results_label'],i)
+
+                # If file does not exist, skip to next file
+                try:
+                    h5py.File(filename, 'r')
+                except Exception as e:
+                    i+=1
+                    continue
+
+                print(filename)
+                post_files.append(filename)
+                data_temp = {}
+                #bounds = {}
+                n = 0
+                for q in self.params['inf_pars']:
+                     p = q + '_post'
+                     par_min = q + '_min'
+                     par_max = q + '_max'
+                     data_temp[p] = h5py.File(filename, 'r')[p][:]
+                     if p == 'geocent_time_post':
+                         data_temp[p] = data_temp[p] - self.params['ref_geocent_time']
+        #                 Nsamp = data_temp[p].shape[0]
+        #                 n = n + 1
+        #                 continue
+                     data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
+                     Nsamp = data_temp[p].shape[0]
+                     n = n + 1
+                XS = np.zeros((Nsamp,n))
+                j = 0
+                for p,d in data_temp.items():
+                    XS[:,j] = d
+                    j += 1
+
+                if i_idx == 0:
+                    XS_all = np.expand_dims(XS[:self.params['n_samples'],:], axis=0)
+                else:
+                    # save all posteriors in array
+                    XS_all = np.vstack((XS_all,np.expand_dims(XS[:self.params['n_samples'],:], axis=0)))
+
+                i_idx_use.append(i)
+                i+=1
+                i_idx+=1
+
+            dt = None
+            return XS_all, dt
+            """
             # Define variables
             pos_test = []
             samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndata']+1))
@@ -220,6 +275,7 @@ class make_plots:
                 new_samples.append(samples[i].T)
             #samples = samples.reshape(samples.shape[0],samples.shape[2],samples.shape[1])
             samples = np.array(new_samples)
+            """
 
             return samples, timet
 
@@ -410,14 +466,21 @@ class make_plots:
 
         return r
 
-    def plot_pp(self,model,sig_test,par_test,i_epoch,normscales,samples,pos_test):
+    def plot_pp(self,model,sig_test,par_test,i_epoch,normscales,pos_test,bounds):
         """
         make p-p plots
+        
+        ##########
+        Parameters
+        ##########
+        pos_test:
+            True scalar values for GW test parameters
+
+
         """
         matplotlib.rc('text', usetex=True)
-        Npp = self.params['Npp']
+        Npp = int(self.params['r']*self.params['r']) # number of test GW waveforms to use to calculate PP plot
         ndim_y = self.params['ndata']
-        outdir = self.params['plot_dir'][0]
         
         fig, axis = plt.subplots(1,1,figsize=(6,6))
 
@@ -426,10 +489,12 @@ class make_plots:
             hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'r')
         else:
             # Create dataset to save PP results for later plotting
-            hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'w')
-               
+            pass
+#            os.remove('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'])
+#            hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'w')
+            
         # make vitamin p-p plots
-        for j in range(self.params['ndim_x']):
+        for j in range(len(self.params['inf_pars'])):
             pp = np.zeros((self.params['r']**2)+2)
             pp[0] = 0.0
             pp[1] = 1.0
@@ -439,47 +504,64 @@ class make_plots:
                     y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
 
                     # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                    _, _, x, _, _ = model.run(self.params, y, np.shape(par_test)[1], "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label']) # This runs the trained model using the weights stored in inverse_model_dir/inverse_model.ckpt
+                    # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+                    x, dt  = model.run(self.params, y, np.shape(par_test)[1],
+                                                         normscales,
+                                                         "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
 
                     # Apply mask
-                    sampset_1 = x[0,:,:]
-                    cur_max = self.params['n_samples']
-                    set1 = []
-                    for i in range(sampset_1.shape[0]):
-                        mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 0.0) & (sampset_1[3,:] <= 1.0) & (sampset_1[1,:] >= 0.0) & (sampset_1[1,:] <= 1.0) & (sampset_1[0,:] >= 0.0) & (sampset_1[0,:] <= 1.0) & (sampset_1[2,:] <= 1.0) & (sampset_1[2,:] >= 0.0)]
-                        mask = np.argwhere(mask[0])
-                        new_rev = sampset_1[i,mask]
-                        new_rev = new_rev.reshape(new_rev.shape[0])
-                        tmp_max = new_rev.shape[0]
-                        if tmp_max < cur_max: cur_max = tmp_max
-                        set1.append(new_rev[:cur_max])
-                    set1 = np.array(set1)
+                    x = x.T
+                    sampset_1 = x
+                    del_cnt = 0
+                    # iterate over each sample
+                    for i in range(sampset_1.shape[1]):
+                        # iterate over each parameter
+                        for j,q in enumerate(self.params['inf_pars']):
+                            # if sample out of range, delete the sample
+                            if sampset_1[j,i] < 0.0 or sampset_1[j,i] > 1.0:
+                                x = np.delete(x,del_cnt,axis=1)
+                                del_cnt-=1
+                                break
+                            # check m1 > m2
+                            elif q == 'mass_1' or q == 'mass_2':
+                                m1_idx = np.argwhere(self.params['inf_pars']=='mass_1')
+                                m2_idx = np.argwhere(self.params['inf_pars']=='mass_2')
+                                if sampset_1[m1_idx,i] < sampset_1[m2_idx,i]:
+                                    x = np.delete(x,del_cnt,axis=1)
+                                    del_cnt-=1
+                                    break
+                        del_cnt+=1
 
-                    pp[cnt+2] = self.pp_plot(pos_test[cnt,j],set1[j,:])
+                    pp[cnt+2] = self.pp_plot(pos_test[cnt,j],x[j,:])
                     print('Computed param %d p-p plot iteration %d/%d' % (j,int(cnt)+1,int(Npp)))
                 # Save vitamin pp plot data
-                hf.create_dataset('vitamin_param%d_pp' % j, data=pp)
+#                hf.create_dataset('vitamin_param%d_pp' % j, data=pp)
             else:
                 pp = np.array(hf['vitamin_param%d_pp' % j] )      
             if j == 0:
                 axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp),'-',color='red',linewidth=2,zorder=50,label=r'$\textrm{VItamin}$')
             else:
                 axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp),'-',color='red',linewidth=2,zorder=50) 
-       
+      
+         
         # make bilby p-p plots
         samplers = self.params['samplers']
         CB_color_cycle=['blue','#4daf4a','#ff7f00','#4b0092']
 
-        test = np.zeros((16,256))
-        cnt = 0
-        for i in range(len(self.params['use_samplers'])):
+#        test = np.zeros((16,256))
+        for i in range(len(self.params['samplers'])):
             if samplers[i] == 'vitamin': continue
 
             if self.params['load_plot_data'] == False:
                 # load bilby sampler samples
-                samples,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=samplers[i]+'1')
+                samples,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=samplers[i]+'1')
+                if samples.shape[0] == self.params['r']**2:
+                    samples = samples[:,:,:self.params['n_samples']]
+                else:
+                    samples = samples[:self.params['n_samples'],:]
+                samples = samples.reshape(self.params['r']**2,len(self.params['inf_pars']),self.params['n_samples'])
 
-            for j in range(self.params['ndim_x']):
+            for j in range(len(self.params['inf_pars'])):
                 pp_bilby = np.zeros((self.params['r']**2)+2)
                 pp_bilby[0] = 0.0
                 pp_bilby[1] = 1.0
@@ -488,7 +570,8 @@ class make_plots:
                         pp_bilby[cnt+2] = self.pp_plot(pos_test[cnt,j],samples[cnt,j,:].transpose())
                         print('Computed %s, param %d p-p plot iteration %d/%d' % (samplers[i],j,int(cnt)+1,int(self.params['r']**2)))
                     # Save bilby sampler pp data
-                    hf.create_dataset('%s_param%d_pp' % (samplers[i],j), data=pp_bilby)           
+                    # TODO add this back in later
+#                    hf.create_dataset('%s_param%d_pp' % (samplers[i],j), data=pp_bilby)           
                 else:
                     pp_bilby = hf['%s_param%d_pp' % (samplers[i],j)]
                     print('Made pp curve')
@@ -497,10 +580,9 @@ class make_plots:
                     axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],label=r'$\textrm{%s}$' % samplers[i])
                 else:
                     axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1])
-                test[cnt,:] = pp_bilby[1:-1]
-                cnt += 1
 
-      
+ 
+        """     
         fig = plt.figure(figsize=(6, 6))
         ax = fig.add_subplot(111, projection='pp_plot')
         ax.add_confidence_band(256, alpha=0.95) # Add 95% confidence band
@@ -515,6 +597,7 @@ class make_plots:
         plt.close(fig)
         hf.close()
         return
+        """
 
         matplotlib.rc('text', usetex=True) 
         # Remove whitespace on x-axis in all plots
@@ -533,10 +616,11 @@ class make_plots:
         leg = axis.legend(loc='lower right', fontsize=14)
         for l in leg.legendHandles:
             l.set_alpha(1.0)
-        fig.savefig('%s/pp_plot_%04d.png' % (outdir,i_epoch),dpi=360)
-        fig.savefig('%s/latest/latest_pp_plot.png' % outdir,dpi=360)
+        fig.savefig('%s/pp_plot_%04d.png' % (self.params['plot_dir'],i_epoch),dpi=360)
+        fig.savefig('%s/latest_%s/latest_pp_plot.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig)
-        hf.close()
+        # TODO add this back in
+#        hf.close()
         return
 
     def make_loss_plot(self,loss,kl,cad,fwd=True):

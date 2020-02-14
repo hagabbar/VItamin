@@ -133,13 +133,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
           
         SMALL_CONSTANT = 1e-6
-        ramp_start = 5e5
+        ramp_start = 1e4
         ramp_stop = 1e6
         #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
         ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_stop)-tf.log(ramp_start))
         ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
-#        ramp = 1.0
+        #ramp=1.0
+        if multi_modal == False:
+            ramp = 1.0
 
         # GET r1(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
@@ -272,6 +274,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 print('Training Set -ELBO:',cost)
                 print('Approx KL Divergence:',kl)
                 print('Total cost:',kl + cost) 
+
+        if i % params['save_interval'] == 0 and i > 0:
+
+            # Save model 
+            save_path = saver.save(session,save_dir)
 
         if i % params['plot_interval'] == 0 and i>0:
             
@@ -499,7 +506,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.semilogx(xvec,np.array(plotdata)[:,0],label='ELBO')
                 plt.semilogx(xvec,np.array(plotdata)[:,1],label='KL')
                 plt.semilogx(xvec,np.array(plotdata)[:,2],label='total')
-                plt.ylim([-15,12])
+                #plt.ylim([-15,12])
                 plt.xlabel('iteration')
                 plt.ylabel('cost')
                 plt.legend()
@@ -539,11 +546,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 pass
             """
 
-        if i % params['save_interval'] == 0 and i > 0:
-        
-            # Save model 
-            save_path = saver.save(session,save_dir)
-                
     return            
 
 def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
@@ -563,7 +565,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     session = tf.Session(graph=graph)
     with graph.as_default():
         tf.set_random_seed(np.random.randint(0,10))
-        SMALL_CONSTANT = 1e-6
+        SMALL_CONSTANT = 1e-14
 
         # LOAD VICI NEURAL NETWORKS
         r2_xzy = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh1, z_dimension+ysh1, n_weights_r2)
