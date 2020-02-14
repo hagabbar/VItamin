@@ -593,7 +593,6 @@ def run(sampling_frequency=256.0,
                 # Make a corner plot.
                 result.plot_corner()
                 print('finished running pe')
-                exit()
                 return test_samples_noisy,test_samples_noisefree,np.array([temp])
 
             run_startt = time.time()

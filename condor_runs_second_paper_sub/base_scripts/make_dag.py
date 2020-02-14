@@ -4,7 +4,8 @@ import numpy as np
 # Defining the list of parameter that need to be fed into the models
 def get_params():
     ndata = 256
-    bilby_results_label = '7par_256Hz_3det_case'
+    rand_pars='mass_1,mass_2,luminosity_distance,geocent_time,phase,ra,dec,theta_jn,psi'
+    bilby_results_label = '%dpar_%dHz_3det_case' % (len(rand_pars),ndata)
     r = 5
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
@@ -13,10 +14,10 @@ def get_params():
         print_values=True,            # optionally print values every report interval
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
-        rand_pars='mass_1,mass_2,luminosity_distance,geocent_time,phase,ra,dec',
+        rand_pars=rand_pars,
         ref_geocent_time=ref_geocent_time,            # reference gps time
         testing_data_seed=44,
-        inf_pars='mass_1,mass_2,luminosity_distance,phase,geocent_time,ra,dec',#,'geocent_time','phase','theta_jn','psi'], # parameter names
+        inf_pars='mass_1,mass_2,luminosity_distance,phase,geocent_time,ra,dec,theta_jn,psi',#,'geocent_time','phase','theta_jn','psi'], # parameter names
         pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test' % bilby_results_label,    # location of bilby PE results
         samplers='vitamin,dynesty,emcee,ptemcee,cpnest',          # samplers to use when plotting
         doPE = True,                          # if True then do bilby PE
