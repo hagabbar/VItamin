@@ -82,7 +82,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
 # Defining the list of parameter that need to be fed into the models
 def get_params():
     ndata = 256
-    run_label = 'multi-modal33'
+    run_label = 'multi-modal81'
     r = 2
     tot_dataset_size = int(1e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
@@ -103,16 +103,17 @@ def get_params():
         save_interval=10000,           # interval at which to save inference model weights
         plot_interval=20000,           # interval over which plotting is done
         z_dimension=4,                # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 128,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r1 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
         rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase'],
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        inf_pars=['luminosity_distance','geocent_time','phase'], # parameter names
+        inf_pars=['geocent_time','phase','luminosity_distance'], # parameter names
+        wrap_pars=['phase'],                  # parameters that get wrapped on the 1D parameter 
         train_set_dir='/home/chrism/training_sets/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
         test_set_dir='/home/chrism/testing_sets/tset_tot-%d' % (r*r), #location of test set
         pe_dir='/home/chrism/bilby_outputs/bilby_output', #location of bilby PE results
