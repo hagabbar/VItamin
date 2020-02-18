@@ -5,8 +5,8 @@ import numpy as np
 def get_params():
     ndata = 256
     rand_pars='mass_1,mass_2,luminosity_distance,geocent_time,phase,ra,dec,theta_jn,psi'
-    bilby_results_label = '%dpar_%dHz_3det_case' % (len(rand_pars),ndata)
-    r = 5
+    r = 16
+    bilby_results_label = '9par_%dHz_3det_case_%dtest' % (ndata,int(r*r))
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
         ndata = ndata,
