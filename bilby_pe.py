@@ -14,6 +14,7 @@ from __future__ import division, print_function
 import numpy as np
 import bilby
 from sys import exit
+import os
 import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
@@ -27,6 +28,44 @@ from scipy.ndimage.interpolation import shift
 #from pylal import antenna, cosmography
 import argparse
 
+# fixed parameter values
+condor_fixed_vals = {'mass_1':50.0,
+        'mass_2':50.0,
+        'mc':None,
+        'geocent_time':0.0,
+        'phase':0.0,
+        'ra':1.375,
+        'dec':-1.2108,
+        'psi':0.0,
+        'theta_jn':0.0,
+        'luminosity_distance':2000.0,
+        'a_1':0.0,
+        'a_2':0.0,
+        'tilt_1':0.0,
+        'tilt_2':0.0,
+        'phi_12':0.0,
+        'phi_jl':0.0,
+        'det':['H1','L1','V1']}
+
+# prior bounds
+condor_bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
+        'mass_2_min':35.0, 'mass_2_max':80.0,
+        'M_min':70.0, 'M_max':160.0,
+        'geocent_time_min':0.15,'geocent_time_max':0.35,
+        'phase_min':0.0, 'phase_max':2.0*np.pi,
+        'ra_min':0.0, 'ra_max':2.0*np.pi,
+        'dec_min':-0.5*np.pi, 'dec_max':0.5*np.pi,
+        'psi_min':0.0, 'psi_max':2.0*np.pi,
+        'theta_jn_min':0.0, 'theta_jn_max':np.pi,
+        'a_1_min':0.0, 'a_1_max':0.0,
+        'a_2_min':0.0, 'a_2_max':0.0,
+        'tilt_1_min':0.0, 'tilt_1_max':0.0,
+        'tilt_2_min':0.0, 'tilt_2_max':0.0,
+        'phi_12_min':0.0, 'phi_12_max':0.0,
+        'phi_jl_min':0.0, 'phi_jl_max':0.0,
+        'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
+
+
 def parser():
     """
     Parses command line arguments
@@ -37,10 +76,21 @@ def parser():
     parser = argparse.ArgumentParser(prog='bilby_pe.py', description='script for generating bilby samples/posterior')
 
     # arguments for data
-    parser.add_argument('-label', '--run-label', type=str, default='1',
-                        help='label that identifies which bilby results this is')
-    parser.add_argument('-od', '--outdir', type=str, default='test',
-                        help='Directory to store bilby results')
+    parser.add_argument('-samplingfrequency', type=float, help='sampling frequency of signal')
+    parser.add_argument('-samplers', nargs='+', type=str, help='list of samplers to use to generate')
+    parser.add_argument('-duration', type=float, help='duration of signal in seconds')
+    parser.add_argument('-Ngen', type=int, help='number of samples to generate')
+    parser.add_argument('-refgeocenttime', type=float, help='reference geocenter time')
+    parser.add_argument('-bounds', type=str, help='dictionary of the bounds')
+    parser.add_argument('-fixedvals', type=str, help='dictionary of the fixed values')
+    parser.add_argument('-randpars', nargs='+', type=str, help='list of pars to randomize')
+    parser.add_argument('-infpars', nargs='+', type=str, help='list of pars to infer')
+    parser.add_argument('-label', type=str, help='label of run')
+    parser.add_argument('-outdir', type=str, help='output directory')
+    parser.add_argument('-training', type=str, help='boolean for train/test config')
+    parser.add_argument('-seed', type=int, help='random seed')
+    parser.add_argument('-dope', type=str, help='boolean for whether or not to do PE')
+    
 
     return parser.parse_args()
 
@@ -154,7 +204,7 @@ def gen_template(duration,
 
     # Set up interferometers. These default to their design
     # sensitivity
-    ifos = bilby.gw.detector.InterferometerList([pars['det']])
+    ifos = bilby.gw.detector.InterferometerList(pars['det'])
 
     # set noise to be colored Gaussian noise
     ifos.set_strain_data_from_power_spectral_densities(
@@ -165,26 +215,34 @@ def gen_template(duration,
     ifos.inject_signal(waveform_generator=waveform_generator,
                        parameters=injection_parameters)
 
-    # get frequency domain noise-free signal at detector
-    signal_fd = ifos[0].get_detector_response(freq_signal, injection_parameters) 
 
-    # whiten frequency domain noise-free signal (and reshape/flatten)
-    whitened_signal_fd = signal_fd/ifos[0].amplitude_spectral_density_array
-    #whitened_signal_fd = whitened_signal_fd.reshape(whitened_signal_fd.shape[0])    
+    whitened_signal_td_all = []
+    whitened_h_td_all = [] 
+    # iterate over ifos
+    for i in range(len(pars['det'])):
+        # get frequency domain noise-free signal at detector
+        signal_fd = ifos[i].get_detector_response(freq_signal, injection_parameters) 
 
-    # get frequency domain signal + noise at detector
-    h_fd = ifos[0].strain_data.frequency_domain_strain
+        # whiten frequency domain noise-free signal (and reshape/flatten)
+        whitened_signal_fd = signal_fd/ifos[i].amplitude_spectral_density_array
+        #whitened_signal_fd = whitened_signal_fd.reshape(whitened_signal_fd.shape[0])    
 
-    # inverse FFT noise-free signal back to time domain and normalise
-    whitened_signal_td = np.sqrt(2.0*Nt)*np.fft.irfft(whitened_signal_fd)
+        # get frequency domain signal + noise at detector
+        h_fd = ifos[i].strain_data.frequency_domain_strain
 
-    # whiten noisy frequency domain signal
-    whitened_h_fd = h_fd/ifos[0].amplitude_spectral_density_array
+        # inverse FFT noise-free signal back to time domain and normalise
+        whitened_signal_td = np.sqrt(2.0*Nt)*np.fft.irfft(whitened_signal_fd)
+
+        # whiten noisy frequency domain signal
+        whitened_h_fd = h_fd/ifos[i].amplitude_spectral_density_array
     
-    # inverse FFT noisy signal back to time domain and normalise
-    whitened_h_td = np.sqrt(2.0*Nt)*np.fft.irfft(whitened_h_fd)
+        # inverse FFT noisy signal back to time domain and normalise
+        whitened_h_td = np.sqrt(2.0*Nt)*np.fft.irfft(whitened_h_fd)
+        
+        whitened_h_td_all.append([whitened_h_td])
+        whitened_signal_td_all.append([whitened_signal_td])
 
-    return whitened_signal_td,whitened_h_td,injection_parameters,ifos,waveform_generator
+    return np.squeeze(np.array(whitened_signal_td_all),axis=1),np.squeeze(np.array(whitened_h_td_all),axis=1),injection_parameters,ifos,waveform_generator
 
 def gen_masses(m_min=5.0,M_max=100.0,mdist='metric'):
 
@@ -288,7 +346,7 @@ def gen_par(pars,
 
     # generate declination
     if np.any([r=='dec' for r in rand_pars]):
-        pars['dec'] = np.arcsin(np.random.uniform(low=np.sin(bounds['phase_min']),high=np.sin(bounds['dec_max'])))
+        pars['dec'] = np.arcsin(np.random.uniform(low=np.sin(bounds['dec_min']),high=np.sin(bounds['dec_max'])))
         print('{}: selected bbh declination = {}'.format(time.asctime(),pars['dec']))
 
     # make geocentric arrival time
@@ -322,10 +380,18 @@ def run(sampling_frequency=256.0,
            label='test_results',
            out_dir='bilby_output',
            seed=None,
+           samplers=['vitamin','dynesty'],
+           condor_run=False,
+           params=None
            ):
     """
     Generate data sets
     """
+
+    # use bounds specifically for condor test sample runs defined in this script. Can't figure out yet how to pass a dictionary. This is a temporary fix.
+    if condor_run == True:
+        bounds = condor_bounds
+        fixed_vals = condor_fixed_vals
 
     # Set up a random seed for result reproducibility.  This is optional!
     if seed is not None:
@@ -335,6 +401,7 @@ def run(sampling_frequency=256.0,
     if training == True:
         train_samples = []
         train_pars = []
+        snrs = []
         for i in range(N_gen):
             
             # choose waveform parameters here
@@ -350,12 +417,17 @@ def run(sampling_frequency=256.0,
         
             # make the data - shift geocent time to correct reference
             pars['geocent_time'] += ref_geocent_time
-            train_samples.append(gen_template(duration,sampling_frequency,pars,ref_geocent_time)[0:2])
+            train_samp_noisefree, train_samp_noisy,_,ifos,_ = gen_template(duration,sampling_frequency,pars,ref_geocent_time)
+            train_samples.append([train_samp_noisefree,train_samp_noisy])
+            small_snr_list = [ifos[j].meta_data['optimal_SNR'] for j in range(len(pars['det']))]
+            snrs.append(small_snr_list)
+            #train_samples.append(gen_template(duration,sampling_frequency,pars,ref_geocent_time)[0:2])
             print('Made waveform %d/%d' % (i,N_gen)) 
 
         train_samples_noisefree = np.array(train_samples)[:,0,:]
         train_samples_noisy = np.array(train_samples)[:,1,:]
-        return train_samples_noisy,train_samples_noisefree,np.array(train_pars)
+        snrs = np.array(snrs) 
+        return train_samples_noisy,train_samples_noisefree,np.array(train_pars),snrs
 
     # otherwise we are doing test data 
     else:
@@ -377,7 +449,11 @@ def run(sampling_frequency=256.0,
         if not do_pe:
             return test_samples_noisy,test_samples_noisefree,np.array([temp])
 
-        bilby.core.utils.setup_logger(outdir=out_dir, label=label)
+        try:
+            bilby.core.utils.setup_logger(outdir=out_dir, label=label)
+        except Exception as e:
+            print(e)
+            pass
 
         # Set up a PriorDict, which inherits from dict.
         # By default we will sample all terms in the signal models.  However, this will
@@ -396,7 +472,7 @@ def run(sampling_frequency=256.0,
                 maximum=ref_geocent_time + bounds['geocent_time_max'],
                 name='geocent_time', latex_label='$t_c$', unit='$s$')
         else:
-            priors['geocent_time'] = ref_geocent_time + fixed_vals['geocent_time']
+            priors['geocent_time'] = fixed_vals['geocent_time']
         if np.any([r=='mass_1' for r in inf_pars]):
             priors['mass_1'] = bilby.gw.prior.Uniform(name='mass_1', minimum=bounds['mass_1_min'], maximum=bounds['mass_1_max'],unit='$M_{\odot}$')
         else:
@@ -434,7 +510,8 @@ def run(sampling_frequency=256.0,
         else:
             priors['ra'] = fixed_vals['ra']
         if np.any([r=='dec' for r in inf_pars]):
-            priors['dec'] = bilby.gw.prior.Cosine(name='dec', boundary='reflective')
+#            priors['dec'] = bilby.gw.prior.Cosine(name='dec', boundary='reflective')
+            pass
         else:    
             priors['dec'] = fixed_vals['dec']
         if np.any([r=='psi' for r in inf_pars]):
@@ -442,7 +519,8 @@ def run(sampling_frequency=256.0,
         else:
             priors['psi'] = fixed_vals['psi']
         if np.any([r=='theta_jn' for r in inf_pars]):
-            priors['theta_jn'] = bilby.gw.prior.Sine(name='theta_jn', minimum=bounds['theta_jn_min'], maximum=bounds['theta_jn_max'], boundary='reflective')
+#            priors['theta_jn'] = bilby.gw.prior.Sine(name='theta_jn', minimum=bounds['theta_jn_min'], maximum=bounds['theta_jn_max'], boundary='reflective')
+             pass
         else:
             priors['theta_jn'] = fixed_vals['theta_jn']
         if np.any([r=='phase' for r in inf_pars]):
@@ -460,238 +538,297 @@ def run(sampling_frequency=256.0,
             interferometers=ifos, waveform_generator=waveform_generator, phase_marginalization=False,
             priors=priors)
 
-        run_startt = time.time()
-        # Run sampler dynesty 1 sampler
-        result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
-            likelihood=likelihood, priors=priors, sampler='dynesty', npoints=5000,
-            injection_parameters=injection_parameters, outdir=out_dir+'_dynesty1', label=label, dlogz=0.1,
-            save='hdf5')
-        run_endt = time.time()
+        # save test waveform information
+        try:
+            os.mkdir('%s' % (out_dir+'_waveforms'))
+        except Exception as e:
+            print(e)
+            pass
 
-        # save test sample waveform
-        hf = h5py.File('%s/%s.h5py' % (out_dir+'_dynesty1',label), 'w')
-        hf.create_dataset('noisy_waveform', data=test_samples_noisy)
-        hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
+
+        if params != None:
+            hf = h5py.File('%s/data_%d.h5py' % (out_dir+'_waveforms',int(label.split('_')[-1])),'w')
+            for k, v in params.items():
+                try:
+                    hf.create_dataset(k,data=v)
+                except:
+                    pass
+
+            hf.create_dataset('x_data', data=np.array([temp]))
+            for k, v in bounds.items():
+                hf.create_dataset(k,data=v)
+            hf.create_dataset('y_data_noisefree', data=test_samples_noisefree)
+            hf.create_dataset('y_data_noisy', data=test_samples_noisy)
+            hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
+            hf.close()
+
+        # look for dynesty sampler option
+        if np.any([r=='dynesty' for r in samplers]):
+
+            run_startt = time.time()
+            # Run sampler dynesty 1 sampler
+            result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
+                likelihood=likelihood, priors=priors, sampler='dynesty', npoints=5000,
+                injection_parameters=injection_parameters, outdir=out_dir+'_dynesty1', label=label, dlogz=0.1,
+                save='hdf5')
+            run_endt = time.time()
+
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_dynesty1',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
         
-        # loop over randomised params and save samples
-        for p in inf_pars:
-            for q,qi in result.posterior.items():
-                if p==q:
-                    name = p + '_post'
-                    print('saving PE samples for parameter {}'.format(q))
-                    hf.create_dataset(name, data=np.array(qi))
-        hf.create_dataset('runtime', data=(run_endt - run_startt))
-        hf.close()
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
 
-        print('finished running pe')
-        return test_samples_noisy,test_samples_noisefree,np.array([temp])
+            # return samples if not doing a condor run
+            if condor_run == False:
+                # Make a corner plot.
+                result.plot_corner()
+                print('finished running pe')
+                return test_samples_noisy,test_samples_noisefree,np.array([temp])
 
-    #run_startt = time.time()
-    # ptemcee sampler 1
-    #result = bilby.run_sampler(
-    #    likelihood=likelihood, priors=priors, sampler='ptemcee',
-    #    nwalkers=100, nsteps=9000, nburn=8000, ntemps=2, 
-    #    injection_parameters=injection_parameters, outdir=outdir+'_ptemcee1', label=label,
-    #    save='hdf5')
-    #run_endt = time.time()
+            run_startt = time.time()
+            # Run sampler dynesty 2 sampler
+            result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
+                likelihood=likelihood, priors=priors, sampler='dynesty', npoints=5000,
+                injection_parameters=injection_parameters, outdir=out_dir+'_dynesty2', label=label, dlogz=0.1,
+                save='hdf5')
+            run_endt = time.time()
 
-    # Make a corner plot.
-    #result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance','theta_jn'])
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_dynesty2',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisy)
 
-    # save test sample waveform
-    #hf = h5py.File('%s/%s.h5py' % (outdir+'_ptemcee1',run_label), 'w')
-    #hf.create_dataset('noisy_waveform', data=test_samp_noisy)
-    #hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
-    #hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
-    #hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
-    #hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
-    #hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
-    #hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
-    #hf.create_dataset('mass_1', data=pars['m1'])
-    #hf.create_dataset('mass_2', data=pars['m2'])
-    #hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
-    #hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
-    #hf.create_dataset('phase', data=result.injection_parameters['phase'])
-    #hf.create_dataset('runtime', data=(run_endt - run_startt))
-    #hf.close()
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
 
-    #run_startt = time.time()
-    # ptemcee sampler 2
-    #result = bilby.run_sampler(
-    #    likelihood=likelihood, priors=priors, sampler='ptemcee',
-    #    nwalkers=100, nsteps=9000, nburn=8000, ntemps=2,
-    #    injection_parameters=injection_parameters, outdir=outdir+'_ptemcee2', label=label,
-    #    save='hdf5')
-    #run_endt = time.time()
+        # look for cpnest sampler option
+        if np.any([r=='cpnest' for r in samplers]):
 
-    # Make a corner plot.
-    #result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance','theta_jn'])
+            # run cpnest sampler 1
+            run_startt = time.time()
+            result = bilby.run_sampler(
+                likelihood=likelihood, priors=priors, sampler='cpnest',
+                nlive=5000,maxmcmc=1000, seed=1994,
+                injection_parameters=injection_parameters, outdir=out_dir+'_cpnest1', label=label,
+                save='hdf5')
+            run_endt = time.time()
 
-    # save test sample waveform
-    #hf = h5py.File('%s/%s.h5py' % (outdir+'_ptemcee2',run_label), 'w')
-    #hf.create_dataset('noisy_waveform', data=test_samp_noisy)
-    #hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
-    #hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
-    #hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
-    #hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
-    #hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
-    #hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
-    #hf.create_dataset('mass_1', data=pars['m1'])
-    #hf.create_dataset('mass_2', data=pars['m2'])
-    #hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
-    #hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
-    #hf.create_dataset('phase', data=result.injection_parameters['phase'])
-    #hf.create_dataset('runtime', data=(run_endt - run_startt))
-    #hf.close()
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_cpnest1',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
 
-    #run_startt = time.time()
-    # Run dynesty 2 sampler.
-    #result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
-    #    likelihood=likelihood, priors=priors, sampler='dynesty', npoints=5000,
-    #    injection_parameters=injection_parameters, outdir=outdir+'_dynesty2', label=label, dlogz=0.1,
-    #    save='hdf5')
-    #run_endt = time.time()
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
 
-    # save test sample waveform
-    #hf = h5py.File('%s/%s.h5py' % (outdir+'_dynesty2',run_label), 'w')
-    #hf.create_dataset('noisy_waveform', data=test_samp_noisy)
-    #hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
-    #hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
-    #hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
-    #hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
-    #hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
-    #hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
-    #hf.create_dataset('mass_1', data=pars['m1'])
-    #hf.create_dataset('mass_2', data=pars['m2'])
-    #hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
-    #hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
-    #hf.create_dataset('phase', data=result.injection_parameters['phase'])
-    #hf.create_dataset('runtime', data=(run_endt - run_startt))
-    #hf.close()
+            # return samples if not doing a condor run
+            if condor_run == False:
+                print('finished running pe')
+                return test_samples_noisy,test_samples_noisefree,np.array([temp])
 
-    #run_startt = time.time()
-    # emcee sampler
-    #result = bilby.run_sampler(
-    #    likelihood=likelihood, priors=priors, sampler='emcee',
-    #    nwalkers=100, nsteps=9000, nburn=8000,
-    #    injection_parameters=injection_parameters, outdir=outdir+'_emcee1', label=label,
-    #    save='hdf5')
-    #run_endt = time.time()
+            # run cpnest sampler 2
+            run_startt = time.time()
+            result = bilby.run_sampler(
+                likelihood=likelihood, priors=priors, sampler='cpnest',
+                nlive=5000,maxmcmc=1000, seed=1994,
+                injection_parameters=injection_parameters, outdir=out_dir+'_cpnest2', label=label,
+                save='hdf5')
+            run_endt = time.time()
 
-    # Make a corner plot.
-    #result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance','theta_jn'])
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_cpnest2',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
 
-    # save test sample waveform
-    #hf = h5py.File('%s/%s.h5py' % (outdir+'_emcee1',run_label), 'w')
-    #hf.create_dataset('noisy_waveform', data=test_samp_noisy)
-    #hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
-    #hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
-    #hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
-    #hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
-    #hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
-    #hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
-    #hf.create_dataset('mass_1', data=pars['m1'])
-    #hf.create_dataset('mass_2', data=pars['m2'])
-    #hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
-    #hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
-    #hf.create_dataset('phase', data=result.injection_parameters['phase'])
-    #hf.create_dataset('runtime', data=(run_endt - run_startt))
-    #hf.close()
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
 
-    
-    #run_startt = time.time()
-    # emcee sampler
-    #result = bilby.run_sampler(
-    #    likelihood=likelihood, priors=priors, sampler='emcee',
-    #    nwalkers=100, nsteps=9000, nburn=8000,
-    #    injection_parameters=injection_parameters, outdir=outdir+'_emcee2', label=label,
-    #    save='hdf5')
-    #run_endt = time.time()
+        # look for ptemcee sampler option
+        if np.any([r=='ptemcee' for r in samplers]):
 
-    # Make a corner plot.
-    #result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance','theta_jn'])
+            # run ptemcee sampler 1
+            run_startt = time.time()
+            result = bilby.run_sampler(
+                likelihood=likelihood, priors=priors, sampler='ptemcee',
+                nwalkers=100, nsteps=5000, nburn=4000, ntemps=2, 
+                injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee1', label=label,
+                save='hdf5')
+            run_endt = time.time()
 
-    # save test sample waveform
-    #hf = h5py.File('%s/%s.h5py' % (outdir+'_emcee2',run_label), 'w')
-    #hf.create_dataset('noisy_waveform', data=test_samp_noisy)
-    #hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
-    #hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
-    #hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
-    #hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
-    #hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
-    #hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
-    #hf.create_dataset('mass_1', data=pars['m1'])
-    #hf.create_dataset('mass_2', data=pars['m2'])
-    #hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
-    #hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
-    #hf.create_dataset('phase', data=result.injection_parameters['phase'])
-    #hf.create_dataset('runtime', data=(run_endt - run_startt))
-    #hf.close()
-  
-    
- 
-    #run_startt = time.time()
-    # CP Nest sampler 1
-    #result = bilby.run_sampler(
-    #    likelihood=likelihood, priors=priors, sampler='cpnest',
-    #    nlive=5000,maxmcmc=1000, seed=1994,
-    #    injection_parameters=injection_parameters, outdir=outdir+'_cpnest1', label=label,
-    #    save='hdf5')
-    #run_endt = time.time()
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_ptemcee1',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
 
-    # Make a corner plot.
-    #result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance'])
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
 
-    # save test sample waveform
-    #hf = h5py.File('%s/%s.h5py' % (outdir+'_cpnest1',run_label), 'w')
-    #hf.create_dataset('noisy_waveform', data=test_samp_noisy)
-    #hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
-    #hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
-    #hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
-    #hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
-    #hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
-    #hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
-    #hf.create_dataset('mass_1', data=pars['m1'])
-    #hf.create_dataset('mass_2', data=pars['m2'])
-    #hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
-    #hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
-    #hf.create_dataset('phase', data=result.injection_parameters['phase'])
-    #hf.create_dataset('runtime', data=(run_endt - run_startt))
-    #hf.close()
+            # return samples if not doing a condor run
+            if condor_run == False:
+                print('finished running pe')
+                return test_samples_noisy,test_samples_noisefree,np.array([temp])
 
-    #run_startt = time.time()
-    # CP Nest sampler 2
-    #result = bilby.run_sampler(
-    #    likelihood=likelihood, priors=priors, sampler='cpnest',
-    #    nlive=5000,maxmcmc=1000, seed=42,
-    #    injection_parameters=injection_parameters, outdir=outdir+'_cpnest2', label=label,
-    #    save='hdf5')
-    #run_endt = time.time()
+            # run ptemcee sampler 2
+            run_startt = time.time()
+            result = bilby.run_sampler(
+                likelihood=likelihood, priors=priors, sampler='ptemcee',
+                nwalkers=100, nsteps=5000, nburn=4000, ntemps=2, 
+                injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee2', label=label,
+                save='hdf5')
+            run_endt = time.time()
 
-    # Make a corner plot.
-    #result.plot_corner(parameters=['mass_1','mass_2','phase','geocent_time','luminosity_distance'])
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_ptemcee2',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
 
-    # save test sample waveform
-    #hf = h5py.File('%s/%s.h5py' % (outdir+'_cpnest2',run_label), 'w')
-    #hf.create_dataset('noisy_waveform', data=test_samp_noisy)
-    #hf.create_dataset('noisefree_waveform', data=test_samp_noisefree)
-    #hf.create_dataset('mass_1_post', data=np.array(result.posterior.mass_1))
-    #hf.create_dataset('mass_2_post', data=np.array(result.posterior.mass_2))
-    #hf.create_dataset('geocent_time_post', data=np.array(result.posterior.geocent_time))
-    #hf.create_dataset('luminosity_distance_post', data=np.array(result.posterior.luminosity_distance))
-    #hf.create_dataset('phase_post', data=np.array(result.posterior.phase))
-    #hf.create_dataset('mass_1', data=pars['m1'])
-    #hf.create_dataset('mass_2', data=pars['m2'])
-    #hf.create_dataset('geocent_time', data=result.injection_parameters['geocent_time'])
-    #hf.create_dataset('luminosity_distance', data=result.injection_parameters['luminosity_distance'])
-    #hf.create_dataset('phase', data=result.injection_parameters['phase'])
-    #hf.create_dataset('runtime', data=(run_endt - run_startt))
-    #hf.close() 
- 
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
+
+        # look for emcee sampler option
+        if np.any([r=='emcee' for r in samplers]):
+
+            # run emcee sampler 1
+            run_startt = time.time()
+            result = bilby.run_sampler(
+            likelihood=likelihood, priors=priors, sampler='emcee',
+            nwalkers=100, nsteps=5000, nburn=4000,
+            injection_parameters=injection_parameters, outdir=out_dir+'_emcee1', label=label,
+            save='hdf5')
+            run_endt = time.time()
+
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_emcee1',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
+
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
+
+            # return samples if not doing a condor run
+            if condor_run == False:
+                print('finished running pe')
+                return test_samples_noisy,test_samples_noisefree,np.array([temp])
+
+            # run emcee sampler 2
+            run_startt = time.time()
+            result = bilby.run_sampler(
+            likelihood=likelihood, priors=priors, sampler='emcee',
+            nwalkers=100, nsteps=5000, nburn=4000,
+            injection_parameters=injection_parameters, outdir=out_dir+'_emcee2', label=label,
+            save='hdf5')
+            run_endt = time.time()
+
+            # save test sample waveform
+            hf = h5py.File('%s/%s.h5py' % (out_dir+'_emcee2',label), 'w')
+            hf.create_dataset('noisy_waveform', data=test_samples_noisy)
+            hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
+
+            # loop over randomised params and save samples
+            for p in inf_pars:
+                for q,qi in result.posterior.items():
+                    if p==q:
+                        name = p + '_post'
+                        print('saving PE samples for parameter {}'.format(q))
+                        hf.create_dataset(name, data=np.array(qi))
+            hf.create_dataset('runtime', data=(run_endt - run_startt))
+            hf.close()
+
     print('finished running pe')
 
 def main(args):
-    run(run_label=args.run_label, outdir=args.outdir)
+     
+    def get_params():
+        params = dict(
+           sampling_frequency=args.samplingfrequency,
+           duration=args.duration,
+           N_gen=args.Ngen,
+           bounds=args.bounds,
+           fixed_vals=args.fixedvals,
+           rand_pars=list(args.randpars[0].split(',')),
+           inf_pars=list(args.infpars[0].split(',')),
+           ref_geocent_time=args.refgeocenttime,
+           training=eval(args.training),
+           do_pe=eval(args.dope),
+           label=args.label,
+           out_dir=args.outdir,
+           seed=args.seed,
+           samplers=list(args.samplers[0].split(',')),
+           condor_run=True
+
+        )
+
+        return params
+
+    params = get_params()
+    run(sampling_frequency=args.samplingfrequency,
+           duration=args.duration,
+           N_gen=args.Ngen,
+           bounds=args.bounds,
+           fixed_vals=args.fixedvals,
+           rand_pars=list(args.randpars[0].split(',')),
+           inf_pars=list(args.infpars[0].split(',')),
+           ref_geocent_time=args.refgeocenttime,
+           training=eval(args.training),
+           do_pe=eval(args.dope),
+           label=args.label,
+           out_dir=args.outdir,
+           seed=args.seed,
+           samplers=list(args.samplers[0].split(',')),
+           condor_run=True,
+           params=params)
 
 if __name__ == '__main__':
     args = parser()

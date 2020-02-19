@@ -22,6 +22,11 @@ the machine learning model will be able to produce
 posteriors 6-7 orders of magnitudes faster than existing 
 techniques.
 
+The documentation and code itself is currently a work in 
+progress. I plan on making the pipeline more user-friendly 
+for use with the general public sometime later this Spring 
+after my industry placement.
+
 ## Table of contents
 - [Installation](#installation)
 - [Usage](#usage)

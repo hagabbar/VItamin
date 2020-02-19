@@ -125,7 +125,10 @@ def get_wrap_index(params):
     idx_mask = idx_nowrap + idx_wrap
     return wrap_mask, nowrap_mask, idx_mask
 
-def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_dir):    
+def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefree, y_normscale, save_dir, truth_test, bounds, fixed_vals, posterior_truth_test):    
+
+    # if True, do multi-modal
+    multi_modal = True
 
     # USEFUL SIZES
     xsh = np.shape(x_data)
@@ -158,30 +161,47 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
         r1_zy_a = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
         r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
         r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
+        r1_zy_d = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh, z_dimension, n_weights_q) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
-  
+
+          
         SMALL_CONSTANT = 1e-8
-        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_end)-tf.log(ramp_start))
+        ramp_start = 1e4
+        ramp_stop = 1e6
+        #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
+        #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
+        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_stop)-tf.log(ramp_start))
         ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
-        #ramp = 1.0
+        #ramp=1.0
+        if multi_modal == False:
+            ramp = 1.0
 
         # GET r1(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
         r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa = r1_zy_a._calc_z_mean_and_sigma(y_ph)        
         r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
-        r1_zy_log_weights = 0.0*tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc],axis=1)
-        r1_zy_locs = tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c],axis=1)
-        r1_zy_scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)), tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c))],axis=1)
+        r1_zy_mean_d, r1_zy_log_sig_sq_d, r1_zy_wd = r1_zy_d._calc_z_mean_and_sigma(y_ph)
+        if multi_modal == True:
+            r1_zy_locs = tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1)
+            r1_zy_scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)), tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1)
         #r1_zy_log_weights = tf_normalise_sum_dataset(r1_zy_log_weights)
+            r1_zy_log_weights = tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc,r1_zy_wd],1)
+        else:
+            r1_zy_locs = tf.stack([r1_zy_mean_a],axis=1)
+            r1_zy_scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a))],axis=1)
+            r1_zy_log_weights = tf.concat([r1_zy_wa],1)
+        r1_zy_log_weights = tf_normalise_sum_dataset(r1_zy_log_weights)
 
+        
         # define the r1(z|y) mixture model
         bimix_gauss = tfd.MixtureSameFamily(
                           mixture_distribution=tfd.Categorical(logits=r1_zy_log_weights),
                           components_distribution=tfd.MultivariateNormalDiag(
                           loc=r1_zy_locs,
                           scale_diag=r1_zy_scales))
+
 
         # DRAW FROM r1(z|y) - given the Gaussian parameters generate z samples
         r1_zy_samp = bimix_gauss.sample()        
@@ -254,10 +274,10 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
     for i in range(params['num_iterations']):
 
         next_indices = indices_generator.next_indices()
- 
+
         # Make noise realizations and add to training data
         next_x_data = x_data[next_indices,:]
-        next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],params['ndata']))
+        next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
         next_y_data /= y_normscale  # required for fast convergence
 
         # train to minimise the cost function
@@ -276,6 +296,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 print('Approx KL Divergence:',kl)
                 print('Total cost:',kl + cost) 
 
+        if i % params['save_interval'] == 0 and i > 0:
+
+            # Save model 
+            save_path = saver.save(session,save_dir)
+
         if i % params['plot_interval'] == 0 and i>0:
             
             # use the testing data for some plots
@@ -286,11 +311,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1))
                 y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],params['ndata']))
                 y_data_zplot /= y_normscale  # required for fast convergence                
-
-                # run a training pass and extract parameters (do it tr_loss_xultiple times for ease of reading)
-                # get q(z) data
-                q_z_plot_data, q_z_log_sig_sq_data, q_samp = session.run([q_zxy_mean,q_zxy_log_sig_sq,q_zxy_samp], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                 
+                # run a training pass and extract parameters (do it multiple times for ease of reading)
+                # get q(z) data
+                q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+          
                 # get r1(z) data
                 r1_z_locs, r1_z_scales, r1_samp, r1_z_weights_plot_data = session.run([r1_zy_locs,r1_zy_scales,r1_zy_samp,r1_zy_log_weights], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                 
@@ -301,6 +326,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 #print('<r2 sigsq nowrap> = {}'.format(np.mean(r2_log_sig_sq_nowrap)))
                 #print('<r2 sigsq wrap> = {}'.format(np.mean(r2_log_sig_sq_wrap)))
 
+
+
+                """
                 try:
                     # Make corner plot of latent space samples from the q distribution
                     figure = corner.corner(q_z_plot_data, #labels=params['inf_pars'],
@@ -457,6 +485,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 plt.savefig('%s/latest_%s/mixweights_%s_train%d_linear.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                 plt.close()
 
+                """
+
             # just run the network on the test data
             for j in range(params['r']*params['r']):
 
@@ -466,24 +496,21 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
                
+                # Generate final results plots
+                plotter = plots.make_plots(params,posterior_truth_test,np.expand_dims(XS, axis=0),np.expand_dims(truth_test[j],axis=0))
+
+                # Make corner plots
+                plotter.make_corner_plot(y_data_test_noisefree[j,:params['ndata']],y_data_test[j,:params['ndata']],bounds,j,i,sampler='dynesty1')
+
+                del plotter
+
+                """
                 try:
-                    # Make corner plot of VItamin posterior samples
+                    
+                    # Make Chris corner plot of VItamin posterior samples
                     figure = corner.corner(XS, labels=params['inf_pars'],
                        quantiles=[0.16, 0.5, 0.84],
-                       #range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                       truths=x_data_test[j,:],
-                       show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/samples_output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/samples_output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))            
-                    plt.close()
-                except:
-                    pass
- 
-                try:
-                    # Make corner plot of VItamin posterior locaton params
-                    figure = corner.corner(loc, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
-                       #range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
+                       range=[[0.0,1.0]]*np.shape(x_data_test)[1],
                        truths=x_data_test[j,:],
                        show_titles=True, title_kwargs={"fontsize": 12})
                     plt.savefig('%s/loc_output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
@@ -502,8 +529,14 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                     plt.savefig('%s/scale_output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
                     plt.savefig('%s/latest_%s/scale_output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                     plt.close()
-                except:
+                    
+                except Exception as e:
+                    print(e)
+                    exit()
+                    exit()
+                    exi(t)
                     pass 
+                """
 
 
             # Make loss plot
@@ -513,6 +546,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 plt.semilogx(xvec,np.array(plotdata)[:,0],label='recon')
                 plt.semilogx(xvec,np.array(plotdata)[:,1],label='KL')
                 plt.semilogx(xvec,np.array(plotdata)[:,2],label='total')
+                #plt.ylim([-15,12])
                 plt.xlabel('iteration')
                 plt.ylabel('cost')
                 plt.legend()
@@ -523,6 +557,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
             except:
                  pass            
 
+            """
             # plot the AB histogram
             try:
                 density_flag = False
@@ -540,28 +575,26 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
                 pass
 
             # plot the AB histogram
-            #try:
-            #    plt.figure()
-            #    plt.hist(AB_batch[:,0],25,alpha=0.5,density=density_flag,label='component 0')
-            #    plt.hist(AB_batch[:,1],25,alpha=0.5,density=density_flag,label='component 1')
-            #    #plt.hist(AB_batch[:,2],25,alpha=0.5,density=density_flag,label='component 2')
-            #    plt.xlabel('Mixture weight')
-            #    plt.ylabel('p(w)')
-            #    plt.legend()
-            #    plt.savefig('%s/mixweights_%s_batch_%d_log.png' % (params['plot_dir'],params['run_label'],i))
-            #    plt.savefig('%s/latest_%s/mixweights_%s_batch_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-            #    plt.close()
-            #except:
-            #    pass
 
-        if i % params['save_interval'] == 0 and i > 0:
-        
-            # Save model 
-            save_path = saver.save(session,save_dir)
-                
+            try:
+                plt.figure()
+                plt.hist(AB_batch[:,0],25,density=density_flag,label='component 0')
+                plt.hist(AB_batch[:,1],25,density=density_flag,label='component 1')
+                plt.xlabel('Mixture weight')
+                plt.ylabel('p(w)')
+                plt.legend()
+                plt.savefig('%s/mixweights_%s_batch_%d_log.png' % (params['plot_dir'],params['run_label'],i))
+                plt.savefig('%s/latest_%s/mixweights_%s_batch_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                plt.close()
+            except:
+                pass
+            """
+
     return            
 
 def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
+
+    multi_modal = True
 
     # USEFUL SIZES
     xsh1 = siz_x_data
@@ -588,24 +621,27 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
         y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="y_ph")
 
+
         # LOAD VICI NEURAL NETWORKS
         r2_xzy = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh1, z_dimension+ysh1, n_weights_r2,wrap_mask,nowrap_mask)
         r1_zy_a = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
+        r1_zy_d = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh1+ysh1, z_dimension, n_weights_q)
 
         # GET r1(z|y)
         r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa = r1_zy_a._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
         r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
-        r1_zy_weights = 0.0*tf.concat([r1_zy_wa, r1_zy_wb, r1_zy_wc],1)
-        r1_zy_locs = tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c],axis=1)
-        r1_zy_scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c))],axis=1)
+        r1_zy_mean_d, r1_zy_log_sig_sq_d, r1_zy_wd = r1_zy_d._calc_z_mean_and_sigma(y_ph)
+        r1_zy_weights = 0.0*tf.concat([r1_zy_wa, r1_zy_wb, r1_zy_wc, r1_zy_wd],1)
+        r1_zy_locs = tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1)
+        r1_zy_scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1)
         #r1_zy_weights = tf_normalise_sum_dataset(r1_zy_weights)
 
-        means = tf.stack([r1_zy_mean_a,r1_zy_mean_b],axis=1)
-        scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b))],axis=1)
+        means = tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c,r1_zy_mean_d],axis=1)
+        scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_d))],axis=1)
 
         # define the r1(z|y) mixture model
         bimix_gauss = tfd.MixtureSameFamily(
@@ -613,6 +649,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
                           components_distribution=tfd.MultivariateNormalDiag(
                           loc=r1_zy_locs,
                           scale_diag=r1_zy_scales))
+
 
         # DRAW FROM r1(z|y)
         r1_zy_samp = bimix_gauss.sample()
@@ -641,6 +678,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
             r2_xzy_loc = r2_xzy_mean_nowrap
             r2_xzy_scale = r2_xzy_log_sig_sq_nowrap
             r2_xzy_samp = r2_xzy_samp_gauss
+
 
         # VARIABLES LISTS
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
