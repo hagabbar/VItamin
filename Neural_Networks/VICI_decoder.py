@@ -20,7 +20,7 @@ class VariationalAutoencoder(object):
         self.n_weights = n_weights                # the number of weights were layer
         self.name = name                          # the name of the network
         self.bias_start = 0.0                     # some sort of initial bias value
-        self.drate = 0.0                          # dropout rate
+        self.drate = 0.2                          # dropout rate
         self.wrap_mask = wrap_mask                # mask identifying wrapped indices
         self.nowrap_mask = nowrap_mask            # mask identifying non-wrapped indices
  
