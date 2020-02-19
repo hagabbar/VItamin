@@ -83,7 +83,7 @@ session = tf.Session(config=config)
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
-    ndata = 1024 # length of input to NN == fs * num_detectors
+    ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
     run_label = 'multi-modal_%ddet_%dpar_%dHz_run2' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = '%dpar_%dHz_%ddet_case' % (len(rand_pars),ndata,len(fixed_vals['det']))
@@ -118,6 +118,7 @@ def get_params():
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
+        wrap_pars=['phase'],                  # parameters that get wrapped on the 1D parameter 
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
         test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det'])), #location of test set
