@@ -21,7 +21,7 @@ class VariationalAutoencoder(object):
         self.name = name
         self.middle = middle
         self.bias_start = 0.0
-        self.drate = 0.0
+        self.drate = 0.2
 
         network_weights = self._create_weights()
         self.weights = network_weights
@@ -61,9 +61,10 @@ class VariationalAutoencoder(object):
                 hidden1c_post = self.nonlinearity(hidden1c_pre)
                 hidden1c_dropout = tf.layers.dropout(hidden1c_post,rate=self.drate)
 ##                
-#                hidden1d_pre = tf.add(tf.matmul(hidden1c_post, self.weights['decoder']['W3d_to_hiddenG']), self.weights['decoder']['b3d_to_hiddenG'])
+#                hidden1d_pre = tf.add(tf.matmul(hidden1c_dropout, self.weights['VICI_decoder']['W3d_to_hiddenG']), self.weights['VICI_decoder']['b3d_to_hiddenG'])
 #                hidden1d_post = self.nonlinearity(hidden1d_pre)
-                
+#                hidden1d_dropout = tf.layers.dropout(hidden1d_post,rate=self.drate)
+      
 #                hidden1e_pre = tf.add(tf.matmul(hidden1d_post, self.weights['decoder']['W3e_to_hiddenG']), self.weights['decoder']['b3e_to_hiddenG'])
 #                hidden1e_post = self.nonlinearity(hidden1e_pre)
                 
@@ -100,11 +101,11 @@ class VariationalAutoencoder(object):
                 all_weights['VICI_decoder']['W3c_to_hiddenG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, hidden_number_decoder), dtype=tf.float32)
                 all_weights['VICI_decoder']['b3c_to_hiddenG'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)
     #####            
-    #            all_weights['decoder']['W3d_to_hiddenG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, hidden_number_decoder), dtype=tf.float32)
-    #            all_weights['decoder']['b3d_to_hiddenG'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)
+                all_weights['VICI_decoder']['W3d_to_hiddenG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, hidden_number_decoder), dtype=tf.float32)
+                all_weights['VICI_decoder']['b3d_to_hiddenG'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)
     #            
-    #            all_weights['decoder']['W3e_to_hiddenG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, hidden_number_decoder), dtype=tf.float32)
-    #            all_weights['decoder']['b3e_to_hiddenG'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)
+                all_weights['VICI_decoder']['W3e_to_hiddenG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, hidden_number_decoder), dtype=tf.float32)
+                all_weights['VICI_decoder']['b3e_to_hiddenG'] = tf.Variable(tf.zeros([hidden_number_decoder], dtype=tf.float32)  * self.bias_start)
     
                 all_weights['VICI_decoder']['W4_to_muG'] = tf.Variable(vae_utils.xavier_init(hidden_number_decoder, self.n_input), dtype=tf.float32)
                 all_weights['VICI_decoder']['b4_to_muG'] = tf.Variable(tf.zeros([self.n_input])  * self.bias_start, dtype=tf.float32)

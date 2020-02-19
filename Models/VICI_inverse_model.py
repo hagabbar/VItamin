@@ -133,7 +133,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
           
         SMALL_CONSTANT = 1e-6
-        ramp_start = 1e4
+        ramp_start = 2e4
         ramp_stop = 1e6
         #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
@@ -303,7 +303,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                     r2_mean, r2_log_sig_sq = session.run([r2_xzy_mean, r2_xzy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                     r2_mean_testpath, r2_log_sig_sq_testpath, r2_samp_testpath = session.run([r2_xzy_mean_testpath, r2_xzy_log_sig_sq_testpath, r2_xzy_samp_testpath], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
 
-                """
+                """ 
                 try:
                     # Make corner plot of latent space samples from the q distribution
                     figure = corner.corner(q_z_plot_data, #labels=params['inf_pars'],
@@ -458,8 +458,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.savefig('%s/mixweights_%s_train%d_%d_linear.png' % (params['plot_dir'],params['run_label'],j,i))
                 plt.savefig('%s/latest_%s/mixweights_%s_train%d_linear.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                 plt.close()
-
                 """
+                
 
             # just run the network on the test data
             for j in range(params['r']*params['r']):
@@ -515,13 +515,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             except:
                 pass            
 
-            """
+            
             # plot the AB histogram
             try:
                 density_flag = False
                 plt.figure()
                 plt.hist(np.exp(AB_batch[:,0]),25,density=density_flag,label='component 0')
                 plt.hist(np.exp(AB_batch[:,1]),25,density=density_flag,label='component 1')
+                plt.hist(np.exp(AB_batch[:,0]),25,density=density_flag,label='component 2')
+                plt.hist(np.exp(AB_batch[:,1]),25,density=density_flag,label='component 3')
                 plt.xlabel('iteration')
                 plt.ylabel('KL')
                 plt.legend()
@@ -536,6 +538,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.figure()
                 plt.hist(AB_batch[:,0],25,density=density_flag,label='component 0')
                 plt.hist(AB_batch[:,1],25,density=density_flag,label='component 1')
+                plt.hist(AB_batch[:,0],25,density=density_flag,label='component 2')
+                plt.hist(AB_batch[:,1],25,density=density_flag,label='component 3')
                 plt.xlabel('Mixture weight')
                 plt.ylabel('p(w)')
                 plt.legend()
@@ -544,7 +548,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.close()
             except:
                 pass
-            """
+            
 
     return            
 
