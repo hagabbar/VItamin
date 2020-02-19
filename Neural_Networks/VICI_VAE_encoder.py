@@ -22,13 +22,18 @@ class VariationalAutoencoder(object):
         self.middle = middle
         self.bias_start = 0.0
         self.drate = 0.2
+        self.mean_min = -10.0
+        self.mean_max = 10.0
+        self.log_sig_sq_min = -10.0
+        self.log_sig_sq_max = 5.0
 
         network_weights = self._create_weights()
         self.weights = network_weights
 
         self.nonlinearity = tf.nn.relu
         #self.nonlinearity = tf.nn.leaky_relu
-
+        self.nonlinearity_mean = tf.clip_by_value
+        #self.nonlinearity_log_sig_sq = tf.clip_by_value
 
     def _calc_z_mean_and_sigma(self,x):
         with tf.name_scope("VICI_VAE_encoder"):
@@ -55,14 +60,16 @@ class VariationalAutoencoder(object):
 #            hidden5_post = self.nonlinearity(hidden5_pre)
             
 
-            z_mean = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_VAE_encoder']['W4_to_mu']), self.weights['VICI_VAE_encoder']['b4_to_mu'])
+            z_mean = tf.add(tf.matmul(hidden3_post_dropout, self.weights['VICI_VAE_encoder']['W4_to_mu']), self.weights['VICI_VAE_encoder']['b4_to_mu'])
+            #z_mean = self.nonlinearity_mean(z_mean,self.mean_min,self.mean_max)
 #            z_mean = self.nonlinearity2(z_mean)
 #            z_mean = tf.exp(z_mean)
-            z_log_sigma_sq = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_VAE_encoder']['W5_to_log_sigma']), self.weights['VICI_VAE_encoder']['b5_to_log_sigma'])
+            z_log_sig_sq = tf.add(tf.matmul(hidden3_post_dropout, self.weights['VICI_VAE_encoder']['W5_to_log_sigma']), self.weights['VICI_VAE_encoder']['b5_to_log_sigma'])
+            #z_log_sig_sq_clipped = self.nonlinearity_log_sig_sq(z_log_sig_sq,self.log_sig_sq_min,self.log_sig_sq_max)
 #            z_log_sigma_sq = self.nonlinearity(z_log_sigma_sq+10)-10
             tf.summary.histogram("z_mean", z_mean)
-            tf.summary.histogram("z_log_sigma_sq", z_log_sigma_sq)
-            return z_mean, z_log_sigma_sq
+            tf.summary.histogram("z_log_sigma_sq", z_log_sig_sq)
+            return z_mean, z_log_sig_sq
 
     def _sample_from_gaussian_dist(self, num_rows, num_cols, mean, log_sigma_sq):
         with tf.name_scope("sample_in_z_space"):
