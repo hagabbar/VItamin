@@ -70,7 +70,6 @@ import matplotlib.pyplot as plt
 #from data import make_samples
 
 tfd = tfp.distributions
-FOUR_PI_SQ = 4.0*np.pi*np.pi
 
 # NORMALISE DATASET FUNCTION
 def tf_normalise_dataset(xp):
@@ -224,7 +223,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_normscale, save_di
             #reconstr_loss_vm_num = tf.multiply(kappa,tf.math.cos(2.0*np.pi*(r2_xzy_mean_wrap - tf.boolean_mask(x_ph,wrap_mask,axis=1))))
             #reconstr_loss_vm_denum = -np.log(2.0*np.pi) - tf.log(tf.math.bessel_i0(kappa))
             #reconstr_loss_vm = tf.reduce_sum(reconstr_loss_vm_num + reconstr_loss_vm_denum,axis=1)
-            con = tf.reshape(tf.math.reciprocal(FOUR_PI_SQ*(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap))),[-1,wrap_len])   # modelling wrapped scale output as log variance
+            con = tf.reshape(tf.math.reciprocal(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap)),[-1,wrap_len])   # modelling wrapped scale output as log variance
             von_mises = tfp.distributions.VonMises(loc=2.0*np.pi*(tf.reshape(r2_xzy_mean_wrap,[-1,wrap_len])-0.5), concentration=con)   # define p_vm(2*pi*mu,con=1/sig^2)
             reconstr_loss_vm = tf.reduce_sum(von_mises.log_prob(2.0*np.pi*(tf.reshape(tf.boolean_mask(x_ph,wrap_mask,axis=1),[-1,wrap_len]) - 0.5)),axis=1)   # 2pi is the von mises input range
             cost_R = -1.0*tf.reduce_mean(reconstr_loss_x + reconstr_loss_vm) # average over batch
@@ -652,7 +651,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         # draw from r2(x|z,y)
         r2_xzy_samp_gauss = q_zxy._sample_from_gaussian_dist(tf.shape(y_ph)[0], nowrap_len, r2_xzy_mean_nowrap, tf.log(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)))
         if np.sum(wrap_mask)>0:
-            var = FOUR_PI_SQ*(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap))     # modelling wrapped scale output as a variance
+            var = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap)     # modelling wrapped scale output as a variance
             von_mises = tfp.distributions.VonMises(loc=2.0*np.pi*(r2_xzy_mean_wrap-0.5), concentration=tf.math.reciprocal(var))
             r2_xzy_samp_vm = von_mises.sample()/(2.0*np.pi) + 0.5   # shift and scale from -pi-pi to 0-1
             r2_xzy_samp = tf.concat([tf.reshape(r2_xzy_samp_gauss,[-1,nowrap_len]),tf.reshape(r2_xzy_samp_vm,[-1,wrap_len])],1)
