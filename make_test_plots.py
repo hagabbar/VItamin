@@ -6,7 +6,7 @@ from Models import VICI_inverse_model
 import plots
 
 run_label='gpu4',            # label for run
-plot_dir="/data/public_html/chrism/VItamin_plots/%s" % run_label,                 # plot directory
+plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
 ndata=256                    # y dimension size
 load_test_set = True         # if True, load previously made test samples (including bilby posterior)
 r = 16                        # the grid dimension for the output tests
@@ -18,7 +18,7 @@ def get_params():
     params = dict(
         image_size = [1,ndata],       # Images Size
         print_values=True,            # optionally print values every report interval
-        n_samples = 3000,             # number of posterior samples to save per reconstruction upon inference 
+        n_samples = 5000,             # number of posterior samples to save per reconstruction upon inference 
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
 
         ndata = ndata,
@@ -57,19 +57,19 @@ y_normscale = np.array(hf['y_normscale'])
 hf.close()
 
 # Make directory for plots
-plots.make_dirs(params,params['plot_dir'][0])
+#plots.make_dirs(params,params['plot_dir'][0])
 
 # Declare plot class variables
 plotter = plots.make_plots(params,None,None,None)
 
 # plot losses
-plotter.make_loss_plot(None,None,params['report_interval'],fwd=False)
+#plotter.make_loss_plot(None,None,params['report_interval'],fwd=False)
 
 # Make KL plot
-plotter.gen_kl_plots(VICI_inverse_model,None,None,None)
+#plotter.gen_kl_plots(VICI_inverse_model,None,None,None)
 
 # Make pp plot
 plotter.plot_pp(VICI_inverse_model,None,None,0,None,None,None)
 
 # Make corner plots
-plotter.make_corner_plot(None,None,sampler='dynesty1')
+#plotter.make_corner_plot(None,None,sampler='dynesty1')
