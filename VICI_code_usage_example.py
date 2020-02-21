@@ -86,10 +86,11 @@ def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run1' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run22' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = '%dpar_%dHz_%ddet_case' % (len(rand_pars),ndata,len(fixed_vals['det']))
-    r = 2
-    tot_dataset_size = int(2.5e5)    # total number of training samples to use
+    r = 1
+    tot_dataset_size = int(5e5)    # total number of training samples to use
+
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
@@ -104,12 +105,12 @@ def get_params():
         n_samples = 1000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=32,               # batch size inference model (inverse reconstruction)
+        batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
         n_modes=2,                  # number of modes in the latent space
-        save_interval=3500,           # interval at which to save inference model weights
-        plot_interval=3500,           # interval over which plotting is done
+        save_interval=30000,           # interval at which to save inference model weights
+        plot_interval=30000,           # interval over which plotting is done
         z_dimension=48,                # 24 number of latent space dimensions inference model (inverse reconstruction)
         n_weights_r1 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         n_weights_r2 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
@@ -121,7 +122,7 @@ def get_params():
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        wrap_pars=['phase'],                  # parameters that get wrapped on the 1D parameter 
+        wrap_pars=['phase','ra','psi'],                  # parameters that get wrapped on the 1D parameter 
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
         test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det'])), #location of test set

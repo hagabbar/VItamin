@@ -138,9 +138,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     n_weights_r1 = params['n_weights_r1']
     n_weights_r2 = params['n_weights_r2']
     n_weights_q = params['n_weights_q']
-    n_modes = params['n_modes']
-    ramp_start = 1e3
-    ramp_end = 1e4
+    ramp_start = 1e4
+    ramp_stop = 1e5
+
 
     # identify the indices of wrapped and non-wrapped parameters - clunky code
     wrap_mask, nowrap_mask, idx_mask = get_wrap_index(params)
@@ -169,9 +169,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         tf.set_random_seed(np.random.randint(0,10))
 
           
-        SMALL_CONSTANT = 1e-6
-        ramp_start = 2e4
-        ramp_stop = 1e6
+        SMALL_CONSTANT = 1e-8
         #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
         ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_stop)-tf.log(ramp_start))
@@ -311,7 +309,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 # make spcific data for plots that contains a training data sample with lots of different noise
                 x_data_zplot = np.tile(x_data_test[j,:],(params['n_samples'],1))
                 y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1))
-                y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],params['ndata']))
+                y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],(params['ndata']*len(fixed_vals['det']))))
                 y_data_zplot /= y_normscale  # required for fast convergence                
                 
                 # run a training pass and extract parameters (do it multiple times for ease of reading)
