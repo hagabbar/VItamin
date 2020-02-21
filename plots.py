@@ -492,7 +492,7 @@ class make_plots:
             pass
 #            os.remove('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'])
 #            hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'w')
-            
+         
         # make vitamin p-p plots
         for j in range(len(self.params['inf_pars'])):
             pp = np.zeros((self.params['r']**2)+2)
@@ -516,9 +516,9 @@ class make_plots:
                     # iterate over each sample
                     for i in range(sampset_1.shape[1]):
                         # iterate over each parameter
-                        for j,q in enumerate(self.params['inf_pars']):
+                        for k,q in enumerate(self.params['inf_pars']):
                             # if sample out of range, delete the sample
-                            if sampset_1[j,i] < 0.0 or sampset_1[j,i] > 1.0:
+                            if sampset_1[k,i] < 0.0 or sampset_1[k,i] > 1.0:
                                 x = np.delete(x,del_cnt,axis=1)
                                 del_cnt-=1
                                 break
@@ -556,7 +556,7 @@ class make_plots:
                 # load bilby sampler samples
                 samples,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=samplers[i]+'1')
                 if samples.shape[0] == self.params['r']**2:
-                    samples = samples[:,:,:self.params['n_samples']]
+                    samples = samples[:,:,-self.params['n_samples']:]
                 else:
                     samples = samples[:self.params['n_samples'],:]
                 samples = samples.reshape(self.params['r']**2,len(self.params['inf_pars']),self.params['n_samples'])
@@ -662,7 +662,7 @@ class make_plots:
         hf.close()
         return
 
-    def gen_kl_plots(self,model,sig_test,par_test,normscales):
+    def gen_kl_plots(self,model,sig_test,par_test,normscales,bounds):
 
 
         """
@@ -678,60 +678,77 @@ class make_plots:
             """
             # Remove samples outside of the prior mass distribution           
             cur_max = self.params['n_samples']
-            set1 = []
-            set2 = []
 
             # Iterate over parameters and remove samples outside of prior
-            if samplers[0] == 'vitamin1':
-                for i in range(sampset_1.shape[0]):
-                    if samplers[1] != 'vitamin2':
-                        mask = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 0.0) & (sampset_1[3,:] <= 1.0) & (sampset_1[1,:] >= 0.0) & (sampset_1[1,:] <= 1.0) & (sampset_1[0,:] >= 0.0) & (sampset_1[0,:] <= 1.0) & (sampset_1[2,:] <= 1.0) & (sampset_1[2,:] >= 0.0)]
-                        mask = np.argwhere(mask[0])
-                        new_rev = sampset_1[i,mask]
-                        new_rev = new_rev.reshape(new_rev.shape[0])
-                        new_samples = sampset_2[i,mask]
-                        new_samples = new_samples.reshape(new_samples.shape[0])
-                        tmp_max = new_rev.shape[0]
-                        if tmp_max < cur_max: cur_max = tmp_max
-                        set1.append(new_rev[:cur_max])
-                        set2.append(new_samples[:cur_max])
-                    elif samplers[1] == 'vitamin2':
-                        mask1 = [(sampset_1[0,:] >= sampset_1[2,:]) & (sampset_1[3,:] >= 0.0) & (sampset_1[3,:] <= 1.0) & (sampset_1[1,:] >= 0.0) & (sampset_1[1,:] <= 1.0) & (sampset_1[0,:] >= 0.0) & (sampset_1[0,:] <= 1.0) & (sampset_1[2,:] <= 1.0) & (sampset_1[2,:] >= 0.0)]
-                        mask2 = [(sampset_2[0,:] >= sampset_2[2,:]) & (sampset_2[3,:] >= 0.0) & (sampset_2[3,:] <= 1.0) & (sampset_2[1,:] >= 0.0) & (sampset_2[1,:] <= 1.0) & (sampset_2[0,:] >= 0.0) & (sampset_2[0,:] <= 1.0) & (sampset_2[2,:] <= 1.0) & (sampset_2[2,:] >= 0.0)]
+            if samplers[0] == 'vitamin1' or samplers[1] == 'vitamin2':
+                # Apply mask
+                sampset_1 = sampset_1.T
+                sampset_2 = sampset_2.T
+                set1 = sampset_1
+                set2 = sampset_2
+                del_cnt_set1 = 0
+                del_cnt_set2 = 0
+                # iterate over each sample
+                for i in range(set1.shape[1]):
 
-                        mask1, mask2 = np.argwhere(mask1[0]), np.argwhere(mask2[0])
-                        new_rev = sampset_1[i,mask1]
-                        new_rev = new_rev.reshape(new_rev.shape[0])
-                        new_samples = sampset_2[i,mask2]
-                        new_samples = new_samples.reshape(new_samples.shape[0])
-                        set1_max = new_rev.shape[0]
-                        set2_max = new_samples.shape[0]
-                        if set1_max < cur_max: 
-                            cur_max = set1_max
-                        if set2_max < cur_max:
-                            cur_max = set2_max
-                        set1.append(new_rev[:cur_max])
-                        set2.append(new_samples[:cur_max])
+                    # iterate over each parameter in first set
+                    for k,q in enumerate(self.params['inf_pars']):
+                        # if sample out of range, delete the sample
+                        if set1[k,i] < 0.0 or set1[k,i] > 1.0:
+                            sampset_1 = np.delete(sampset_1,del_cnt_set1,axis=1)
+                            del_cnt_set1-=1
+                            break
+                        # check m1 > m2
+                        elif q == 'mass_1' or q == 'mass_2':
+                            m1_idx = np.argwhere(self.params['inf_pars']=='mass_1')
+                            m2_idx = np.argwhere(self.params['inf_pars']=='mass_2')
+                            if set1[m1_idx,i] < set1[m2_idx,i]:
+                                sampset_1 = np.delete(sampset_1,del_cnt_set1,axis=1)
+                                del_cnt_set1-=1
+                                break
 
-                set1 = np.array(set1)
-                set2 = np.array(set2)
+                    del_cnt_set1+=1
 
-            else:
+                # iterate over each sample
+                for i in range(set2.shape[1]):
+
+                    # iterate over each parameter in second set
+                    for k,q in enumerate(self.params['inf_pars']):
+                        # if sample out of range, delete the sample
+                        if set2[k,i] < 0.0 or set2[k,i] > 1.0:
+                            sampset_2 = np.delete(sampset_2,del_cnt_set2,axis=1)
+                            del_cnt_set2-=1
+                            break
+                        # check m1 > m2
+                        elif q == 'mass_1' or q == 'mass_2':
+                            m1_idx = np.argwhere(self.params['inf_pars']=='mass_1')
+                            m2_idx = np.argwhere(self.params['inf_pars']=='mass_2')
+                            if set2[m1_idx,i] < set2[m2_idx,i]:
+                                sampset_2 = np.delete(sampset_2,del_cnt_set2,axis=1)
+                                del_cnt_set2-=1
+                                break
+
+                    del_cnt_set2+=1
 
                 set1 = sampset_1
                 set2 = sampset_2
+            else:
+
+                set1 = sampset_1.T
+                set2 = sampset_2.T
       
             kl_samps = []
             n_samps = self.params['n_samples']
-            n_pars = self.params['ndim_x']
+            n_pars = len(self.params['inf_pars'])
 
             # Iterate over number of randomized sample slices
-            p = gaussian_kde(set1)
-            q = gaussian_kde(set2)
-            log_diff = np.log(p(set1)/q(set1))
+            SMALL_CONSTANT = 0
+            p = gaussian_kde(set1 + SMALL_CONSTANT)
+            q = gaussian_kde(set2 + SMALL_CONSTANT)
+            log_diff = np.log(p(set1 + SMALL_CONSTANT)/q(set1 + SMALL_CONSTANT))
             # Compute KL, but ignore values equal to infinity
-            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
-#            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff[log_diff != np.inf])
+#            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
+            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff[log_diff != np.inf])
 
             kl_arr = kl_result   
 
@@ -739,7 +756,7 @@ class make_plots:
    
         # Define variables 
         params = self.params
-        usesamps = params['inf_pars']
+        usesamps = params['samplers']
         samplers = params['samplers']
         fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
         
@@ -770,14 +787,14 @@ class make_plots:
                     print_cnt+=1
                     sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'2'
                     if self.params['load_plot_data'] == False:
-                        set1,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
-                        set2,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
+                        set1,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
+                        set2,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
                     continue
                 else:
                     sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'2'
                     if self.params['load_plot_data'] == False:
-                        set1,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler1)
-                        set2,time = self.load_test_set(model,sig_test,par_test,normscales,sampler=sampler2)
+                        set1,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
+                        set2,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
 
                 if self.params['load_plot_data'] == True:
                     tot_kl = np.array(hf['%s-%s' % (sampler1,sampler2)])
@@ -821,16 +838,16 @@ class make_plots:
                 runtime[sampler1] = time
 
 
-        if self.params['load_plot_data'] == False:
-            # Print sampler runtimes
-            for i in range(len(usesamps)):
+#        if self.params['load_plot_data'] == False:
+#            # Print sampler runtimes
+#            for i in range(len(usesamps)):
     #            if self.params['load_plot_data'] == True:
     #                hf[]
     #                print('%s sampler runtimes: %s' % (samplers[usesamps[i]]+'1',str(runetime)))
     #            else:
                     # Save runtime information
-                hf.create_dataset('%s_runtime' % (samplers[i]), data=np.array(runtime[samplers[i]+'1']))
-                print('%s sampler runtimes: %s' % (samplers[i]+'1',str(runtime[samplers[i]+'1'])))
+#                hf.create_dataset('%s_runtime' % (samplers[i]), data=np.array(runtime[samplers[i]+'1']))
+#                print('%s sampler runtimes: %s' % (samplers[i]+'1',str(runtime[samplers[i]+'1'])))
 
         # Save KL corner plot
         axis_kl.set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
@@ -846,7 +863,7 @@ class make_plots:
         axis_kl.set_yscale('log')
         axis_kl.grid(False)
         fig_kl.canvas.draw()
-        fig_kl.savefig('%s/latest/hist-kl.png' % (self.params['plot_dir'][0]),dpi=360)
+        fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig_kl)
 
         hf.close()

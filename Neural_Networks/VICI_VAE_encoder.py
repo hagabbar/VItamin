@@ -60,11 +60,11 @@ class VariationalAutoencoder(object):
 #            hidden5_post = self.nonlinearity(hidden5_pre)
             
 
-            z_mean = tf.add(tf.matmul(hidden3_post_dropout, self.weights['VICI_VAE_encoder']['W4_to_mu']), self.weights['VICI_VAE_encoder']['b4_to_mu'])
+            z_mean = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_VAE_encoder']['W4_to_mu']), self.weights['VICI_VAE_encoder']['b4_to_mu'])
             #z_mean = self.nonlinearity_mean(z_mean,self.mean_min,self.mean_max)
 #            z_mean = self.nonlinearity2(z_mean)
 #            z_mean = tf.exp(z_mean)
-            z_log_sig_sq = tf.add(tf.matmul(hidden3_post_dropout, self.weights['VICI_VAE_encoder']['W5_to_log_sigma']), self.weights['VICI_VAE_encoder']['b5_to_log_sigma'])
+            z_log_sig_sq = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_VAE_encoder']['W5_to_log_sigma']), self.weights['VICI_VAE_encoder']['b5_to_log_sigma'])
             #z_log_sig_sq_clipped = self.nonlinearity_log_sig_sq(z_log_sig_sq,self.log_sig_sq_min,self.log_sig_sq_max)
 #            z_log_sigma_sq = self.nonlinearity(z_log_sigma_sq+10)-10
             tf.summary.histogram("z_mean", z_mean)

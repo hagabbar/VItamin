@@ -568,7 +568,7 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             # Run sampler dynesty 1 sampler
             result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
-                likelihood=likelihood, priors=priors, sampler='dynesty', npoints=5000,
+                likelihood=likelihood, priors=priors, sampler='dynesty', npoints=500,
                 injection_parameters=injection_parameters, outdir=out_dir+'_dynesty1', label=label, dlogz=0.1,
                 save='hdf5')
             run_endt = time.time()
@@ -598,7 +598,7 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             # Run sampler dynesty 2 sampler
             result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
-                likelihood=likelihood, priors=priors, sampler='dynesty', npoints=5000,
+                likelihood=likelihood, priors=priors, sampler='dynesty', npoints=500,
                 injection_parameters=injection_parameters, outdir=out_dir+'_dynesty2', label=label, dlogz=0.1,
                 save='hdf5')
             run_endt = time.time()
@@ -625,7 +625,7 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             result = bilby.run_sampler(
                 likelihood=likelihood, priors=priors, sampler='cpnest',
-                nlive=5000,maxmcmc=1000, seed=1994,
+                nlive=500,maxmcmc=1000, seed=1994,
                 injection_parameters=injection_parameters, outdir=out_dir+'_cpnest1', label=label,
                 save='hdf5')
             run_endt = time.time()
@@ -654,7 +654,7 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             result = bilby.run_sampler(
                 likelihood=likelihood, priors=priors, sampler='cpnest',
-                nlive=5000,maxmcmc=1000, seed=1994,
+                nlive=500,maxmcmc=1000, seed=1994,
                 injection_parameters=injection_parameters, outdir=out_dir+'_cpnest2', label=label,
                 save='hdf5')
             run_endt = time.time()
@@ -681,7 +681,7 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             result = bilby.run_sampler(
                 likelihood=likelihood, priors=priors, sampler='ptemcee',
-                nwalkers=100, nsteps=5000, nburn=4000, ntemps=2, 
+                nwalkers=100, nsteps=50, nburn=40, ntemps=2, 
                 injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee1', label=label,
                 save='hdf5')
             run_endt = time.time()
@@ -710,7 +710,7 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             result = bilby.run_sampler(
                 likelihood=likelihood, priors=priors, sampler='ptemcee',
-                nwalkers=100, nsteps=5000, nburn=4000, ntemps=2, 
+                nwalkers=100, nsteps=50, nburn=40, ntemps=2, 
                 injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee2', label=label,
                 save='hdf5')
             run_endt = time.time()
