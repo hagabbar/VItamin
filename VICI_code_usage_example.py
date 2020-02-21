@@ -83,12 +83,13 @@ session = tf.Session(config=config)
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
+
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
     run_label = 'multi-modal_%ddet_%dpar_%dHz_run1' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = '%dpar_%dHz_%ddet_case' % (len(rand_pars),ndata,len(fixed_vals['det']))
     r = 2
-    tot_dataset_size = int(1e5)    # total number of training samples to use
+    tot_dataset_size = int(2.5e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
@@ -105,6 +106,8 @@ def get_params():
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=32,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
+               # number of latent space dimensions inference model (inverse reconstruction)
+        n_modes=2,                  # number of modes in the latent space
         save_interval=3500,           # interval at which to save inference model weights
         plot_interval=3500,           # interval over which plotting is done
         z_dimension=48,                # 24 number of latent space dimensions inference model (inverse reconstruction)
