@@ -13,11 +13,12 @@ SMALL_CONSTANT = 1e-6
 
 class VariationalAutoencoder(object):
 
-    def __init__(self, name, n_input, n_hidden, n_weights, middle="gaussian"):
+    def __init__(self, name, n_input, n_hidden, n_weights, n_modes, middle="gaussian"):
         
         self.n_input = n_input
         self.n_hidden = n_hidden
         self.n_weights = n_weights
+        self.n_modes = n_modes
         self.name = name
         self.middle = middle
         self.bias_start = 0.0
@@ -57,17 +58,18 @@ class VariationalAutoencoder(object):
 
             z_mean = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_encoder']['W4_to_mu']), self.weights['VICI_encoder']['b4_to_mu'])
             #z_mean = self.nonlinearity_mean(z_mean,self.mean_min,self.mean_max) # clip the mean output
-            z_log_sig_sq = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_encoder']['W5_to_log_sigma']), self.weights['VICI_encoder']['b5_to_log_sigma'])
+            #z_log_sig_sq = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_encoder']['W5_to_log_sigma']), self.weights['VICI_encoder']['b5_to_log_sigma'])
             #z_log_sig_sq_clipped = self.nonlinearity_log_sig_sq(z_log_sig_sq,self.log_sig_sq_min,self.log_sig_sq_max) # clip the mean output           
-            z_log_weight = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_encoder']['W5_to_weight']), self.weights['VICI_encoder']['b5_to_weight']) 
+            #z_log_weight = tf.add(tf.matmul(hidden3_dropout, self.weights['VICI_encoder']['W5_to_weight']), self.weights['VICI_encoder']['b5_to_weight']) 
             #z_log_weight_clipped = self.nonlinearity_log_weight(z_log_weight,self.log_weight_min,self.log_weight_max) # clip the mean output
 
             tf.summary.histogram("z_mean", z_mean)
-            tf.summary.histogram("z_log_sigma_sq", z_log_sig_sq)
-            tf.summary.histogram("z_log_weight", z_log_weight)            
+            #tf.summary.histogram("z_log_sigma_sq", z_log_sig_sq)
+            #tf.summary.histogram("z_log_weight", z_log_weight)            
 
-            return z_mean, z_log_sig_sq, z_log_weight
-    
+            #return z_mean, z_log_sig_sq, z_log_weight
+            return tf.reshape(z_mean,(-1,self.n_modes,self.n_hidden))    
+
     def _create_weights(self):
         all_weights = collections.OrderedDict()
         with tf.variable_scope("VICI_ENC"):
@@ -85,14 +87,14 @@ class VariationalAutoencoder(object):
             all_weights['VICI_encoder']['W3b_hth'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, hidden_number_encoder), dtype=tf.float32)
             tf.summary.histogram("W3b_hth", all_weights['VICI_encoder']['W3b_hth'])
     
-            all_weights['VICI_encoder']['W4_to_mu'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, self.n_hidden),dtype=tf.float32)
+            all_weights['VICI_encoder']['W4_to_mu'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, self.n_hidden*self.n_modes),dtype=tf.float32)
             tf.summary.histogram("W4_to_mu", all_weights['VICI_encoder']['W4_to_mu'])
 
-            all_weights['VICI_encoder']['W5_to_log_sigma'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, self.n_hidden), dtype=tf.float32)
-            tf.summary.histogram("W5_to_log_sigma", all_weights['VICI_encoder']['W5_to_log_sigma'])
+            #all_weights['VICI_encoder']['W5_to_log_sigma'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, self.n_hidden), dtype=tf.float32)
+            #tf.summary.histogram("W5_to_log_sigma", all_weights['VICI_encoder']['W5_to_log_sigma'])
 
-            all_weights['VICI_encoder']['W5_to_weight'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, 1), dtype=tf.float32)
-            tf.summary.histogram("W5_to_weight", all_weights['VICI_encoder']['W5_to_weight'])
+            #all_weights['VICI_encoder']['W5_to_weight'] = tf.Variable(vae_utils.xavier_init(hidden_number_encoder, 1), dtype=tf.float32)
+            #tf.summary.histogram("W5_to_weight", all_weights['VICI_encoder']['W5_to_weight'])
 
             # biases
             all_weights['VICI_encoder']['b3_to_hidden'] = tf.Variable(tf.zeros([hidden_number_encoder], dtype=tf.float32) * self.bias_start)
@@ -100,9 +102,9 @@ class VariationalAutoencoder(object):
             all_weights['VICI_encoder']['b3b_hth'] = tf.Variable(tf.zeros([hidden_number_encoder], dtype=tf.float32) * self.bias_start)
             all_weights['VICI_encoder']['b3c_hth'] = tf.Variable(tf.zeros([hidden_number_encoder], dtype=tf.float32) * self.bias_start)
             all_weights['VICI_encoder']['b3d_hth'] = tf.Variable(tf.zeros([hidden_number_encoder], dtype=tf.float32) * self.bias_start)
-            all_weights['VICI_encoder']['b4_to_mu'] = tf.Variable(tf.zeros([self.n_hidden], dtype=tf.float32) * self.bias_start, dtype=tf.float32)
-            all_weights['VICI_encoder']['b5_to_log_sigma'] = tf.Variable(tf.zeros([self.n_hidden], dtype=tf.float32) * self.bias_start, dtype=tf.float32)
-            all_weights['VICI_encoder']['b5_to_weight'] = tf.Variable(tf.zeros([1], dtype=tf.float32) * self.bias_start, dtype=tf.float32)
+            all_weights['VICI_encoder']['b4_to_mu'] = tf.Variable(tf.zeros([self.n_hidden*self.n_modes], dtype=tf.float32) * self.bias_start, dtype=tf.float32)
+            #all_weights['VICI_encoder']['b5_to_log_sigma'] = tf.Variable(tf.zeros([self.n_hidden], dtype=tf.float32) * self.bias_start, dtype=tf.float32)
+            #all_weights['VICI_encoder']['b5_to_weight'] = tf.Variable(tf.zeros([1], dtype=tf.float32) * self.bias_start, dtype=tf.float32)
 
             all_weights['prior_param'] = collections.OrderedDict()
         
