@@ -82,9 +82,9 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
 # Defining the list of parameter that need to be fed into the models
 def get_params():
     ndata = 256
-    run_label = 'multi-modal85'
+    run_label = 'multi-modal90'
     r = 2
-    tot_dataset_size = int(2.5e5)    # total number of training samples to use
+    tot_dataset_size = int(1e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
@@ -104,9 +104,15 @@ def get_params():
         plot_interval=20000,           # interval over which plotting is done
         z_dimension=4,                # number of latent space dimensions inference model (inverse reconstruction)
         n_modes=2,                  # number of modes in the latent space
-        n_weights_r1 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_hlayers=2,                # the number of hidden layers in each network
+        n_weights_r1 = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_conv = 1,
+        n_filters = 16,
+        filter_size = 4,
+        drate = 0.2,
+        maxpool = 2,
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
         rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase'],
@@ -115,8 +121,8 @@ def get_params():
         testing_data_seed=44,
         inf_pars=['geocent_time','phase','luminosity_distance'], # parameter names
         wrap_pars=['phase'],                  # parameters that get wrapped on the 1D parameter 
-        train_set_dir='/home/chrism/training_sets/tset_tot-%d_split-%d' % (tot_dataset_size,tset_split), #location of training set
-        test_set_dir='/home/chrism/testing_sets/tset_tot-%d' % (r*r), #location of test set
+        train_set_dir='/home/chrism/training_sets/tset_tot-%d_split-%d_samp-%d' % (tot_dataset_size,tset_split,ndata), #location of training set
+        test_set_dir='/home/chrism/testing_sets/tset_tot-%d_samp-%d' % (r*r,ndata), #location of test set
         pe_dir='/home/chrism/bilby_outputs/bilby_output', #location of bilby PE results
         KL_cycles = 1,                       # number of cycles to repeat for the KL approximation
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
@@ -249,8 +255,6 @@ if args.gen_train:
         hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
         hf.close()
 
-    exit(0)
-
 # Make testing set directory
 if args.gen_test:
 
@@ -291,8 +295,6 @@ if args.gen_test:
     hf.create_dataset('y_data_noisy', data=signal_test_noisy)
     hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
     hf.close()
-
-    exit(0)
 
 # if we are now training the network
 if args.train:
