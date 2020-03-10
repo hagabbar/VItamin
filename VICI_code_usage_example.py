@@ -81,9 +81,9 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
-    ndata = 256
-    run_label = 'multi-modal90'
-    r = 2
+    ndata = 512
+    run_label = 'multi-modal102'
+    r = 3
     tot_dataset_size = int(1e5)    # total number of training samples to use
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
@@ -104,15 +104,19 @@ def get_params():
         plot_interval=20000,           # interval over which plotting is done
         z_dimension=4,                # number of latent space dimensions inference model (inverse reconstruction)
         n_modes=2,                  # number of modes in the latent space
-        n_hlayers=2,                # the number of hidden layers in each network
-        n_weights_r1 = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 1024,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_conv = 1,
+        n_hlayers=3,                # the number of hidden layers in each network
+        n_weights_r1 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_convsteps = 2,              # the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
+        reduce = True,
+        n_conv = None,
         n_filters = 16,
-        filter_size = 4,
+        filter_size = 8,
         drate = 0.2,
         maxpool = 2,
+        ramp_start = 1e3,
+        ramp_end = 1e5,
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
         rand_pars=['mass_1','mass_2','luminosity_distance','geocent_time','phase'],
@@ -123,7 +127,7 @@ def get_params():
         wrap_pars=['phase'],                  # parameters that get wrapped on the 1D parameter 
         train_set_dir='/home/chrism/training_sets/tset_tot-%d_split-%d_samp-%d' % (tot_dataset_size,tset_split,ndata), #location of training set
         test_set_dir='/home/chrism/testing_sets/tset_tot-%d_samp-%d' % (r*r,ndata), #location of test set
-        pe_dir='/home/chrism/bilby_outputs/bilby_output', #location of bilby PE results
+        pe_dir='/home/chrism/bilby_outputs/bilby_output-%d_samp-%d' % (r*r,ndata), #location of bilby PE results
         KL_cycles = 1,                       # number of cycles to repeat for the KL approximation
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         #do_normscale=True,                    # if true normalize parameters
@@ -298,75 +302,6 @@ if args.gen_test:
 
 # if we are now training the network
 if args.train:
-
-    # Load test samples
-    #pos_test, labels_test, sig_test = [], [], []
-    #samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndim_x']))
-    #cnt=0
-    #for i in range(params['r']):
-    #    for j in range(params['r']):
-    #    
-    #        # Load test sample file
-    #        f = h5py.File('%s/%s_%s.h5py' % (params['test_set_dir'],params['run_label'],str(cnt)), 'r+')
-    
-    #        # rescale all parameters to 0->1
-    #        
-    #
-    #        # select samples from posterior randomly
-    #        phase = (f['phase_post'][:] - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
-    #     
-    #        if params['do_mc_eta_conversion']:
-    #            m1 = f['mass_1_post'][:]
-    #            m2 = f['mass_2_post'][:]
-    #            eta = (m1*m2)/(m1+m2)**2
-    #            mc = np.sum([m1,m2], axis=0)*eta**(3.0/5.0)
-    #        else: 
-    #            m1 = (f['mass_1_post'][:] - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
-    #            m2 = (f['mass_2_post'][:] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
-    #        t0 = (f['geocent_time_post'][:] - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
-    #        dist=(f['luminosity_distance_post'][:] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
-    #
-    #        if params['do_mc_eta_conversion']:
-    #            f_new=np.array([mc,phase,t0,eta]).T
-    #        else:
-    #            f_new=np.array([m1,phase,t0,m2,dist]).T
-    #        f_new=f_new[:params['n_samples'],:]
-    #        print(f_new.shape)
-    #        samples[cnt,:,:]=f_new
-    #
-    #        # get true scalar parameters
-    #        if params['do_mc_eta_conversion']:
-    #            m1 = np.array(f['mass_1'])
-    #            m2 = np.array(f['mass_2'])
-    #            eta = (m1*m2)/(m1+m2)**2
-    #            mc = np.sum([m1,m2])*eta**(3.0/5.0)
-    #            pos_test.append([mc,np.array(f['phase']),(np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2]),eta])
-    #        else:
-    #            m1 = (np.array(f['mass_1']) - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
-    #            m2 = (np.array(f['mass_2']) - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
-    #            t0 = (np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
-    #            dist = (np.array(f['luminosity_distance']) - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
-    #            phase = (np.array(f['phase']) - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
-    #            pos_test.append([m1,phase,t0,m2,dist])
-    #        labels_test.append([np.array(f['noisy_waveform'])])
-    #        sig_test.append([np.array(f['noisefree_waveform'])])
-    #
-    #        cnt += 1
-    #        f.close()
-
-    # Set test arrays
-    #pos_test = np.array(pos_test) # test parameters
-    # TODO: move whitening terms to where whitening is done
-    #y_data_test_h = np.array(labels_test).reshape(int(r*r),ndata) * params['whitening_factor'] # noisy y test
-    #sig_test = np.array(sig_test).reshape(int(r*r),ndata) * params['whitening_factor'] # noise-free y test
-
-    # Get list of training files
-    #train_files = []
-    #if type("%s" % params['train_set_dir']) is str:
-    #    dataLocations = ["%s" % params['train_set_dir']]
-    #    data={'x_data_train_h': [], 'y_data_train_lh': [], 'y_data_test_h': []}
-    #for filename in os.listdir(dataLocations[0]):
-    #    train_files.append(filename)
 
     # load the noisefree training data back in
     x_data_train, y_data_train, _, y_normscale = load_data(params['train_set_dir'],params['inf_pars'])

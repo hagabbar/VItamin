@@ -86,7 +86,10 @@ class VariationalAutoencoder(object):
                     tf.summary.histogram(bias_name, all_weights['VICI_VAE_encoder'][bias_name])
                     dummy = self.n_filters
 
-            fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters/(self.maxpool**self.n_conv))
+                fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters/(self.maxpool**self.n_conv))
+            else:
+                fc_input_size = self.n_input1 + self.n_input2
+
             for i in range(self.n_hlayers):
                 weight_name = 'w_hidden_' + str(i)
                 bias_name = 'b_hidden' + str(i)
