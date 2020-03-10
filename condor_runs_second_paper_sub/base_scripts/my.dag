@@ -1,0 +1,12 @@
+JOB GW000000 GW.sub
+VARS GW000000 training="False" inf_pars="['mass_1', 'mass_2', 'luminosity_distance']" out_dir="/home/hunter.gabbard/CBC/VItamin/bilby_outputs_second_sub" ref_geocent_time="1126259642.5" N_gen="1" bounds="None" fixed_vals="None" sampling_frequency="256.0" seed="44" do_pe="True" rand_pars="['mass_1', 'mass_2', 'luminosity_distance', 'geocent_time', 'phase']" duration="1.0" label="3par_256Hz_case_0"
+
+JOB GW000001 GW.sub
+VARS GW000001 training="False" inf_pars="['mass_1', 'mass_2', 'luminosity_distance']" out_dir="/home/hunter.gabbard/CBC/VItamin/bilby_outputs_second_sub" ref_geocent_time="1126259642.5" N_gen="1" bounds="None" fixed_vals="None" sampling_frequency="256.0" seed="45" do_pe="True" rand_pars="['mass_1', 'mass_2', 'luminosity_distance', 'geocent_time', 'phase']" duration="1.0" label="3par_256Hz_case_1"
+
+JOB GW000002 GW.sub
+VARS GW000002 training="False" inf_pars="['mass_1', 'mass_2', 'luminosity_distance']" out_dir="/home/hunter.gabbard/CBC/VItamin/bilby_outputs_second_sub" ref_geocent_time="1126259642.5" N_gen="1" bounds="None" fixed_vals="None" sampling_frequency="256.0" seed="46" do_pe="True" rand_pars="['mass_1', 'mass_2', 'luminosity_distance', 'geocent_time', 'phase']" duration="1.0" label="3par_256Hz_case_2"
+
+JOB GW000003 GW.sub
+VARS GW000003 training="False" inf_pars="['mass_1', 'mass_2', 'luminosity_distance']" out_dir="/home/hunter.gabbard/CBC/VItamin/bilby_outputs_second_sub" ref_geocent_time="1126259642.5" N_gen="1" bounds="None" fixed_vals="None" sampling_frequency="256.0" seed="47" do_pe="True" rand_pars="['mass_1', 'mass_2', 'luminosity_distance', 'geocent_time', 'phase']" duration="1.0" label="3par_256Hz_case_3"
+

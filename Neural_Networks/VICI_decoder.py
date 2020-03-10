@@ -25,7 +25,7 @@ class VariationalAutoencoder(object):
         self.filter_size = filter_size
         self.maxpool = maxpool
         self.name = name                          # the name of the network
-        self.drate = 0.2                          # dropout rate
+        self.drate = drate                        # dropout rate
         self.wrap_mask = wrap_mask                # mask identifying wrapped indices
         self.nowrap_mask = nowrap_mask            # mask identifying non-wrapped indices
  
