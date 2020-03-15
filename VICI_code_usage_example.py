@@ -110,6 +110,16 @@ def get_params():
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
         n_modes=7,                  # number of modes in the latent space
+        n_hlayers=3,                # the number of hidden layers in each network
+        n_convsteps = 2,              # the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
+        reduce = True,
+        n_conv = None,
+        n_filters = 16,
+        filter_size = 8,
+        drate = 0.0,
+        maxpool = 2,
+        ramp_start = 1e4,
+        ramp_end = 1e5,
         save_interval=30000,           # interval at which to save inference model weights
         plot_interval=30000,           # interval over which plotting is done
         z_dimension=int(96*7),                # 24 number of latent space dimensions inference model (inverse reconstruction)
@@ -280,17 +290,6 @@ if args.gen_train:
         hf.create_dataset('snrs', data=snrs)
         hf.close()
 
-        # plot snr distribution
-        for j in range(len(fixed_vals['det'])):
-            plt.hist(snrs[:,j],bins=20, label=fixed_vals['det'][j], alpha=0.65)
-        plt.xlabel('Optimal SNR')
-        plt.legend()
-        plt.savefig('%s/latest_%s/training_snr_dist.png' % (params['plot_dir'],params['run_label']))
-        plt.close()
-        print('Generated SNR distribution on training set ...')
-
-#    exit(0)
-
 # Make testing set directory
 if args.gen_test:
 
@@ -331,8 +330,6 @@ if args.gen_test:
     hf.create_dataset('y_data_noisy', data=signal_test_noisy)
     hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
     hf.close()
-
-#    exit(0)
 
 # if we are now training the network
 if args.train:
