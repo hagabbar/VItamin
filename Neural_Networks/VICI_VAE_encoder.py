@@ -21,7 +21,7 @@ class VariationalAutoencoder(object):
         self.name = name
         self.middle = middle
         self.bias_start = 0.0
-        self.drate = 0.2
+        self.drate = 0.0
         self.mean_min = -10.0
         self.mean_max = 10.0
         self.log_sig_sq_min = -10.0

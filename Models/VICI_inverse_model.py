@@ -67,6 +67,7 @@ import plots
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from Neural_Networks import conv_dim_red
 #from data import make_samples
 
 tfd = tfp.distributions
@@ -132,14 +133,19 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
     # USEFUL SIZES
     xsh = np.shape(x_data)
+#    ysh1b = np.shape(y_data)[1]
+#    ysh = np.int(np.round(ysh1b/8))
     ysh = np.shape(y_data)[1]
     z_dimension = params['z_dimension']
     bs = params['batch_size']
+    filt_siz = params['filter_size']
+    filt_ch = params['filter_chnnels']
     n_weights_r1 = params['n_weights_r1']
     n_weights_r2 = params['n_weights_r2']
     n_weights_q = params['n_weights_q']
-    ramp_start = 1e4
-    ramp_stop = 1e5
+    ramp_start = params['ramp_start']
+    ramp_stop = params['ramp_stop']
+    n_modes = params['n_modes']
 
 
     # identify the indices of wrapped and non-wrapped parameters - clunky code
@@ -166,7 +172,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         #r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
         #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh, z_dimension, n_weights_q) # used to sample from q(z|x,y)?
+#        conv_dr = conv_dim_red.VariationalAutoencoder("VICI_dim_red", ysh1b, filt_siz, filt_ch)
         tf.set_random_seed(np.random.randint(0,10))
+
+        # reduce the dimensionality of y using convolutional neural network
+#        y_ph = conv_dr.dimensionanily_reduction(y_ph)
 
           
         SMALL_CONSTANT = 1e-8
@@ -175,8 +185,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_stop)-tf.log(ramp_start))
         ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
         #ramp=1.0
-        if multi_modal == False:
-            ramp = 1.0
 
         # GET r1(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
@@ -194,7 +202,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         
         # define the r1(z|y) mixture model
         bimix_gauss = tfd.MixtureSameFamily(
-                          mixture_distribution=tfd.Categorical(logits=r1_weight),
+                          mixture_distribution=tfd.Categorical(logits=ramp*r1_weight),
                           #mixture_distribution=tfd.Categorical(logits=r1_zy_log_weights),
                           components_distribution=tfd.MultivariateNormalDiag(
                           #loc=r1_zy_locs,
@@ -497,19 +505,86 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             # just run the network on the test data
             for j in range(params['r']*params['r']):
 
+                """
+                # Make single waveform w/multiple noise real mode weight histogram
+                if j == 0:
+                    mode_weights_all = []
+                    # Iterate over specified number of noise realizations
+                    for n in range(100):
+                        # Make new noise realization of test waveform
+                        y_data_mode_test = y_data_test_noisefree[j] + np.random.normal(0,1,size=(1,int(params['ndata']*len(fixed_vals['det']))))
+
+                        # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+                        _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([1,-1]), np.shape(x_data_test)[1],
+                                                                        y_normscale,
+                                                                        "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+                        mode_weights_all.append([mode_weights])
+
+                    mode_weights_all = np.array(mode_weights_all)
+                    mode_weights_all = mode_weights_all.reshape((mode_weights_all.shape[0]*mode_weights_all.shape[2],mode_weights_all.shape[3]))
+
+                    # plot the weights mult noise histogram
+                    try:
+                        density_flag = False
+                        plt.figure()
+                        for c in range(params['n_modes']):
+                            plt.hist(mode_weights_all[:,c],25,alpha=0.5,density=density_flag)
+                        plt.xlabel('iteration')
+                        plt.ylabel('KL')
+                        #plt.legend()
+                        plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_linear.png' % (params['plot_dir'],params['run_label'],i))
+                        plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_linear.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                        plt.close()
+                    except:
+                        pass
+
+                    # plot the weights mult noise histogram
+
+                    try:
+                        plt.figure()
+                        for c in range(params['n_modes']):
+                            plt.hist(mode_weights_all[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
+                        plt.xlabel('Mixture weight')
+                        plt.ylabel('p(w)')
+                        plt.legend()
+                        plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_log.png' % (params['plot_dir'],params['run_label'],i))
+                        plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                        plt.close()
+                    except:
+                        pass
+                    print('Made multiple noise real mode plots')
+                """
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                XS, loc, scale, dt  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
+                XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
                                                  y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
                
                 # Generate final results plots
-                plotter = plots.make_plots(params,posterior_truth_test,np.expand_dims(XS, axis=0),np.expand_dims(truth_test[j],axis=0))
+#                plotter = plots.make_plots(params,posterior_truth_test,np.expand_dims(XS, axis=0),np.expand_dims(truth_test[j],axis=0))
 
                 # Make corner plots
-                plotter.make_corner_plot(y_data_test_noisefree[j,:params['ndata']],y_data_test[j,:params['ndata']],bounds,j,i,sampler='dynesty1')
+#                plotter.make_corner_plot(y_data_test_noisefree[j,:params['ndata']],y_data_test[j,:params['ndata']],bounds,j,i,sampler='dynesty1')
+                # Get corner parnames to use in plotting labels
+                parnames = []
+                for k_idx,k in enumerate(params['rand_pars']):
+                    if np.isin(k, params['inf_pars']):
+                        parnames.append(params['cornercorner_parnames'][k_idx])
 
-                del plotter
+                figure = corner.corner(posterior_truth_test[j], labels=parnames,
+                       quantiles=[0.16, 0.5, 0.84], color='blue',
+                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
+                       truths=truth_test[j,:], levels=[0.68,0.90,0.95],
+                       show_titles=True, title_kwargs={"fontsize": 12})
+                corner.corner(XS, labels=parnames,
+                       quantiles=[0.16, 0.5, 0.84], levels=[0.68,0.90,0.95],
+                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
+                       truths=truth_test[j,:], color='red',
+                       show_titles=True, title_kwargs={"fontsize": 12}, fig=figure)
+                plt.savefig('%s/corner_plot_%s_%d-%d.png' % (params['plot_dir'],params['run_label'],i,j))
+                plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
+                print('Made corner plot %d' % j)
+
 
                 """
                 try:
@@ -565,7 +640,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                  pass            
 
             
-            # plot the AB histogram
+            # plot the weights batch histogram
             try:
                 density_flag = False
                 plt.figure()
@@ -580,14 +655,12 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             except:
                 pass
 
-            # plot the AB histogram
+            # plot the weights batch histogram
 
             try:
                 plt.figure()
-                plt.hist(AB_batch[:,0],25,density=density_flag,label='component 0')
-                plt.hist(AB_batch[:,1],25,density=density_flag,label='component 1')
-                plt.hist(AB_batch[:,0],25,density=density_flag,label='component 2')
-                plt.hist(AB_batch[:,1],25,density=density_flag,label='component 3')
+                for c in range(params['n_modes']):
+                    plt.hist(AB_batch[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
                 plt.xlabel('Mixture weight')
                 plt.ylabel('p(w)')
                 plt.legend()
@@ -709,10 +782,10 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale
     run_startt = time.time()
     #XS = session.run(r2_xzy_samp,feed_dict={y_ph:y_data_test_exp})
-    xs, loc, scale = session.run([r2_xzy_samp,r2_xzy_loc,r2_xzy_scale],feed_dict={y_ph:y_data_test_exp})
+    xs, loc, scale, mode_weights = session.run([r2_xzy_samp,r2_xzy_loc,r2_xzy_scale,r1_weight],feed_dict={y_ph:y_data_test_exp})
     run_endt = time.time()
 
-    return xs, loc, scale, (run_endt - run_startt)
+    return xs, loc, scale, (run_endt - run_startt), mode_weights
 
 def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_files,normscales,y_data_train_noisefree,y_normscale):    
 
