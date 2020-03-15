@@ -75,7 +75,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="5"
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -86,10 +86,11 @@ def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run22' % (len(fixed_vals['det']),len(rand_pars),ndata)
-    bilby_results_label = '%dpar_%dHz_%ddet_case' % (len(rand_pars),ndata,len(fixed_vals['det']))
-    r = 1
-    tot_dataset_size = int(5e5)    # total number of training samples to use
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run66' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    bilby_results_label = 'test_run' #'9par_256Hz_3det_case_256test'
+    r = 5                        # number of test samples to use for plotting
+    pe_test_num = 256               # total number of test samples available to use in directory
+    tot_dataset_size = int(1e5)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
@@ -102,13 +103,13 @@ def get_params():
         tset_split = tset_split, 
         plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
         print_values=True,            # optionally print values every report interval
-        n_samples = 1000,             # number of posterior samples to save per reconstruction upon inference 
+        n_samples = 8000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
-        n_modes=2,                  # number of modes in the latent space
+        n_modes=7,                  # number of modes in the latent space
         n_hlayers=3,                # the number of hidden layers in each network
         n_convsteps = 2,              # the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = True,
@@ -121,25 +122,32 @@ def get_params():
         ramp_end = 1e5,
         save_interval=30000,           # interval at which to save inference model weights
         plot_interval=30000,           # interval over which plotting is done
-        z_dimension=48,                # 24 number of latent space dimensions inference model (inverse reconstruction)
+        z_dimension=int(96*7),                # 24 number of latent space dimensions inference model (inverse reconstruction)
         n_weights_r1 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         n_weights_r2 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         n_weights_q = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        filter_size = 8,
+        filter_chnnels = 1,
         duration = 1.0,               # the timeseries length in seconds
+        ramp_start = 1e4,             # start of ramp on KL
+        ramp_stop = 1e5,              # stop of ramp on KL
         r = r,                                # the grid dimension for the output tests
         rand_pars=rand_pars,
         corner_parnames = ['m_{1}\,(\mathrm{M}_{\odot})','m_{2}\,(\mathrm{M}_{\odot})','d_{\mathrm{L}}\,(\mathrm{Mpc})','t_{0}\,(\mathrm{seconds})','{\phi}','\Theta_{jn}','{\psi}','\mathrm{RA}','\mathrm{DEC}'],
+        cornercorner_parnames = ['$m_{1}\,(\mathrm{M}_{\odot})$','$m_{2}\,(\mathrm{M}_{\odot})$','$d_{\mathrm{L}}\,(\mathrm{Mpc})$','$t_{0}\,(\mathrm{seconds})$','${\phi}$','$\Theta_{jn}$','${\psi}$','$\mathrm{RA}$','$\mathrm{DEC}$'],
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        wrap_pars=['phase','ra','psi'],                  # parameters that get wrapped on the 1D parameter 
+        wrap_pars=['phase','psi','ra'],                  # parameters that get wrapped on the 1D parameter 
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
-        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det'])), #location of test set
-        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case/test' % (len(rand_pars),ndata,len(fixed_vals['det'])),    # location of bilby PE results
+#        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
+#        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num),    # location of bilby PE results
+        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test_waveforms',
+        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test',
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
         load_plot_data=False,                                                  # use old plotting data
-        samplers=['vitamin', 'dynesty'],#,'emcee','ptemcee','cpnest'],          # samplers to use when plotting
+        samplers=['vitamin','dynesty','cpnest'],          # samplers to use when plotting
 
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         #do_normscale=True,                    # if true normalize parameters
@@ -451,19 +459,37 @@ if args.test:
     # load generated samples back in
     post_files = []
     #~/bilby_outputs/bilby_output_dynesty1/multi-modal3_0.h5py
-    dataLocations = '%s_%s1' % (params['pe_dir'],params['samplers'][1])
+
+    # choose directory with lowest number of total finished posteriors
+    num_finished_post = int(1e8)
+    for i in params['samplers']:
+        if i == 'vitamin':
+            continue
+        for j in range(1):
+            input_dir = '%s_%s%d/' % (params['pe_dir'],i,j+1)
+            if type("%s" % input_dir) is str:
+                dataLocations = ["%s" % input_dir]
+
+            filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))
+            if len(filenames) < num_finished_post:
+                sampler_loc = i + str(j+1)
+
+    dataLocations_try = '%s_%s' % (params['pe_dir'],sampler_loc)
+    dataLocations = '%s_%s' % (params['pe_dir'],'dynesty1')
     #for i,filename in enumerate(glob.glob(dataLocations[0])):
     i_idx = 0
     i = 0
     i_idx_use = []
+    x_data_test_unnorm = np.copy(x_data_test)
     while i_idx < params['r']*params['r']:
 
-    #for i in range(params['r']*params['r']):
+#    for i in range(params['r']*params['r']):
+        filename_try = '%s/%s_%d.h5py' % (dataLocations_try,params['bilby_results_label'],i)
         filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
 
         # If file does not exist, skip to next file
         try:
-            h5py.File(filename, 'r')
+            h5py.File(filename_try, 'r')
         except Exception as e:
             i+=1
             print(e)
@@ -496,52 +522,142 @@ if args.test:
             j += 1
 
         # Make corner plot of VItamin posterior samples
-        figure = corner.corner(XS, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
-                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       truths=x_data_test[i,:],
-                       show_titles=True, title_kwargs={"fontsize": 12})
+#        figure = corner.corner(XS, labels=params['inf_pars'],
+#                       quantiles=[0.16, 0.5, 0.84],
+#                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
+#                       truths=x_data_test[i,:],
+#                       show_titles=True, title_kwargs={"fontsize": 12})
 
         if i_idx == 0:
-            XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
+            XS_all = np.expand_dims(XS[-params['n_samples']:,:], axis=0)
         else:
             # save all posteriors in array
-            XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
+            XS_all = np.vstack((XS_all,np.expand_dims(XS[-params['n_samples']:,:], axis=0)))
 
 
-#        for q_idx,q in enumerate(params['inf_pars']):
-#            par_min = q + '_min'
-#            par_max = q + '_max'
+        for q_idx,q in enumerate(params['inf_pars']):
+            par_min = q + '_min'
+            par_max = q + '_max'
 
-#            x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+            # rescale parameters back to their physical values
+#            if par_min == 'geocent_time_min':
+#                continue
 
-        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
-        i_idx_use.append(i)
+            x_data_test_unnorm[i_idx,q_idx] = (x_data_test_unnorm[i_idx,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+
+#        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
+        i_idx_use.append(i_idx)
         i+=1
         i_idx+=1
 
     x_data_test = x_data_test[i_idx_use,:]
+    x_data_test_unnorm = x_data_test_unnorm[i_idx_use,:]
     y_data_test = y_data_test[i_idx_use,:]
- 
+
     VI_pred_all = []
+    make_corner_plots = True    
+
     for i in range(params['r']*params['r']):
+
+        if make_corner_plots == False:
+            break
+
         # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-        VI_pred, dt  = VICI_inverse_model.run(params, np.expand_dims(y_data_test[i],axis=0), np.shape(x_data_test)[1],
+        VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, y_data_test[i].reshape([1,-1]), np.shape(x_data_test)[1],
                                                          y_normscale,
                                                          "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+    
+        # Make single waveform w/multiple noise real mode weight histogram
+        """    
+        if i == 0:            
+            mode_weights_all = []
+            # Iterate over specified number of noise realizations
+            for n in range(100):
+                # Make new noise realization of test waveform
+                y_data_mode_test = y_data_test_noisefree[i] + np.random.normal(0,1,size=(1,int(params['ndata']*len(fixed_vals['det']))))
+
+                # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
+                _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([1,-1]), np.shape(x_data_test)[1],
+                                                                        y_normscale,
+                                                                        "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+                mode_weights_all.append([mode_weights])
+
+            mode_weights_all = np.array(mode_weights_all)
+            mode_weights_all = mode_weights_all.reshape((mode_weights_all.shape[0]*mode_weights_all.shape[2],mode_weights_all.shape[3]))
+
+            # plot the weights mult noise histogram
+            try:
+                density_flag = False
+                plt.figure()
+                for c in range(params['n_modes']):
+                    plt.hist(mode_weights_all[:,c],25,alpha=0.5,density=density_flag)
+                plt.xlabel('iteration')
+                plt.ylabel('KL')
+                #plt.legend()
+                plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_linear.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                plt.close()
+            except:
+                pass
+
+            # plot the weights mult noise histogram
+
+            try:
+                plt.figure()
+                for c in range(params['n_modes']):
+                    plt.hist(mode_weights_all[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
+                plt.xlabel('Mixture weight')
+                plt.ylabel('p(w)')
+                plt.legend()
+                plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                plt.close()
+            except:
+                pass
+            print('Made multiple noise real mode plots')
+        """
+        # Make hunter corner plots
+#        if i == 0:
+#            continue
+#        plotter = plots.make_plots(params,XS_all,np.expand_dims(VI_pred,axis=0),np.expand_dims(x_data_test_unnorm[i],axis=0))        
+#        plotter.make_corner_plot(y_data_test_noisefree[i,:params['ndata']],y_data_test[i,:params['ndata']],bounds,i,0,sampler='dynesty1')
+
+        # Make corner corner plots
+
+                       
+        parnames = []
+        for k_idx,k in enumerate(params['rand_pars']):
+            if np.isin(k, params['inf_pars']):
+                parnames.append(params['cornercorner_parnames'][k_idx])
+        figure = corner.corner(XS_all[i], labels=parnames,
+                       quantiles=[0.16, 0.5, 0.84], color='blue',
+                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
+                       truths=x_data_test[i,:], levels=[0.68,0.90,0.95],
+                       show_titles=True, title_kwargs={"fontsize": 12})
+        corner.corner(VI_pred, labels=parnames,
+                       quantiles=[0.16, 0.5, 0.84],
+                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
+                        color='red', levels=[0.68,0.90,0.95],
+                       show_titles=True, title_kwargs={"fontsize": 12}, fig=figure)
+        plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
+        plt.close()
+        del figure
+#        del plotter
+        
+        
         VI_pred_all.append(VI_pred)
 
     VI_pred_all = np.array(VI_pred_all)
+    exit()
 
     # Generate final results plots
     plotter = plots.make_plots(params,XS_all,VI_pred_all,x_data_test)
+    
 
     # Make KL plot
     plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_train,y_normscale,bounds)
-    exit()
+#    exit()
 
     # Make pp plot
-#    plotter.plot_pp(VICI_inverse_model,y_data_test,x_data_train,0,y_normscale,x_data_test,bounds)
+    plotter.plot_pp(VICI_inverse_model,y_data_test,x_data_train,0,y_normscale,x_data_test,bounds)
 #    exit()
 
 

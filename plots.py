@@ -137,7 +137,7 @@ class make_plots:
                 VI_pred_all = []
                 for i in range(params['r']*params['r']):
                     # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                    VI_pred, dt  = model.run(params, np.expand_dims(sig_test[i],axis=0), np.shape(par_test)[1],
+                    VI_pred, _, _, dt,_  = model.run(params, np.expand_dims(sig_test[i],axis=0), np.shape(par_test)[1],
                                                              y_normscale,
                                                              "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                     VI_pred_all.append(VI_pred)
@@ -150,18 +150,37 @@ class make_plots:
             # load up the posterior samples (if they exist)
             # load generated samples back in
             post_files = []
+
+            # choose directory with lowest number of total finished posteriors
+            num_finished_post = int(1e8)
+            for i in self.params['samplers']:
+                if i == 'vitamin':
+                    continue
+                for j in range(1):
+                    input_dir = '%s_%s%d/' % (self.params['pe_dir'],i,j+1)
+                    if type("%s" % input_dir) is str:
+                        dataLocations = ["%s" % input_dir]
+
+                    filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))      
+                    if len(filenames) < num_finished_post:
+                        sampler_loc = i + str(j+1)
+
+            dataLocations_try = '%s_%s' % (self.params['pe_dir'],sampler_loc)
+            
             dataLocations = '%s_%s' % (self.params['pe_dir'],sampler)
+
             #for i,filename in enumerate(glob.glob(dataLocations[0])):
             i_idx = 0
             i = 0
             i_idx_use = []
             while i_idx < self.params['r']*self.params['r']:
 
+                filename_try = '%s/%s_%d.h5py' % (dataLocations_try,self.params['bilby_results_label'],i)
                 filename = '%s/%s_%d.h5py' % (dataLocations,self.params['bilby_results_label'],i)
 
                 # If file does not exist, skip to next file
                 try:
-                    h5py.File(filename, 'r')
+                    h5py.File(filename_try, 'r')
                 except Exception as e:
                     i+=1
                     continue
@@ -194,7 +213,8 @@ class make_plots:
                     XS_all = np.expand_dims(XS[:self.params['n_samples'],:], axis=0)
                 else:
                     # save all posteriors in array
-                    XS_all = np.vstack((XS_all,np.expand_dims(XS[:self.params['n_samples'],:], axis=0)))
+                    max_allow_idx = np.min([XS_all.shape[1],np.expand_dims(XS[:self.params['n_samples'],:], axis=0).shape[1]])
+                    XS_all = np.vstack((XS_all[:,:max_allow_idx,:],np.expand_dims(XS[:self.params['n_samples'],:], axis=0)[:,:max_allow_idx,:]))
 
                 i_idx_use.append(i)
                 i+=1
@@ -342,8 +362,8 @@ class make_plots:
 
                 x_range = np.max(x) - np.min(x)
                 y_range = np.max(y) - np.min(y)
-                xv = np.arange(np.min(x)-0.1*x_range, np.max(x)+0.1*x_range, 1.2*x_range/50.0)
-                yv = np.arange(np.min(y)-0.1*y_range, np.max(y)+0.1*y_range, 1.2*y_range/50.0)
+                xv = np.arange(np.min(x)-0.1*x_range, np.max(x)+0.1*x_range, 1.2*x_range/100.0)
+                yv = np.arange(np.min(y)-0.1*y_range, np.max(y)+0.1*y_range, 1.2*y_range/100.0)
                 X, Y = np.meshgrid(xv, yv)
                 Q = dist(X.flatten(),Y.flatten()).reshape(X.shape)
 
@@ -408,7 +428,7 @@ class make_plots:
 #                    L = contours[3]
                     
                 if color == 'blue':
-                    ax.contour(X,Y,Q,levels=L,alpha=0.5,colors=color, origin='lower')
+                    ax.contour(X,Y,Q,levels=L,alpha=0.5,colors=color, origin='lower', linewidths=1)
                 elif color == 'red':
                     ax.contourf(X,Y,Q,levels=L,alpha=1.0,colors=['#e61a0b','#f75448','#ff7a70'], origin='lower')
                 ax.set_xlim(np.min(X),np.max(X))
@@ -494,6 +514,7 @@ class make_plots:
 #            hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'w')
          
         # make vitamin p-p plots
+        confidence_pp = np.zeros((len(self.params['samplers'])-1,int(self.params['r']**2)+2))
         for j in range(len(self.params['inf_pars'])):
             pp = np.zeros((self.params['r']**2)+2)
             pp[0] = 0.0
@@ -505,7 +526,7 @@ class make_plots:
 
                     # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
                     # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                    x, dt  = model.run(self.params, y, np.shape(par_test)[1],
+                    x, _, _, dt,_  = model.run(self.params, y, np.shape(par_test)[1],
                                                          normscales,
                                                          "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
 
@@ -543,7 +564,8 @@ class make_plots:
             else:
                 axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp),'-',color='red',linewidth=2,zorder=50) 
       
-         
+#        confidence_pp[0,:] = np.sort(pp)
+
         # make bilby p-p plots
         samplers = self.params['samplers']
         CB_color_cycle=['blue','#4daf4a','#ff7f00','#4b0092']
@@ -559,7 +581,7 @@ class make_plots:
                     samples = samples[:,:,-self.params['n_samples']:]
                 else:
                     samples = samples[:self.params['n_samples'],:]
-                samples = samples.reshape(self.params['r']**2,len(self.params['inf_pars']),self.params['n_samples'])
+                #samples = samples.reshape(self.params['r']**2,len(self.params['inf_pars']),samples.shape[1])
 
             for j in range(len(self.params['inf_pars'])):
                 pp_bilby = np.zeros((self.params['r']**2)+2)
@@ -567,7 +589,7 @@ class make_plots:
                 pp_bilby[1] = 1.0
                 if self.params['load_plot_data'] == False:
                     for cnt in range(self.params['r']**2):
-                        pp_bilby[cnt+2] = self.pp_plot(pos_test[cnt,j],samples[cnt,j,:].transpose())
+                        pp_bilby[cnt+2] = self.pp_plot(pos_test[cnt,j],samples[cnt,:,j].transpose())
                         print('Computed %s, param %d p-p plot iteration %d/%d' % (samplers[i],j,int(cnt)+1,int(self.params['r']**2)))
                     # Save bilby sampler pp data
                     # TODO add this back in later
@@ -575,35 +597,40 @@ class make_plots:
                 else:
                     pp_bilby = hf['%s_param%d_pp' % (samplers[i],j)]
                     print('Made pp curve')
+                
                 # plot bilby sampler results
                 if j == 0:
                     axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],label=r'$\textrm{%s}$' % samplers[i])
                 else:
                     axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1])
 
- 
-        """     
-        fig = plt.figure(figsize=(6, 6))
-        ax = fig.add_subplot(111, projection='pp_plot')
-        ax.add_confidence_band(256, alpha=0.95) # Add 95% confidence band
-        ax.add_diagonal() # Add diagonal line
-        ax.add_lightning(256, 20) # Add some random realizations of n samples
-        ax.add_series(test[0,:],test[1,:],test[2,:],test[3,:]) # Add our data
-        ax.add_series(test[4,:],test[5,:],test[6,:],test[7,:]) # Add our data
-        ax.add_series(test[8,:],test[9,:],test[10,:],test[11,:]) # Add our data
-        ax.add_series(test[12,:],test[13,:],test[14,:],test[15,:]) # Add our data
-        fig.savefig('%s/pp_plot_%04d.png' % (outdir,i_epoch),dpi=360)
-        fig.savefig('%s/latest/latest_pp_plot.png' % outdir,dpi=360)
-        plt.close(fig)
-        hf.close()
-        return
-        """
+            confidence_pp[i-1,:] = np.sort(pp_bilby)
 
         matplotlib.rc('text', usetex=True) 
         # Remove whitespace on x-axis in all plots
         axis.margins(x=0,y=0)
 
         axis.plot([0,1],[0,1],'--k')
+        conf_color_wheel = ['#D8D8D8','#A4A4A4','#6E6E6E']
+        confidence = [0.95,0.90,0.68]
+        #x_values = np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0)
+        x_values = np.linspace(0, 1, 1001)
+        N = int(self.params['r']**2)
+        for ci,j in zip(confidence,range(len(confidence))):
+            edge_of_bound = (1. - ci) / 2.
+            lower = scipy.stats.binom.ppf(1 - edge_of_bound, N, x_values) / N
+            upper = scipy.stats.binom.ppf(edge_of_bound, N, x_values) / N
+            # The binomial point percent function doesn't always return 0 @ 0,
+            # so set those bounds explicitly to be sure
+            lower[0] = 0
+            upper[0] = 0
+            axis.fill_between(x_values, lower, upper, facecolor=conf_color_wheel[j],alpha=0.5)
+        """
+        for j in range(len(confidence)):
+            axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),confidence_bound[j,0,:],color='gray')
+            axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),confidence_bound[j,1,:],color='gray')
+            axis.fill_between(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0), confidence_bound[j,0,:], confidence_bound[j,1,:], facecolor=conf_color_wheel[j], alpha=0.5)
+        """
         axis.set_xlim([0,1])
         axis.set_ylim([0,1])
         #axis.set_ylabel(r'$\textrm{Empirical Cumulative Distribution}$',fontsize=14)
@@ -773,11 +800,11 @@ class make_plots:
                   '#fefe62','#d35fb7','#dc3220']
         label_idx = 0
 
-        if params['load_plot_data'] == False:
+#        if params['load_plot_data'] == False:
             # Create dataset to save KL divergence results for later plotting
-            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
-        else:
-            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
+#            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
+#        else:
+#            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
         
         for i in range(len(usesamps)):
             for j in range(tmp_idx):
@@ -785,13 +812,13 @@ class make_plots:
                 # Load appropriate test sets
                 if samplers[i] == samplers[::-1][j]:
                     print_cnt+=1
-                    sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'2'
+                    sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
                     if self.params['load_plot_data'] == False:
                         set1,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
                         set2,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
                     continue
                 else:
-                    sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'2'
+                    sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
                     if self.params['load_plot_data'] == False:
                         set1,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
                         set2,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
@@ -804,19 +831,21 @@ class make_plots:
                     tot_kl = []
                     for r in range(self.params['r']**2):
                         tot_kl.append(compute_kl(set1[r],set2[r],[sampler1,sampler2]))
+                        print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
                     tot_kl = np.array(tot_kl)
 
-                if self.params['load_plot_data'] == False:
+#                if self.params['load_plot_data'] == False:
 
                     # Save results to h5py file
-                    hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
+#                    hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
                
-                logbins = np.histogram_bin_edges(tot_kl,bins='fd') 
+#                logbins = np.histogram_bin_edges(tot_kl,bins='fd') 
+                logbins = np.logspace(-1,2.5,50)
 
                 if samplers[i] == 'vitamin' or samplers[::-1][j] == 'vitamin':
 
-                    logbins = 25
-                    logbins = np.logspace(-1,2.5,50)
+#                    logbins = 25
+#                    logbins = np.logspace(-1,2.5,50)
                     axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[::-1][j]),zorder=2)
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
                 else:
@@ -827,8 +856,7 @@ class make_plots:
                     else:
                         axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color='grey',zorder=1)
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
-                    print(samplers[i],samplers[::-1][j])                 
-                    print(np.mean(tot_kl))
+                    print('Mean total KL: %s' % str(np.mean(tot_kl)))
 
                 print('Completed KL calculation %d/%d' % (print_cnt,len(usesamps)*2))
                 print_cnt+=1
@@ -866,7 +894,7 @@ class make_plots:
         fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig_kl)
 
-        hf.close()
+#        hf.close()
 
         return
 
@@ -1024,9 +1052,9 @@ class make_plots:
                     # Make histograms on diagonal
                     if (len(params['inf_pars'])-1-j) == i:
                         axis_corner[len(params['inf_pars'])-1-j,i].hist(set1[i,:],bins=20,alpha=0.5,density=True,histtype='stepfilled',label='VItamin',color='r')
-                        axis_corner[len(params['inf_pars'])-1-j,i].hist(set1[i,:],bins=20,lw=2,density=True,histtype='step',label='VItamin',color='r',zorder=20)
+                        axis_corner[len(params['inf_pars'])-1-j,i].hist(set1[i,:],bins=20,lw=1,density=True,histtype='step',label='VItamin',color='r',zorder=20)
                         axis_corner[len(params['inf_pars'])-1-j,i].hist(set2[i,:],bins=20,alpha=0.5,density=True,histtype='stepfilled',label=sampler,color='b')
-                        axis_corner[len(params['inf_pars'])-1-j,i].hist(set2[i,:],bins=20,lw=2,density=True,histtype='step',label=sampler,color='b',zorder=10)
+                        axis_corner[len(params['inf_pars'])-1-j,i].hist(set2[i,:],bins=20,lw=1,density=True,histtype='step',label=sampler,color='b',zorder=10)
                         axis_corner[len(params['inf_pars'])-1-j,i].axvline(x=pos_test_copy[r,i], linewidth=1.0, color='black',zorder=30)
                         axis_corner[len(params['inf_pars'])-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[0], linewidth=1, color='r',zorder=30)
                         axis_corner[len(params['inf_pars'])-1-j,i].axvline(x=self.confidence_bd(set1[i,:])[1], linewidth=1, color='r',zorder=30)
@@ -1100,7 +1128,9 @@ class make_plots:
                         except Exception as e:
                             print(e)
                             pass
-                        axis_corner[len(params['inf_pars'])-1-j,i].plot(pos_test_copy[r,i],pos_test_copy[r,::-1][j],'+k',markersize=8, label='Truth')
+
+                        # Add scalar truth crosshair
+                        axis_corner[len(params['inf_pars'])-1-j,i].plot(pos_test_copy[r,i],pos_test_copy[r,::-1][j],'+k',markersize=6, label='Truth')
 
                         print('Made dataset')
 

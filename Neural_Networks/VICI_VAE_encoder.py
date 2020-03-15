@@ -19,6 +19,7 @@ class VariationalAutoencoder(object):
         self.n_input2 = n_input2
         self.n_output = n_output
         self.n_weights = n_weights
+
         self.n_hlayers = n_hlayers
         self.n_conv = n_conv
         self.drate = drate
