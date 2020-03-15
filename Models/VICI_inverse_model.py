@@ -60,6 +60,7 @@ import corner
 from Neural_Networks import VICI_decoder
 from Neural_Networks import VICI_encoder
 from Neural_Networks import VICI_VAE_encoder
+from Neural_Networks import VICI_reduction
 from Neural_Networks import batch_manager
 from Models import VICI_inverse_model
 from data import chris_data
@@ -133,13 +134,23 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     # USEFUL SIZES
     xsh = np.shape(x_data)
     ysh = np.shape(y_data)[1]
+    n_convsteps = params['n_convsteps']
     z_dimension = params['z_dimension']
     bs = params['batch_size']
     n_weights_r1 = params['n_weights_r1']
     n_weights_r2 = params['n_weights_r2']
     n_weights_q = params['n_weights_q']
-    ramp_start = 1e4
-    ramp_stop = 1e5
+    n_modes = params['n_modes']
+    n_hlayers = params['n_hlayers']
+    n_conv = params['n_conv']
+    n_filters = params['n_filters']
+    filter_size = params['filter_size']
+    maxpool = params['maxpool']
+    red = params['reduce']
+    ysh_conv = int(ysh*n_filters/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
+    drate = params['drate']
+    ramp_start = params['ramp_start']
+    ramp_end = params['ramp_end']
 
 
     # identify the indices of wrapped and non-wrapped parameters - clunky code
@@ -158,14 +169,20 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         idx = tf.placeholder(tf.int32)
 
         # LOAD VICI NEURAL NETWORKS
-        r2_xzy = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh[1], z_dimension+ysh, n_weights_r2, wrap_mask, nowrap_mask) # r2(x|z,y)
-        r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1, n_modes)  # generates params for r1(z|y)
-        r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1, n_modes)  # generates params for r1(z|y)
-        r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, 1, n_weights_r1, n_modes)  # generates params for r1(z|y)
-        #r1_zy_a = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
-        #r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
-        #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh, z_dimension, n_weights_r1) # generates params for r1(z|y)
-        q_zxy = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh, z_dimension, n_weights_q) # used to sample from q(z|x,y)?
+        r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh, filter_size, n_filters, n_convsteps)
+        r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', wrap_mask, nowrap_mask, 
+                                                     n_input1=z_dimension, n_input2=ysh_conv, n_output=xsh[1], 
+                                                     n_weights=n_weights_r2, n_hlayers=n_hlayers, 
+                                                     drate=drate, n_filters=n_filters, filter_size=filter_size,
+                                                     maxpool=maxpool, n_conv=n_conv)
+        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, 
+                                                     n_weights=n_weights_r1, n_modes=n_modes, 
+                                                     n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
+                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv)
+        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=ysh_conv, 
+                                                        n_output=z_dimension, n_weights=n_weights_q, 
+                                                        n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
+                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
 
           
@@ -174,15 +191,16 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
         ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_stop)-tf.log(ramp_start))
         ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
-        #ramp=1.0
-        if multi_modal == False:
-            ramp = 1.0
+        #ramp = 1.0
+ 
+        # reduce the y data size
+        y_conv = r2_conv.dimensionanily_reduction(y_ph)
 
         # GET r1(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
-        r1_loc = r1_zy_loc._calc_z_mean_and_sigma(y_ph)
-        r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_scale._calc_z_mean_and_sigma(y_ph)))
-        r1_weight = tf.squeeze(r1_zy_weight._calc_z_mean_and_sigma(y_ph))
+        r1_loc, r1_scale, r1_weight = r1_zy._calc_z_mean_and_sigma(y_conv)
+        r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_scale))
+        r1_weight = ramp*tf.squeeze(r1_weight)
         #r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa = r1_zy_a._calc_z_mean_and_sigma(y_ph)        
         #r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
         #r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
@@ -207,14 +225,14 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         r1_zy_samp = bimix_gauss.sample()        
         
         # GET q(z|x,y)
-        q_zxy_mean, q_zxy_log_sig_sq = q_zxy._calc_z_mean_and_sigma(tf.concat([x_ph,y_ph],axis=1))
+        q_zxy_mean, q_zxy_log_sig_sq = q_zxy._calc_z_mean_and_sigma(x_ph,y_conv)
         #q_zxy_mean, q_zxy_log_sig_sq = q_zxy._calc_z_mean_and_sigma(x_ph)
 
         # DRAW FROM q(z|x,y)
         q_zxy_samp = q_zxy._sample_from_gaussian_dist(bs_ph, z_dimension, q_zxy_mean, tf.log(SMALL_CONSTANT + tf.exp(q_zxy_log_sig_sq)))
         
         # GET r2(x|z,y)
-        reconstruction_xzy = r2_xzy.calc_reconstruction(tf.concat([q_zxy_samp,y_ph],axis=1))
+        reconstruction_xzy = r2_xzy.calc_reconstruction(q_zxy_samp,y_conv)
         r2_xzy_mean_nowrap = reconstruction_xzy[0]
         r2_xzy_log_sig_sq_nowrap = reconstruction_xzy[1]
         if np.sum(wrap_mask)>0:
@@ -608,12 +626,20 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     xsh1 = siz_x_data
     ysh0 = np.shape(y_data_test)[0]
     ysh1 = np.shape(y_data_test)[1]
-
     z_dimension = params['z_dimension']
     n_weights_r1 = params['n_weights_r1']
     n_weights_r2 = params['n_weights_r2']
     n_weights_q = params['n_weights_q']
     n_modes = params['n_modes']
+    n_hlayers = params['n_hlayers']
+    n_conv = params['n_conv']
+    n_filters = params['n_filters']
+    filter_size = params['filter_size']
+    n_convsteps = params['n_convsteps']
+    red = params['reduce']
+    ysh_conv = int(ysh1*n_filters/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
+    drate = params['drate']
+    maxpool = params['maxpool']
 
     # identify the indices of wrapped and non-wrapped parameters - clunky code
     wrap_mask, nowrap_mask, idx_mask = get_wrap_index(params)
@@ -632,19 +658,31 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
 
         # LOAD VICI NEURAL NETWORKS
-        r2_xzy = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh1, z_dimension+ysh1, n_weights_r2,wrap_mask,nowrap_mask)
-        r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes)
-        r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes)
-        r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, 1, n_weights_r1, n_modes)
+        r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh1, filter_size, n_filters, n_convsteps)
+        r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', wrap_mask, nowrap_mask, n_input1=z_dimension, 
+                                                     n_input2=ysh_conv, n_output=xsh1, n_weights=n_weights_r2, 
+                                                     n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
+                                                     filter_size=filter_size, maxpool=maxpool, n_conv=n_conv)
+        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, n_weights=n_weights_r1,   # generates params for r1(z|y)
+                                                    n_modes=n_modes, n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
+                                                    filter_size=filter_size, maxpool=maxpool, n_conv=n_conv)
+        #r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
+        #r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
+        #r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, 1, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_a = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         #r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
-        q_zxy = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh1+ysh1, z_dimension, n_weights_q)
+        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=ysh_conv, n_output=z_dimension, 
+                                                        n_weights=n_weights_q, n_hlayers=n_hlayers, drate=drate, 
+                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv)  
+
+        # reduce the y data size
+        y_conv = r2_conv.dimensionanily_reduction(y_ph)
 
         # GET r1(z|y)
-        r1_loc = r1_zy_loc._calc_z_mean_and_sigma(y_ph)
-        r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_scale._calc_z_mean_and_sigma(y_ph)))
-        r1_weight = tf.squeeze(r1_zy_weight._calc_z_mean_and_sigma(y_ph))
+        r1_loc, r1_scale, r1_weight = r1_zy._calc_z_mean_and_sigma(y_conv)
+        r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_scale))
+        r1_weight = tf.squeeze(r1_weight)
         #r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa = r1_zy_a._calc_z_mean_and_sigma(y_ph)
         #r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
         #r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
@@ -669,7 +707,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         r1_zy_samp = bimix_gauss.sample()
 
         # GET r2(x|z,y) from r(z|y) samples
-        reconstruction_xzy = r2_xzy.calc_reconstruction(tf.concat([r1_zy_samp,y_ph],1))
+        reconstruction_xzy = r2_xzy.calc_reconstruction(r1_zy_samp,y_conv)
         r2_xzy_mean_nowrap = reconstruction_xzy[0]
         r2_xzy_log_sig_sq_nowrap = reconstruction_xzy[1]
         if np.sum(wrap_mask)>0:
@@ -677,10 +715,11 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
             r2_xzy_log_sig_sq_wrap = reconstruction_xzy[3]
 
         # draw from r2(x|z,y)
-        r2_xzy_samp_gauss = q_zxy._sample_from_gaussian_dist(tf.shape(y_ph)[0], nowrap_len, r2_xzy_mean_nowrap, tf.log(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)))
+        r2_xzy_samp_gauss = q_zxy._sample_from_gaussian_dist(tf.shape(y_conv)[0], nowrap_len, r2_xzy_mean_nowrap, tf.log(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)))
         if np.sum(wrap_mask)>0:
-            var = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap)     # modelling wrapped scale output as a variance
-            von_mises = tfp.distributions.VonMises(loc=2.0*np.pi*(r2_xzy_mean_wrap-0.5), concentration=tf.math.reciprocal(var))
+            con = tf.reshape(tf.math.reciprocal(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap)),[-1,wrap_len])   # modelling wrapped scale output as log variance
+            #var = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap)     # modelling wrapped scale output as a variance
+            von_mises = tfp.distributions.VonMises(loc=2.0*np.pi*(r2_xzy_mean_wrap-0.5), concentration=con)
             r2_xzy_samp_vm = von_mises.sample()/(2.0*np.pi) + 0.5   # shift and scale from -pi-pi to 0-1
             r2_xzy_samp = tf.concat([tf.reshape(r2_xzy_samp_gauss,[-1,nowrap_len]),tf.reshape(r2_xzy_samp_vm,[-1,wrap_len])],1)
             r2_xzy_samp = tf.gather(r2_xzy_samp,tf.constant(idx_mask),axis=1)
