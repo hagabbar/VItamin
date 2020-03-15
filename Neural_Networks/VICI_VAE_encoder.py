@@ -63,6 +63,7 @@ class VariationalAutoencoder(object):
             tf.summary.histogram('scale', scale)
             return loc, scale
 
+
     def _sample_from_gaussian_dist(self, num_rows, num_cols, mean, log_sigma_sq):
         with tf.name_scope("sample_in_z_space"):
             eps = tf.random_normal([num_rows, num_cols], 0, 1., dtype=tf.float32)

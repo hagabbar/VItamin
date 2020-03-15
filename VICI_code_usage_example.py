@@ -83,10 +83,14 @@ session = tf.Session(config=config)
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
-    ndata = 512
-    run_label = 'multi-modal102'
-    r = 3
-    tot_dataset_size = int(1e5)    # total number of training samples to use
+
+    ndata = 256 # length of input to NN == fs * num_detectors
+    rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run22' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    bilby_results_label = '%dpar_%dHz_%ddet_case' % (len(rand_pars),ndata,len(fixed_vals['det']))
+    r = 1
+    tot_dataset_size = int(5e5)    # total number of training samples to use
+
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
@@ -101,23 +105,26 @@ def get_params():
         n_samples = 1000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=32,               # batch size inference model (inverse reconstruction)
+        batch_size=512,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
         n_modes=2,                  # number of modes in the latent space
         n_hlayers=3,                # the number of hidden layers in each network
-        n_weights_r1 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 2048,             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         n_convsteps = 2,              # the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = True,
         n_conv = None,
         n_filters = 16,
         filter_size = 8,
-        drate = 0.2,
+        drate = 0.0,
         maxpool = 2,
-        ramp_start = 1e3,
+        ramp_start = 1e4,
         ramp_end = 1e5,
+        save_interval=30000,           # interval at which to save inference model weights
+        plot_interval=30000,           # interval over which plotting is done
+        z_dimension=48,                # 24 number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
         rand_pars=rand_pars,
@@ -125,11 +132,15 @@ def get_params():
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        wrap_pars=['phase'],                  # parameters that get wrapped on the 1D parameter 
-        train_set_dir='/home/chrism/training_sets/tset_tot-%d_split-%d_samp-%d' % (tot_dataset_size,tset_split,ndata), #location of training set
-        test_set_dir='/home/chrism/testing_sets/tset_tot-%d_samp-%d' % (r*r,ndata), #location of test set
-        pe_dir='/home/chrism/bilby_outputs/bilby_output-%d_samp-%d' % (r*r,ndata), #location of bilby PE results
-        KL_cycles = 1,                       # number of cycles to repeat for the KL approximation
+        wrap_pars=['phase','ra','psi'],                  # parameters that get wrapped on the 1D parameter 
+        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
+        train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
+        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det'])), #location of test set
+        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case/test' % (len(rand_pars),ndata,len(fixed_vals['det'])),    # location of bilby PE results
+        KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
+        load_plot_data=False,                                                  # use old plotting data
+        samplers=['vitamin', 'dynesty'],#,'emcee','ptemcee','cpnest'],          # samplers to use when plotting
+
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         #do_normscale=True,                    # if true normalize parameters
         #do_mc_eta_conversion=False,           # if True, convert m1 and m2 parameters into mc and eta

@@ -708,6 +708,7 @@ def run(sampling_frequency=256.0,
                 return test_samples_noisy,test_samples_noisefree,np.array([temp])
 
             run_startt = time.time()
+
             # Run sampler dynesty 2 sampler
             result = bilby.run_sampler(#conversion_function=bilby.gw.conversion.generate_all_bbh_parameters,
                 likelihood=likelihood, priors=priors, sampler='dynesty', npoints=250,
