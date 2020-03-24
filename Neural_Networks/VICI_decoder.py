@@ -1,6 +1,8 @@
 import collections
 
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 import math as m
 
@@ -13,7 +15,7 @@ SMALL_CONSTANT = 1e-6
 
 class VariationalAutoencoder(object):
 
-    def __init__(self, name, wrap_mask, nowrap_mask, n_input1=4, n_input2=256, n_output=3, n_weights=2048, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2):
+    def __init__(self, name, wrap_mask, nowrap_mask, n_input1=4, n_input2=256, n_output=3, n_weights=2048, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, strides=1, num_det=1):
         
         self.n_input1 = n_input1                    # actually the output size
         self.n_input2 = n_input2                    # actually the output size
@@ -24,10 +26,12 @@ class VariationalAutoencoder(object):
         self.n_filters = n_filters
         self.filter_size = filter_size
         self.maxpool = maxpool
+        self.strides = strides
         self.name = name                          # the name of the network
         self.drate = drate                        # dropout rate
         self.wrap_mask = wrap_mask                # mask identifying wrapped indices
         self.nowrap_mask = nowrap_mask            # mask identifying non-wrapped indices
+        self.num_det = num_det
  
         network_weights = self._create_weights()
         self.weights = network_weights
@@ -43,11 +47,12 @@ class VariationalAutoencoder(object):
 
             # Reshape input to a 3D tensor - single channel
             if self.n_conv is not None:
-                conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], 1])
+#                conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], 1])
+                conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], self.num_det])
                 for i in range(self.n_conv):            
                     weight_name = 'w_conv_' + str(i)
                     bias_name = 'b_conv_' + str(i)
-                    conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_decoder'][weight_name],strides=1,padding='SAME'),self.weights['VICI_decoder'][bias_name])
+                    conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_decoder'][weight_name],strides=[1,1,self.strides,1],padding='SAME'),self.weights['VICI_decoder'][bias_name])
                     conv_post = self.nonlinearity(conv_pre)
                     conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
                     conv_pool = tf.nn.max_pool(conv_dropout,ksize=[1, 1, self.maxpool, 1],strides=[1, 1, self.maxpool, 1],padding='SAME')

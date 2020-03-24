@@ -1,6 +1,8 @@
 import collections
 
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 import math as m
 
@@ -31,7 +33,10 @@ class VariationalAutoencoder(object):
             if self.n_convsteps==0:
                 return x
 
-            redx_post0 = tf.expand_dims(x,2)
+#            redx_post0 = tf.expand_dims(x,2)
+#            print(redx_post0.shape)
+#            exit()
+            redx_post0 = x
             if self.n_convsteps>=1:
                 redxa_pre1 = tf.add(tf.nn.conv1d(redx_post0,self.weights[self.name]['F_conv_1a'],stride = 2, padding = 'SAME'),self.weights[self.name]['b_conv_1a'])
                 redx_post1 = self.nonlinearity(redxa_pre1)

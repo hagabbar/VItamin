@@ -75,22 +75,22 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="5"
+os.environ["CUDA_VISIBLE_DEVICES"]="3"
 
-config = tf.ConfigProto()
+config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
-session = tf.Session(config=config)
+session = tf.compat.v1.Session(config=config)
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run66' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run116' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = 'test_run' #'9par_256Hz_3det_case_256test'
     r = 5                        # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
-    tot_dataset_size = int(1e5)    # total number of training samples to use
+    tot_dataset_size = int(1e6)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
@@ -106,31 +106,29 @@ def get_params():
         n_samples = 8000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=512,               # batch size inference model (inverse reconstruction)
+        batch_size=32,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
-        n_modes=7,                  # number of modes in the latent space
+        n_modes=10,                  # number of modes in the latent space
         n_hlayers=3,                # the number of hidden layers in each network
-        n_convsteps = 2,              # the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
-        reduce = True,
-        n_conv = None,
-        n_filters = 16,
-        filter_size = 8,
+        n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
+        reduce = False,
+        n_conv = 1,                # number of convolutional layers to use in each part of the networks. None if not used
+        n_filters = 18,
+        filter_size = 2,
         drate = 0.0,
-        maxpool = 2,
+        maxpool = 1,
+        strides = 1,
         ramp_start = 1e4,
         ramp_end = 1e5,
-        save_interval=30000,           # interval at which to save inference model weights
-        plot_interval=30000,           # interval over which plotting is done
-        z_dimension=int(96*7),                # 24 number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 1024,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        filter_size = 8,
+        save_interval=50000,           # interval at which to save inference model weights
+        plot_interval=50000,           # interval over which plotting is done
+        z_dimension=int(96*1),                # 24 number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = 768,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 768,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 768,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         filter_chnnels = 1,
         duration = 1.0,               # the timeseries length in seconds
-        ramp_start = 1e4,             # start of ramp on KL
-        ramp_stop = 1e5,              # stop of ramp on KL
         r = r,                                # the grid dimension for the output tests
         rand_pars=rand_pars,
         corner_parnames = ['m_{1}\,(\mathrm{M}_{\odot})','m_{2}\,(\mathrm{M}_{\odot})','d_{\mathrm{L}}\,(\mathrm{Mpc})','t_{0}\,(\mathrm{seconds})','{\phi}','\Theta_{jn}','{\psi}','\mathrm{RA}','\mathrm{DEC}'],
@@ -138,7 +136,7 @@ def get_params():
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        wrap_pars=['phase','psi','ra'],                  # parameters that get wrapped on the 1D parameter 
+        wrap_pars=['phase','psi'],                  # parameters that get wrapped on the 1D parameter 
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
 #        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
@@ -147,7 +145,7 @@ def get_params():
         pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test',
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
         load_plot_data=False,                                                  # use old plotting data
-        samplers=['vitamin','dynesty','cpnest'],          # samplers to use when plotting
+        samplers=['vitamin','dynesty','cpnest'],#,'ptemcee','emcee'],          # samplers to use when plotting
 
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         #do_normscale=True,                    # if true normalize parameters
@@ -180,15 +178,20 @@ def load_data(input_dir,inf_pars,load_condor=False):
     else:
         filenames = os.listdir(dataLocations[0])
     for filename in filenames:
-        train_files.append(filename)
-        data_temp={'x_data': h5py.File(dataLocations[0]+'/'+filename, 'r')['x_data'][:],
-              'y_data_noisefree': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisefree'][:],
-              'y_data_noisy': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisy'][:],
-              'rand_pars': h5py.File(dataLocations[0]+'/'+filename, 'r')['rand_pars'][:]}
-        data['x_data'].append(data_temp['x_data'])
-        data['y_data_noisefree'].append(np.expand_dims(data_temp['y_data_noisefree'], axis=0))
-        data['y_data_noisy'].append(np.expand_dims(data_temp['y_data_noisy'], axis=0))
-        data['rand_pars'] = data_temp['rand_pars']
+        try:
+            print(filename)
+            train_files.append(filename)
+            data_temp={'x_data': h5py.File(dataLocations[0]+'/'+filename, 'r')['x_data'][:],
+                  'y_data_noisefree': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisefree'][:],
+                  'y_data_noisy': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisy'][:],
+                  'rand_pars': h5py.File(dataLocations[0]+'/'+filename, 'r')['rand_pars'][:]}
+            data['x_data'].append(data_temp['x_data'])
+            data['y_data_noisefree'].append(np.expand_dims(data_temp['y_data_noisefree'], axis=0))
+            data['y_data_noisy'].append(np.expand_dims(data_temp['y_data_noisy'], axis=0))
+            data['rand_pars'] = data_temp['rand_pars']
+        except OSError:
+            print('Could not load requested file')
+            continue
 
 
     # extract the prior bounds
@@ -430,6 +433,29 @@ if args.train:
     y_data_test_noisefree = y_data_test_noisefree[i_idx_use,:]
     x_data_test = x_data_test[i_idx_use,:]
 
+    # reshape y data into channels last format for convolutional approach
+    if params['reduce'] == True or params['n_conv'] != None:
+        y_data_test_copy = np.zeros((y_data_test.shape[0],params['ndata'],len(fixed_vals['det'])))
+        y_data_test_noisefree_copy = np.zeros((y_data_test_noisefree.shape[0],params['ndata'],len(fixed_vals['det'])))
+        y_data_train_copy = np.zeros((y_data_train.shape[0],params['ndata'],len(fixed_vals['det'])))
+        for i in range(y_data_test.shape[0]):
+            for j in range(len(fixed_vals['det'])):
+                idx_range = np.linspace(int(j*params['ndata']),int((j+1)*params['ndata'])-1,num=params['ndata'],dtype=int)
+                y_data_test_copy[i,:,j] = y_data_test[i,idx_range]
+                y_data_test_noisefree_copy[i,:,j] = y_data_test_noisefree[i,idx_range]
+        y_data_test = y_data_test_copy
+        y_data_noisefree_test = y_data_test_noisefree_copy
+
+        for i in range(y_data_train.shape[0]):
+            for j in range(len(fixed_vals['det'])):
+                idx_range = np.linspace(int(j*params['ndata']),int((j+1)*params['ndata'])-1,num=params['ndata'],dtype=int)
+                y_data_train_copy[i,:,j] = y_data_train[i,idx_range]
+        y_data_train = y_data_train_copy
+
+#        y_data_test = y_data_test.reshape(y_data_test.shape[0],params['ndata'],len(fixed_vals['det']))
+#        y_data_train = y_data_train.reshape(y_data_train.shape[0],params['ndata'],len(fixed_vals['det']))
+#        y_data_test_noisefree = y_data_test_noisefree.reshape(y_data_test_noisefree.shape[0],params['ndata'],len(fixed_vals['det']))
+
     VICI_inverse_model.train(params, x_data_train, y_data_train,
                              x_data_test, y_data_test, y_data_test_noisefree,
                              y_normscale,
@@ -445,6 +471,13 @@ if args.test:
 
     # load the noisy testing data back in
     x_data_test, y_data_test_noisefree, y_data_test,_ = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
+
+    # plot test waveforms
+    for i in range(y_data_test.shape[0]):
+        plt.plot(y_data_test[i,0,:])
+        plt.plot(y_data_test_noisefree[i,0,:])
+        plt.savefig('%s/latest_%s/waveform_%d.png' % (params['plot_dir'],params['run_label'],i))
+        plt.close()
 
     # reshape arrays for multi-detector
     y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
@@ -475,7 +508,7 @@ if args.test:
                 sampler_loc = i + str(j+1)
 
     dataLocations_try = '%s_%s' % (params['pe_dir'],sampler_loc)
-    dataLocations = '%s_%s' % (params['pe_dir'],'dynesty1')
+    dataLocations = '%s_%s' % (params['pe_dir'],params['samplers'][1]+'1')
     #for i,filename in enumerate(glob.glob(dataLocations[0])):
     i_idx = 0
     i = 0
@@ -553,9 +586,20 @@ if args.test:
     x_data_test = x_data_test[i_idx_use,:]
     x_data_test_unnorm = x_data_test_unnorm[i_idx_use,:]
     y_data_test = y_data_test[i_idx_use,:]
+    y_data_test_noisefree = y_data_test_noisefree[i_idx_use,:]
+
+    # reshape y data into channels last format for convolutional approach
+    y_data_test_copy = np.zeros((y_data_test.shape[0],params['ndata'],len(fixed_vals['det'])))
+    if params['reduce'] == True or params['n_conv'] != None:
+        for i in range(y_data_test.shape[0]):
+            for j in range(len(fixed_vals['det'])):
+                idx_range = np.linspace(int(j*params['ndata']),int((j+1)*params['ndata'])-1,num=params['ndata'],dtype=int)
+                y_data_test_copy[i,:,j] = y_data_test[i,idx_range]
+        y_data_test = y_data_test_copy
+#        y_data_test = y_data_test.reshape(y_data_test.shape[0],params['ndata'],len(fixed_vals['det']))
 
     VI_pred_all = []
-    make_corner_plots = True    
+    make_corner_plots = True   
 
     for i in range(params['r']*params['r']):
 
@@ -563,7 +607,12 @@ if args.test:
             break
 
         # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-        VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, y_data_test[i].reshape([1,-1]), np.shape(x_data_test)[1],
+        if params['reduce'] == True or params['n_conv'] != None:
+             VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, y_data_test[i].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
+                                                         y_normscale,
+                                                         "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+        else:
+            VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, y_data_test[i].reshape([1,-1]), np.shape(x_data_test)[1],
                                                          y_normscale,
                                                          "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
     
@@ -615,33 +664,54 @@ if args.test:
             print('Made multiple noise real mode plots')
         """
         # Make hunter corner plots
-#        if i == 0:
-#            continue
 #        plotter = plots.make_plots(params,XS_all,np.expand_dims(VI_pred,axis=0),np.expand_dims(x_data_test_unnorm[i],axis=0))        
 #        plotter.make_corner_plot(y_data_test_noisefree[i,:params['ndata']],y_data_test[i,:params['ndata']],bounds,i,0,sampler='dynesty1')
 
         # Make corner corner plots
 
-                       
+        matplotlib.rc('text', usetex=True)                
         parnames = []
         for k_idx,k in enumerate(params['rand_pars']):
             if np.isin(k, params['inf_pars']):
                 parnames.append(params['cornercorner_parnames'][k_idx])
         figure = corner.corner(XS_all[i], labels=parnames,
-                       quantiles=[0.16, 0.5, 0.84], color='blue',
+                       quantiles=[0.16, 0.84], color='blue',
                        #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
                        truths=x_data_test[i,:], levels=[0.68,0.90,0.95],
+                       truth_color='black',
+                       plot_datapoints=False,
+                       plot_density=False,
                        show_titles=True, title_kwargs={"fontsize": 12})
         corner.corner(VI_pred, labels=parnames,
-                       quantiles=[0.16, 0.5, 0.84],
+                       quantiles=[0.16, 0.84],
+                       fill_contours=True,
+                       plot_datapoints=False,
+                       plot_density=False,
                        #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
                         color='red', levels=[0.68,0.90,0.95],
                        show_titles=True, title_kwargs={"fontsize": 12}, fig=figure)
+
+        left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
+        ax2 = figure.add_axes([left, bottom, width, height])
+
+        # plot waveform in upper-right hand corner
+        ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[i,:params['ndata']],color='cyan',zorder=50)
+        if params['reduce'] == True or params['n_conv'] != None:
+            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],1],color='darkblue')
+        else:
+            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata']],color='darkblue')
+        ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
+        ax2.yaxis.set_visible(False)
+        ax2.tick_params(axis="x", labelsize=11)
+        ax2.tick_params(axis="y", labelsize=11)
+        ax2.set_ylim([-6,6])
+        ax2.grid(False)
+        ax2.margins(x=0,y=0)
+
         plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
         plt.close()
         del figure
 #        del plotter
-        
         
         VI_pred_all.append(VI_pred)
 

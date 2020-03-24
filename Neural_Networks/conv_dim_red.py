@@ -17,7 +17,7 @@ class VariationalAutoencoder(object):
         
         self.n_hidden = n_hidden
         self.filter_size = filter_size
-        self.filter_channels
+        self.filter_channels = filter_channels
         self.name = name
         self.middle = middle
         self.bias_start = 0.0
@@ -31,19 +31,20 @@ class VariationalAutoencoder(object):
 
     def dimensionanily_reduction(self,x):
         with tf.name_scope("VICI_encoder"):
-            
-            X = tf.expand_dims(x,2)
-            hidden0_pre = tf.add(tf.nn.conv1d(X,self.weights[self.name]['F_conv_0'],strides = 2, padding = 'SAME'),self.weights[self.name]['b_conv_0'])
+           
+            #X = tf.expand_dims(x,2)
+            X = x
+            hidden0_pre = tf.add(tf.compat.v1.nn.conv1d(X,self.weights[self.name]['F_conv_0'],stride = 2, padding = 'SAME'),self.weights[self.name]['b_conv_0'])
             hidden0_post = self.nonlinearity(hidden0_pre)
             
             hidden1_pre = tf.add(tf.nn.conv1d(hidden0_post,self.weights[self.name]['F_conv_1'],strides = 2, padding = 'SAME'),self.weights[self.name]['b_conv_1'])
-            hidden1b_pre = tf.nn.conv1d(X,self.weights[self.name]['F_conv_1b'],strides = 4, padding = 'SAME')
+            hidden1b_pre = tf.nn.conv1d(X,self.weights[self.name]['F_conv_1b'],stride = 4, padding = 'SAME')
             hidden1_post = self.nonlinearity(hidden1_pre+hidden1b_pre)
             hidden1_post = tf.squeeze(hidden1_post)
             
-            redx_pre = tf.add(tf.nn.conv1d(hidden1_post,self.weights[self.name]['F_conv_2'],strides = 2, padding = 'SAME'),self.weights[self.name]['b_conv_2'])
-            redxb_pre = tf.nn.conv1d(hidden0_post,self.weights[self.name]['F_conv_2b'],strides = 4, padding = 'SAME')
-            redxc_pre = tf.nn.conv1d(X,self.weights[self.name]['F_conv_1c'],strides = 8, padding = 'SAME')
+            redx_pre = tf.add(tf.nn.conv1d(hidden1_post,self.weights[self.name]['F_conv_2'],stride = 2, padding = 'SAME'),self.weights[self.name]['b_conv_2'])
+            redxb_pre = tf.nn.conv1d(hidden0_post,self.weights[self.name]['F_conv_2b'],stride = 4, padding = 'SAME')
+            redxc_pre = tf.nn.conv1d(X,self.weights[self.name]['F_conv_1c'],stride = 8, padding = 'SAME')
             redx_post = self.nonlinearity(redx_pre+redxb_pre+redxc_pre)
             
             redx_post = tf.squeeze(redx_post)
@@ -62,7 +63,7 @@ class VariationalAutoencoder(object):
             # Encoder
             all_weights[self.name] = collections.OrderedDict()
             
-            all_weights[self.name]['F_conv_0'] = tf.Variable(vae_utils.xavier_init(self.filter_size, 1, self.filter_channels), dtype=tf.float32)
+            all_weights[self.name]['F_conv_0'] = tf.expand_dims(tf.Variable(vae_utils.xavier_init(self.filter_size, 1, self.filter_channels), dtype=tf.float32),0)
             all_weights[self.name]['b_conv_0'] = tf.Variable(tf.zeros([tf.cast(tf.round(self.n_hidden/2),dtype=tf.int32),self.filter_channels], dtype=tf.float32) * self.bias_start, dtype=tf.float32)
             
             all_weights[self.name]['F_conv_1'] = tf.Variable(vae_utils.xavier_init(self.filter_size, self.filter_channels, self.filter_channels), dtype=tf.float32)

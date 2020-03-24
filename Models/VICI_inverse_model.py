@@ -50,7 +50,9 @@
 
 import numpy as np
 import time
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import tensorflow_probability as tfp
 import corner
 
@@ -68,7 +70,7 @@ import plots
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from Neural_Networks import conv_dim_red
+#from Neural_Networks import conv_dim_red
 #from data import make_samples
 
 tfd = tfp.distributions
@@ -136,6 +138,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     xsh = np.shape(x_data)
 #    ysh1b = np.shape(y_data)[1]
 #    ysh = np.int(np.round(ysh1b/8))
+   
     ysh = np.shape(y_data)[1]
     n_convsteps = params['n_convsteps']
     z_dimension = params['z_dimension']
@@ -151,11 +154,16 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     n_filters = params['n_filters']
     filter_size = params['filter_size']
     maxpool = params['maxpool']
+    strides = params['strides']
     red = params['reduce']
-    ysh_conv = int(ysh*n_filters/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
+    if n_convsteps != None:
+        ysh_conv = int(ysh*n_filters/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
+    else:
+        ysh_conv = int(ysh)
     drate = params['drate']
     ramp_start = params['ramp_start']
     ramp_end = params['ramp_end']
+    num_det = len(fixed_vals['det'])
 
 
     # identify the indices of wrapped and non-wrapped parameters - clunky code
@@ -170,7 +178,10 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # PLACE HOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
         x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph") # params placeholder
-        y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh], name="y_ph")    # data placeholder
+        if params['reduce'] == True or params['n_conv'] != None:
+            y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh,len(fixed_vals['det'])], name="y_ph")    # data placeholder
+        else:
+            y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh], name="y_ph")    # data placeholder
         idx = tf.placeholder(tf.int32)
 
         # LOAD VICI NEURAL NETWORKS
@@ -179,15 +190,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                                                      n_input1=z_dimension, n_input2=ysh_conv, n_output=xsh[1], 
                                                      n_weights=n_weights_r2, n_hlayers=n_hlayers, 
                                                      drate=drate, n_filters=n_filters, filter_size=filter_size,
-                                                     maxpool=maxpool, n_conv=n_conv)
+                                                     maxpool=maxpool, n_conv=n_conv, strides=strides, num_det=num_det)
         r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, 
                                                      n_weights=n_weights_r1, n_modes=n_modes, 
                                                      n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv)
+                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, strides=strides, num_det=num_det)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=ysh_conv, 
                                                         n_output=z_dimension, n_weights=n_weights_q, 
                                                         n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv) # used to sample from q(z|x,y)?
+                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, strides=strides, num_det=num_det) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
 
         # reduce the dimensionality of y using convolutional neural network
@@ -197,7 +208,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         SMALL_CONSTANT = 1e-8
         #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
-        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_stop)-tf.log(ramp_start))
+        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_end)-tf.log(ramp_start))
         ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
 
         #ramp = 1.0
@@ -304,8 +315,16 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
         # Make noise realizations and add to training data
         next_x_data = x_data[next_indices,:]
-        next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
+        if params['reduce'] == True or params['n_conv'] != None:
+            next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
+        else:
+            next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
         next_y_data /= y_normscale  # required for fast convergence
+
+        # reshape y data into channels last format
+#        if params['reduce'] == True or params['n_conv'] != None:
+#            next_y_data = next_y_data.reshape(next_y_data.shape[0],params['ndata'],len(fixed_vals['det']))
+#            next_y_data = next_y_data.reshape(next_y_data.shape[0],params['ndata'],len(fixed_vals['det']))
 
         # train to minimise the cost function
         session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
@@ -333,10 +352,17 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             # use the testing data for some plots
             for j in range(params['r']*params['r']):
 
-                # make spcific data for plots that contains a training data sample with lots of different noise
-                x_data_zplot = np.tile(x_data_test[j,:],(params['n_samples'],1))
-                y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1))
-                y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],(params['ndata']*len(fixed_vals['det']))))
+                # only make these plots for fully-connected network
+                if params['reduce'] == True or params['n_conv'] != None:
+                    # make spcific data for plots that contains a training data sample with lots of different noise  
+                    x_data_zplot = np.tile(x_data_test[j,:],(params['n_samples'],1))
+                    y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1,1))
+                    y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],params['ndata'],len(fixed_vals['det'])))  
+                else:
+                    # make spcific data for plots that contains a training data sample with lots of different noise
+                    x_data_zplot = np.tile(x_data_test[j,:],(params['n_samples'],1))
+                    y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1))
+                    y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],(params['ndata']*len(fixed_vals['det']))))
                 y_data_zplot /= y_normscale  # required for fast convergence                
                 
                 # run a training pass and extract parameters (do it multiple times for ease of reading)
@@ -348,12 +374,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 
                 # get r2(x) data
                 r2_loc, r2_scale = session.run([r2_xzy_mean, r2_xzy_scale], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-                #print('<r2 mean nowrap> = {}'.format(np.mean(r2_mean_nowrap)))
-                #print('<r2 mean wrap> = {}'.format(np.mean(r2_mean_wrap)))
-                #print('<r2 sigsq nowrap> = {}'.format(np.mean(r2_log_sig_sq_nowrap)))
-                #print('<r2 sigsq wrap> = {}'.format(np.mean(r2_log_sig_sq_wrap)))
-
-
 
                 """ 
                 try:
@@ -574,7 +594,12 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                     print('Made multiple noise real mode plots')
                 """
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
+                if params['reduce'] == True or params['n_conv'] != None:
+                    XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
+                                                 y_normscale, 
+                                                 "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+                else:
+                    XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
                                                  y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
@@ -591,14 +616,20 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                         parnames.append(params['cornercorner_parnames'][k_idx])
 
                 figure = corner.corner(posterior_truth_test[j], labels=parnames,
-                       quantiles=[0.16, 0.5, 0.84], color='blue',
+                       quantiles=[0.16, 0.84], color='blue',
                        #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       truths=truth_test[j,:], levels=[0.68,0.90,0.95],
+                       levels=[0.68,0.90,0.95],
+                       truth_color='black',
+                       plot_datapoints=False,
+                       plot_density=False,
                        show_titles=True, title_kwargs={"fontsize": 12})
                 corner.corner(XS, labels=parnames,
-                       quantiles=[0.16, 0.5, 0.84], levels=[0.68,0.90,0.95],
+                       quantiles=[0.16, 0.84], levels=[0.68,0.90,0.95],
                        #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       truths=truth_test[j,:], color='red',
+                       color='red',
+                       fill_contours=True,
+                       plot_datapoints=False,
+                       plot_density=False,
                        show_titles=True, title_kwargs={"fontsize": 12}, fig=figure)
                 plt.savefig('%s/corner_plot_%s_%d-%d.png' % (params['plot_dir'],params['run_label'],i,j))
                 plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
@@ -711,9 +742,17 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     filter_size = params['filter_size']
     n_convsteps = params['n_convsteps']
     red = params['reduce']
-    ysh_conv = int(ysh1*n_filters/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
+    if n_convsteps != None:
+        ysh_conv = int(ysh1*n_filters/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
+    else:
+        ysh_conv = int(ysh1)
     drate = params['drate']
     maxpool = params['maxpool']
+    strides = params['strides']
+    if params['reduce'] == True or params['n_conv'] != None:
+        num_det = np.shape(y_data_test)[2]
+    else:
+        num_det = None
 
     # identify the indices of wrapped and non-wrapped parameters - clunky code
     wrap_mask, nowrap_mask, idx_mask = get_wrap_index(params)
@@ -728,7 +767,10 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
         # PLACEHOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
-        y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="y_ph")
+        if params['reduce'] == True or params['n_conv'] != None:
+            y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1, num_det], name="y_ph")
+        else:
+            y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="y_ph")
 
 
         # LOAD VICI NEURAL NETWORKS
@@ -736,10 +778,12 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', wrap_mask, nowrap_mask, n_input1=z_dimension, 
                                                      n_input2=ysh_conv, n_output=xsh1, n_weights=n_weights_r2, 
                                                      n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                     filter_size=filter_size, maxpool=maxpool, n_conv=n_conv)
+                                                     filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
+                                                     strides=strides,num_det=num_det)
         r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, n_weights=n_weights_r1,   # generates params for r1(z|y)
                                                     n_modes=n_modes, n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                    filter_size=filter_size, maxpool=maxpool, n_conv=n_conv)
+                                                    filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
+                                                    strides=strides, num_det=num_det)
         #r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, 1, n_weights_r1, n_modes, n_hlayers)
@@ -748,7 +792,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=ysh_conv, n_output=z_dimension, 
                                                         n_weights=n_weights_q, n_hlayers=n_hlayers, drate=drate, 
-                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv)  
+                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv,strides=strides,num_det=num_det)  
 
         # reduce the y data size
         y_conv = r2_conv.dimensionanily_reduction(y_ph)
@@ -819,7 +863,10 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     # ESTIMATE TEST SET RECONSTRUCTION PER-PIXEL APPROXIMATE MARGINAL LIKELIHOOD and draw from q(x|y)
     ns = params['n_samples'] # number of samples to save per reconstruction
 
-    y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale
+    if params['reduce'] == True or params['n_conv'] != None:
+        y_data_test_exp = np.tile(y_data_test,(ns,1,1))/y_normscale
+    else:
+        y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale
     run_startt = time.time()
     #XS = session.run(r2_xzy_samp,feed_dict={y_ph:y_data_test_exp})
     xs, loc, scale, mode_weights = session.run([r2_xzy_samp,r2_xzy_loc,r2_xzy_scale,r1_weight],feed_dict={y_ph:y_data_test_exp})

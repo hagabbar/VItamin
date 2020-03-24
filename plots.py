@@ -522,7 +522,10 @@ class make_plots:
             if self.params['load_plot_data'] == False:     
                 for cnt in range(Npp):
 
-                    y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
+                    if self.params['reduce'] == True or self.params['n_conv'] != None:
+                        y = sig_test[cnt,:].reshape(1,sig_test.shape[1],sig_test.shape[2])
+                    else:
+                        y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
 
                     # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
                     # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
@@ -843,7 +846,6 @@ class make_plots:
                 logbins = np.logspace(-1,2.5,50)
 
                 if samplers[i] == 'vitamin' or samplers[::-1][j] == 'vitamin':
-
 #                    logbins = 25
 #                    logbins = np.logspace(-1,2.5,50)
                     axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[::-1][j]),zorder=2)

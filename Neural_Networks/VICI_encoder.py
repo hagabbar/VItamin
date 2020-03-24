@@ -1,6 +1,8 @@
 import collections
 
-import tensorflow as tf
+#import tensorflow as tf
+import tensorflow.compat.v1 as tf
+tf.disable_v2_behavior()
 import numpy as np
 import math as m
 
@@ -13,7 +15,7 @@ SMALL_CONSTANT = 1e-6
 
 class VariationalAutoencoder(object):
 
-    def __init__(self, name, n_input=256, n_output=4, n_weights=2048, n_modes=2, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2):
+    def __init__(self, name, n_input=256, n_output=4, n_weights=2048, n_modes=2, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, strides=1, num_det=1):
         
         self.n_input = n_input
         self.n_output = n_output
@@ -25,6 +27,8 @@ class VariationalAutoencoder(object):
         self.n_modes = n_modes
         self.drate = drate
         self.maxpool = maxpool
+        self.strides = strides
+        self.num_det = num_det
 
         network_weights = self._create_weights()
         self.weights = network_weights
@@ -37,11 +41,11 @@ class VariationalAutoencoder(object):
  
             # Reshape input to a 3D tensor - single channel
             if self.n_conv is not None:
-                conv_pool = tf.reshape(x, shape=[-1, 1, x.shape[1], 1])
+                conv_pool = tf.reshape(x, shape=[-1, 1, x.shape[1], self.num_det])
                 for i in range(self.n_conv):
                     weight_name = 'w_conv_' + str(i)
                     bias_name = 'b_conv_' + str(i)
-                    conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_encoder'][weight_name],strides=1,padding='SAME'),self.weights['VICI_encoder'][bias_name])
+                    conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_encoder'][weight_name],strides=[1,1,self.strides,1],padding='SAME'),self.weights['VICI_encoder'][bias_name])
                     conv_post = self.nonlinearity(conv_pre)
                     conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
                     conv_pool = tf.nn.max_pool(conv_dropout,ksize=[1, 1, self.maxpool, 1],strides=[1, 1, self.maxpool, 1],padding='SAME')
