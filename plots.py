@@ -127,12 +127,16 @@ class make_plots:
 
             return ks_mcmc_arr, ks_inn_arr, ad_mcmc_arr, ad_inn_arr, 0, 0
 
-        def load_test_set(model,sig_test,par_test,y_normscale,bounds,sampler='dynesty1'):
+        def load_test_set(model,sig_test,par_test,y_normscale,bounds,sampler='dynesty1',vitamin_pred_made=None):
             """
             load requested test set
             """
 
             if sampler=='vitamin1' or sampler=='vitamin2':
+
+                # check if vitamin test posteriors have already been generated
+                if vitamin_pred_made != None:
+                    return vitamin_pred_made[0], vitamin_pred_made[1]
 
                 VI_pred_all = []
                 for i in range(params['r']*params['r']):
@@ -141,6 +145,8 @@ class make_plots:
                                                              y_normscale,
                                                              "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                     VI_pred_all.append(VI_pred)
+
+                    print('Generated vitamin preds %d/%d' % (int(i),int(params['r']*params['r'])))
 
                 VI_pred_all = np.array(VI_pred_all)
 
@@ -512,62 +518,56 @@ class make_plots:
             pass
 #            os.remove('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'])
 #            hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'w')
-         
-        # make vitamin p-p plots
-        confidence_pp = np.zeros((len(self.params['samplers'])-1,int(self.params['r']**2)+2))
-        for j in range(len(self.params['inf_pars'])):
-            pp = np.zeros((self.params['r']**2)+2)
-            pp[0] = 0.0
-            pp[1] = 1.0
-            if self.params['load_plot_data'] == False:     
-                for cnt in range(Npp):
+        pp = np.zeros(((self.params['r']**2)+2,len(self.params['inf_pars']))) 
+        for cnt in range(Npp):
 
-                    if self.params['reduce'] == True or self.params['n_conv'] != None:
-                        y = sig_test[cnt,:].reshape(1,sig_test.shape[1],sig_test.shape[2])
-                    else:
-                        y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
-
-                    # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                    # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                    x, _, _, dt,_  = model.run(self.params, y, np.shape(par_test)[1],
-                                                         normscales,
-                                                         "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
-
-                    # Apply mask
-                    x = x.T
-                    sampset_1 = x
-                    del_cnt = 0
-                    # iterate over each sample
-                    for i in range(sampset_1.shape[1]):
-                        # iterate over each parameter
-                        for k,q in enumerate(self.params['inf_pars']):
-                            # if sample out of range, delete the sample
-                            if sampset_1[k,i] < 0.0 or sampset_1[k,i] > 1.0:
-                                x = np.delete(x,del_cnt,axis=1)
-                                del_cnt-=1
-                                break
-                            # check m1 > m2
-                            elif q == 'mass_1' or q == 'mass_2':
-                                m1_idx = np.argwhere(self.params['inf_pars']=='mass_1')
-                                m2_idx = np.argwhere(self.params['inf_pars']=='mass_2')
-                                if sampset_1[m1_idx,i] < sampset_1[m2_idx,i]:
-                                    x = np.delete(x,del_cnt,axis=1)
-                                    del_cnt-=1
-                                    break
-                        del_cnt+=1
-
-                    pp[cnt+2] = self.pp_plot(pos_test[cnt,j],x[j,:])
-                    print('Computed param %d p-p plot iteration %d/%d' % (j,int(cnt)+1,int(Npp)))
-                # Save vitamin pp plot data
-#                hf.create_dataset('vitamin_param%d_pp' % j, data=pp)
+            # generate Vitamin samples
+            if self.params['reduce'] == True or self.params['n_conv'] != None:
+                y = sig_test[cnt,:].reshape(1,sig_test.shape[1],sig_test.shape[2])
             else:
-                pp = np.array(hf['vitamin_param%d_pp' % j] )      
+                y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
+             # The trained inverse model weights can then be used to infer a probability density of solutions 
+#given new measurements
+            x, _, _, dt,_  = model.run(self.params, y, np.shape(par_test)[1],
+                                                 normscales,
+                                                 "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
+
+            # Apply mask
+            x = x.T
+            sampset_1 = x   
+            del_cnt = 0
+            # iterate over each sample   during inference training
+            for i in range(sampset_1.shape[1]):
+                # iterate over each parameter
+                for k,q in enumerate(self.params['inf_pars']):
+                    # if sample out of range, delete the sample                                              the y data (size changes by factor of  n_filter/(2**n_redsteps) )
+                    if sampset_1[k,i] < 0.0 or sampset_1[k,i] > 1.0:
+                        x = np.delete(x,del_cnt,axis=1)   
+                        del_cnt-=1
+                        break
+                    # check m1 > m2
+                    elif q == 'mass_1' or q == 'mass_2':
+                        m1_idx = np.argwhere(self.params['inf_pars']=='mass_1')
+                        m2_idx = np.argwhere(self.params['inf_pars']=='mass_2')
+                        if sampset_1[m1_idx,i] < sampset_1[m2_idx,i]:
+                            x = np.delete(x,del_cnt,axis=1)
+                            del_cnt-=1
+                            break    
+                del_cnt+=1
+            confidence_pp = np.zeros((len(self.params['samplers'])-1,int(self.params['r']**2)+2))
+            for j in range(len(self.params['inf_pars'])):
+                pp[0,j] = 0.0
+                pp[1,j] = 1.0
+                pp[cnt+2,j] = self.pp_plot(pos_test[cnt,j],x[j,:])
+#                    pp[cnt+2] = self.pp_plot(pos_test[cnt,j],x[j,int(cnt*self.params['n_samples']):int((cnt+1)*self.params['n_samples'])])
+                print('Computed param %d p-p plot iteration %d/%d' % (j,int(cnt)+1,int(Npp)))
+
+        # plot the pp plot
+        for j in range(len(self.params['inf_pars'])):        
             if j == 0:
-                axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp),'-',color='red',linewidth=2,zorder=50,label=r'$\textrm{VItamin}$')
+                axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp[:,j]),'-',color='red',linewidth=1,zorder=50,label=r'$\textrm{VItamin}$',alpha=0.5)
             else:
-                axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp),'-',color='red',linewidth=2,zorder=50) 
-      
-#        confidence_pp[0,:] = np.sort(pp)
+                axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp[:,j]),'-',color='red',linewidth=1,zorder=50,alpha=0.5)
 
         # make bilby p-p plots
         samplers = self.params['samplers']
@@ -603,9 +603,9 @@ class make_plots:
                 
                 # plot bilby sampler results
                 if j == 0:
-                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],label=r'$\textrm{%s}$' % samplers[i])
+                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],linewidth=1,label=r'$\textrm{%s}$' % samplers[i],alpha=0.5)
                 else:
-                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1])
+                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],linewidth=1,alpha=0.5)
 
             confidence_pp[i-1,:] = np.sort(pp_bilby)
 
@@ -706,11 +706,13 @@ class make_plots:
             """
             Compute KL for one test case.
             """
+            """
             # Remove samples outside of the prior mass distribution           
             cur_max = self.params['n_samples']
-
+            
             # Iterate over parameters and remove samples outside of prior
             if samplers[0] == 'vitamin1' or samplers[1] == 'vitamin2':
+
                 # Apply mask
                 sampset_1 = sampset_1.T
                 sampset_2 = sampset_2.T
@@ -762,11 +764,24 @@ class make_plots:
 
                 set1 = sampset_1
                 set2 = sampset_2
+            
             else:
 
                 set1 = sampset_1.T
                 set2 = sampset_2.T
       
+            """
+#            if samplers[0] == 'vitamin1':
+#                set1 = sampset_1.T
+#            else:
+#                set1 = sampset_1
+#            if samplers[1] == 'vitamin1':
+#                set2 = sampset_2.T
+#            else:
+#                set2 = sampset_2                                                                                         
+            set1 = sampset_1.T
+            set2 = sampset_2.T
+
             kl_samps = []
             n_samps = self.params['n_samples']
             n_pars = len(self.params['inf_pars'])
@@ -777,12 +792,11 @@ class make_plots:
             q = gaussian_kde(set2 + SMALL_CONSTANT)
             log_diff = np.log(p(set1 + SMALL_CONSTANT)/q(set1 + SMALL_CONSTANT))
             # Compute KL, but ignore values equal to infinity
-#            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
-            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff[log_diff != np.inf])
+            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
+#            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff[log_diff != np.inf])
 
-            kl_arr = kl_result   
 
-            return kl_arr
+            return kl_result
    
         # Define variables 
         params = self.params
@@ -802,13 +816,14 @@ class make_plots:
                   '#ffc107','#1aff1a','#377eb8',
                   '#fefe62','#d35fb7','#dc3220']
         label_idx = 0
+        vi_pred_made = None
 
 #        if params['load_plot_data'] == False:
             # Create dataset to save KL divergence results for later plotting
 #            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
 #        else:
 #            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
-        
+      
         for i in range(len(usesamps)):
             for j in range(tmp_idx):
 
@@ -816,15 +831,23 @@ class make_plots:
                 if samplers[i] == samplers[::-1][j]:
                     print_cnt+=1
                     sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
-                    if self.params['load_plot_data'] == False:
-                        set1,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
-                        set2,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
+                    # currently not doing KL of approaches with themselves, so skip here
                     continue
+                    if self.params['load_plot_data'] == False:
+                        set1,time1 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
+                        set2,time2 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
                 else:
                     sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
+                   
                     if self.params['load_plot_data'] == False:
-                        set1,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
-                        set2,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
+                        set1,time1 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1,vitamin_pred_made=vi_pred_made)
+                        set2,time2 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2,vitamin_pred_made=vi_pred_made)
+
+                        # check if vitamin test posteriors were generated for the first time
+                        if sampler1 == 'vitamin1' and vi_pred_made == None:
+                            vi_pred_made = [set1,time1]
+                        elif sampler2 == 'vitamin1' and vi_pred_made == None:
+                            vi_pred_made = [set2,time2]
 
                 if self.params['load_plot_data'] == True:
                     tot_kl = np.array(hf['%s-%s' % (sampler1,sampler2)])
@@ -853,10 +876,10 @@ class make_plots:
                 else:
                     
                     if label_idx == 0:
-                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
+                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
                         label_idx += 1
                     else:
-                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color='grey',zorder=1)
+                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',zorder=1)
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
                     print('Mean total KL: %s' % str(np.mean(tot_kl)))
 
@@ -865,7 +888,7 @@ class make_plots:
 
             tmp_idx -= 1
             if self.params['load_plot_data'] == False:
-                runtime[sampler1] = time
+                runtime[sampler1] = time1
 
 
 #        if self.params['load_plot_data'] == False:

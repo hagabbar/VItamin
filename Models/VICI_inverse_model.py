@@ -144,7 +144,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     z_dimension = params['z_dimension']
     bs = params['batch_size']
     filt_siz = params['filter_size']
-    filt_ch = params['filter_chnnels']
     n_weights_r1 = params['n_weights_r1']
     n_weights_r2 = params['n_weights_r2']
     n_weights_q = params['n_weights_q']
@@ -367,13 +366,13 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 
                 # run a training pass and extract parameters (do it multiple times for ease of reading)
                 # get q(z) data
-                q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+#                q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
           
                 # get r1(z) data
-                r1_z_locs, r1_z_scales, r1_samp, r1_z_weights_plot_data = session.run([r1_loc,r1_scale,r1_zy_samp,r1_weight], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+#                r1_z_locs, r1_z_scales, r1_samp, r1_z_weights_plot_data = session.run([r1_loc,r1_scale,r1_zy_samp,r1_weight], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
                 
                 # get r2(x) data
-                r2_loc, r2_scale = session.run([r2_xzy_mean, r2_xzy_scale], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
+#                r2_loc, r2_scale = session.run([r2_xzy_mean, r2_xzy_scale], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
 
                 """ 
                 try:
@@ -544,7 +543,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             # just run the network on the test data
             for j in range(params['r']*params['r']):
 
-                """
+                
                 # Make single waveform w/multiple noise real mode weight histogram
                 if j == 0:
                     mode_weights_all = []
@@ -553,10 +552,20 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                         # Make new noise realization of test waveform
                         y_data_mode_test = y_data_test_noisefree[j] + np.random.normal(0,1,size=(1,int(params['ndata']*len(fixed_vals['det']))))
 
+                        if params['reduce'] == True or params['n_conv'] != None:
+                            _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
+                                                 y_normscale,
+                                                 "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])    
+                        else:
+                            _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
+                                                 y_normscale,
+                                                 "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+
                         # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                        _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([1,-1]), np.shape(x_data_test)[1],
-                                                                        y_normscale,
-                                                                        "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+#                        _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([1,-1]), np.shape(x_data_test)[1],
+#                                                                        y_normscale,
+#                                                                        "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+                        print('Generated mode weights for noise realization %d/%d' % (n+1,100))
                         mode_weights_all.append([mode_weights])
 
                     mode_weights_all = np.array(mode_weights_all)
@@ -592,7 +601,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                     except:
                         pass
                     print('Made multiple noise real mode plots')
-                """
+                
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
                 if params['reduce'] == True or params['n_conv'] != None:
                     XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
@@ -689,7 +698,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             except:
                  pass            
 
-            
+            """        
             # plot the weights batch histogram
             try:
                 density_flag = False
@@ -719,6 +728,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.close()
             except:
                 pass
+            """
             
 
     return            

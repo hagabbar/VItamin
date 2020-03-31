@@ -8,7 +8,7 @@
 import argparse
 import numpy as np
 import tensorflow as tf
-#tf.enable_eager_execution()
+#tf.compat.v1.enable_eager_execution()
 import scipy.io as sio
 import scipy.misc as mis
 import h5py
@@ -75,7 +75,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -86,9 +86,9 @@ def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run116' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run129' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = 'test_run' #'9par_256Hz_3det_case_256test'
-    r = 5                        # number of test samples to use for plotting
+    r = 6                        # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
     tot_dataset_size = int(1e6)    # total number of training samples to use
 
@@ -96,7 +96,6 @@ def get_params():
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
         ndata = ndata,
-        image_size = [1,ndata],        # Images Size
         run_label=run_label,            # label for run
         bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
         tot_dataset_size = tot_dataset_size,
@@ -106,16 +105,16 @@ def get_params():
         n_samples = 8000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=32,               # batch size inference model (inverse reconstruction)
+        batch_size=64,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
-        n_modes=10,                  # number of modes in the latent space
-        n_hlayers=3,                # the number of hidden layers in each network
+        n_modes=16,                  # number of modes in the latent space
+        n_hlayers=1,                # the number of hidden layers in each network
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,
-        n_conv = 1,                # number of convolutional layers to use in each part of the networks. None if not used
-        n_filters = 18,
-        filter_size = 2,
+        n_conv = 5,                # number of convolutional layers to use in each part of the networks. None if not used
+        n_filters = int(18),
+        filter_size = 5,
         drate = 0.0,
         maxpool = 1,
         strides = 1,
@@ -123,11 +122,10 @@ def get_params():
         ramp_end = 1e5,
         save_interval=50000,           # interval at which to save inference model weights
         plot_interval=50000,           # interval over which plotting is done
-        z_dimension=int(96*1),                # 24 number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = 768,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = 768,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = 768,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        filter_chnnels = 1,
+        z_dimension=int(96),                # 24 number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = 500,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = 500,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = 500,             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
         rand_pars=rand_pars,
@@ -145,7 +143,7 @@ def get_params():
         pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test',
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
         load_plot_data=False,                                                  # use old plotting data
-        samplers=['vitamin','dynesty','cpnest'],#,'ptemcee','emcee'],          # samplers to use when plotting
+        samplers=['vitamin','cpnest','dynesty'],#,'ptemcee','emcee'],          # samplers to use when plotting
 
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         #do_normscale=True,                    # if true normalize parameters
@@ -166,7 +164,8 @@ def get_params():
     return params
 
 def load_data(input_dir,inf_pars,load_condor=False):
- 
+#    tf.compat.v1.enable_eager_execution() 
+
     # load generated samples back in
     train_files = []
     if type("%s" % input_dir) is str:
@@ -177,6 +176,12 @@ def load_data(input_dir,inf_pars,load_condor=False):
         filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))
     else:
         filenames = os.listdir(dataLocations[0])
+
+#    data['x_data'] = np.zeros((int(params['tot_dataset_size']/params['tset_split']),params['tset_split'],1,len(params['inf_pars'])))
+#    data['y_data_noisefree'] = np.zeros((int(params['tot_dataset_size']/params['tset_split']),1,params['tset_split'],len(fixed_vals['det']),params['ndata']))
+#    data['y_data_noisy'] = np.zeros((int(params['tot_dataset_size']/params['tset_split']),1,params['tset_split'],len(fixed_vals['det']),params['ndata']))
+#    data['rand_pars'] = np.zeros((len(params['inf_pars'])))
+
     for filename in filenames:
         try:
             print(filename)
@@ -193,7 +198,8 @@ def load_data(input_dir,inf_pars,load_condor=False):
             print('Could not load requested file')
             continue
 
-
+#    print(np.array(data['x_data']).shape,np.array(data['y_data_noisefree']).shape,np.array(data['y_data_noisy']).shape,np.array(data['rand_pars']).shape)
+#    exit()
     # extract the prior bounds
     bounds = {}
     for k in data_temp['rand_pars']:
@@ -400,11 +406,11 @@ if args.train:
             j += 1
 
         # Make corner plot of VItamin posterior samples
-        figure = corner.corner(XS, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
+#        figure = corner.corner(XS, labels=params['inf_pars'],
+#                       quantiles=[0.16, 0.5, 0.84],
                        #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       truths=x_data_test[i,:],
-                       show_titles=True, title_kwargs={"fontsize": 12})
+#                       truths=x_data_test[i,:],
+#                       show_titles=True, title_kwargs={"fontsize": 12})
 
         if i_idx == 0:
             XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
@@ -423,7 +429,7 @@ if args.train:
 
             x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
 
-        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
+#        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
         i_idx_use.append(i)
         i+=1
         i_idx+=1
@@ -469,15 +475,22 @@ if args.test:
     # load the noisefree training data back in
     x_data_train, y_data_train, _, y_normscale = load_data(params['train_set_dir'],params['inf_pars'])
 
+    # TODO: remove this when not doing debugging
+    print('YOU ARE CURRENTLY IN DEBUGGING MODE. REMOVE THIS LINE IF NOT!!')
+    y_normscale = 36.43879218007172
+
     # load the noisy testing data back in
     x_data_test, y_data_test_noisefree, y_data_test,_ = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
 
+    # Make directory for plots
+    os.system('mkdir -p %s/latest_%s' % (params['plot_dir'],params['run_label']))
+
     # plot test waveforms
-    for i in range(y_data_test.shape[0]):
-        plt.plot(y_data_test[i,0,:])
-        plt.plot(y_data_test_noisefree[i,0,:])
-        plt.savefig('%s/latest_%s/waveform_%d.png' % (params['plot_dir'],params['run_label'],i))
-        plt.close()
+#    for i in range(y_data_test.shape[0]):
+#        plt.plot(y_data_test[i,0,:])
+#        plt.plot(y_data_test_noisefree[i,0,:])
+#        plt.savefig('%s/latest_%s/waveform_%d.png' % (params['plot_dir'],params['run_label'],i))
+#        plt.close()
 
     # reshape arrays for multi-detector
     y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
@@ -562,10 +575,10 @@ if args.test:
 #                       show_titles=True, title_kwargs={"fontsize": 12})
 
         if i_idx == 0:
-            XS_all = np.expand_dims(XS[-params['n_samples']:,:], axis=0)
+            XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
         else:
             # save all posteriors in array
-            XS_all = np.vstack((XS_all,np.expand_dims(XS[-params['n_samples']:,:], axis=0)))
+            XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
 
 
         for q_idx,q in enumerate(params['inf_pars']):
@@ -599,7 +612,7 @@ if args.test:
 #        y_data_test = y_data_test.reshape(y_data_test.shape[0],params['ndata'],len(fixed_vals['det']))
 
     VI_pred_all = []
-    make_corner_plots = True   
+    make_corner_plots = False   
 
     for i in range(params['r']*params['r']):
 
@@ -608,7 +621,7 @@ if args.test:
 
         # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
         if params['reduce'] == True or params['n_conv'] != None:
-             VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, y_data_test[i].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
+             VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, np.expand_dims(y_data_test[i],axis=0), np.shape(x_data_test)[1],
                                                          y_normscale,
                                                          "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
         else:
@@ -697,7 +710,7 @@ if args.test:
         # plot waveform in upper-right hand corner
         ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[i,:params['ndata']],color='cyan',zorder=50)
         if params['reduce'] == True or params['n_conv'] != None:
-            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],1],color='darkblue')
+            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],0],color='darkblue')
         else:
             ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata']],color='darkblue')
         ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
@@ -716,7 +729,6 @@ if args.test:
         VI_pred_all.append(VI_pred)
 
     VI_pred_all = np.array(VI_pred_all)
-    exit()
 
     # Generate final results plots
     plotter = plots.make_plots(params,XS_all,VI_pred_all,x_data_test)
