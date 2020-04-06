@@ -25,7 +25,7 @@ class VariationalAutoencoder(object):
         self.red = red
         self.weights = self._create_weights()
         self.nonlinearity = tf.nn.relu
-        self.outshape = [-1,int(n_input*filter_channels/2**n_convsteps)] if red==False else [-1,int(n_input/2**n_convsteps)]
+        self.outshape = [-1,int(n_input*filter_channels[0]/2**n_convsteps)] if red==False else [-1,int(n_input/2**n_convsteps)]
 
     def dimensionanily_reduction(self,x):
         with tf.name_scope(self.name):

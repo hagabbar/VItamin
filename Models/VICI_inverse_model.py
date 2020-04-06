@@ -153,7 +153,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     n_filters = params['n_filters']
     filter_size = params['filter_size']
     maxpool = params['maxpool']
-    strides = params['strides']
+    conv_strides = params['conv_strides']
+    pool_strides = params['pool_strides']
     red = params['reduce']
     if n_convsteps != None:
         ysh_conv = int(ysh*n_filters/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
@@ -189,15 +190,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                                                      n_input1=z_dimension, n_input2=ysh_conv, n_output=xsh[1], 
                                                      n_weights=n_weights_r2, n_hlayers=n_hlayers, 
                                                      drate=drate, n_filters=n_filters, filter_size=filter_size,
-                                                     maxpool=maxpool, n_conv=n_conv, strides=strides, num_det=num_det)
+                                                     maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det)
         r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, 
                                                      n_weights=n_weights_r1, n_modes=n_modes, 
                                                      n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, strides=strides, num_det=num_det)
+                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=ysh_conv, 
                                                         n_output=z_dimension, n_weights=n_weights_q, 
                                                         n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, strides=strides, num_det=num_det) # used to sample from q(z|x,y)?
+                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
 
         # reduce the dimensionality of y using convolutional neural network
@@ -540,68 +541,60 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 """
                 
 
+            n_mode_weight_copy = 100 # must be a multiple of 50
             # just run the network on the test data
             for j in range(params['r']*params['r']):
 
                 
                 # Make single waveform w/multiple noise real mode weight histogram
-                if j == 0:
-                    mode_weights_all = []
-                    # Iterate over specified number of noise realizations
-                    for n in range(100):
-                        # Make new noise realization of test waveform
-                        y_data_mode_test = y_data_test_noisefree[j] + np.random.normal(0,1,size=(1,int(params['ndata']*len(fixed_vals['det']))))
+                mode_weights_all = []
+                for n in range(0,n_mode_weight_copy,50):
+                    y_data_mode_test = np.tile(y_data_test_noisefree[j],(50,1)) + np.random.normal(0,1,size=(50,int(params['ndata']*len(fixed_vals['det']))))
 
-                        if params['reduce'] == True or params['n_conv'] != None:
-                            _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
-                                                 y_normscale,
-                                                 "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])    
-                        else:
-                            _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
+                    if params['reduce'] == True or params['n_conv'] != None:
+                            _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([50,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
+                                                         y_normscale,
+                                                         "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+                    else:
+                        _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([1,-1]), np.shape(x_data_test)[1],
                                                  y_normscale,
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
+                    print('Generated mode weights for noise realization %d/%d' % (n+50,n_mode_weight_copy))
+                    mode_weights_all.append([mode_weights])
 
-                        # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-#                        _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([1,-1]), np.shape(x_data_test)[1],
-#                                                                        y_normscale,
-#                                                                        "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
-                        print('Generated mode weights for noise realization %d/%d' % (n+1,100))
-                        mode_weights_all.append([mode_weights])
+                mode_weights_all = np.array(mode_weights_all)
+                mode_weights_all = mode_weights_all.reshape((mode_weights_all.shape[0]*mode_weights_all.shape[2],mode_weights_all.shape[3]))
 
-                    mode_weights_all = np.array(mode_weights_all)
-                    mode_weights_all = mode_weights_all.reshape((mode_weights_all.shape[0]*mode_weights_all.shape[2],mode_weights_all.shape[3]))
+                # plot the weights mult noise histogram
+                try:
+                    density_flag = False
+                    plt.figure()
+                    for c in range(params['n_modes']):
+                        plt.hist(mode_weights_all[:,c],25,alpha=0.5,density=density_flag)
+                    plt.xlabel('iteration')
+                    plt.ylabel('KL')
+                    #plt.legend()
+                    plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_linear_%d.png' % (params['plot_dir'],params['run_label'],i,j))
+                    plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_linear_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
+                    plt.close('all')
+                except:
+                    pass
 
-                    # plot the weights mult noise histogram
-                    try:
-                        density_flag = False
-                        plt.figure()
-                        for c in range(params['n_modes']):
-                            plt.hist(mode_weights_all[:,c],25,alpha=0.5,density=density_flag)
-                        plt.xlabel('iteration')
-                        plt.ylabel('KL')
-                        #plt.legend()
-                        plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_linear.png' % (params['plot_dir'],params['run_label'],i))
-                        plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_linear.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                        plt.close()
-                    except:
-                        pass
+                # plot the weights mult noise histogram
+                try:
+                    plt.figure()
+                    for c in range(params['n_modes']):
+                        plt.hist(mode_weights_all[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
+                    plt.xlabel('Mixture weight')
+                    plt.ylabel('p(w)')
+                    plt.legend()
+                    plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_log.png' % (params['plot_dir'],params['run_label'],i))
+                    plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                    plt.close('all')
+                except:
+                    pass
+                print('Made multiple noise real mode plots')
 
-                    # plot the weights mult noise histogram
-
-                    try:
-                        plt.figure()
-                        for c in range(params['n_modes']):
-                            plt.hist(mode_weights_all[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
-                        plt.xlabel('Mixture weight')
-                        plt.ylabel('p(w)')
-                        plt.legend()
-                        plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_log.png' % (params['plot_dir'],params['run_label'],i))
-                        plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                        plt.close()
-                    except:
-                        pass
-                    print('Made multiple noise real mode plots')
-                
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
                 if params['reduce'] == True or params['n_conv'] != None:
                     XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
@@ -642,6 +635,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                        show_titles=True, title_kwargs={"fontsize": 12}, fig=figure)
                 plt.savefig('%s/corner_plot_%s_%d-%d.png' % (params['plot_dir'],params['run_label'],i,j))
                 plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
+                plt.close('all')
                 print('Made corner plot %d' % j)
 
 
@@ -691,10 +685,10 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.xlabel('iteration')
                 plt.ylabel('cost')
                 plt.legend()
-                plt.savefig('%s/cost_%s.png' % (params['plot_dir'],params['run_label']))
+                plt.savefig('%s/latest_%s/cost_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
                 plt.ylim([np.min(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,0]), np.max(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,1])])
-                plt.savefig('%s/cost_zoom_%s.png' % (params['plot_dir'],params['run_label']))
-                plt.close()
+                plt.savefig('%s/latest_%s/cost_zoom_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                plt.close('all')
             except:
                  pass            
 
@@ -758,11 +752,12 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         ysh_conv = int(ysh1)
     drate = params['drate']
     maxpool = params['maxpool']
-    strides = params['strides']
+    conv_strides = params['conv_strides']
+    pool_strides = params['pool_strides']
     if params['reduce'] == True or params['n_conv'] != None:
         num_det = np.shape(y_data_test)[2]
     else:
-        num_det = None
+        num_det = Nones
 
     # identify the indices of wrapped and non-wrapped parameters - clunky code
     wrap_mask, nowrap_mask, idx_mask = get_wrap_index(params)
@@ -789,11 +784,11 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
                                                      n_input2=ysh_conv, n_output=xsh1, n_weights=n_weights_r2, 
                                                      n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
                                                      filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
-                                                     strides=strides,num_det=num_det)
+                                                     conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det)
         r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, n_weights=n_weights_r1,   # generates params for r1(z|y)
                                                     n_modes=n_modes, n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
                                                     filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
-                                                    strides=strides, num_det=num_det)
+                                                    conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det)
         #r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, 1, n_weights_r1, n_modes, n_hlayers)
@@ -802,7 +797,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=ysh_conv, n_output=z_dimension, 
                                                         n_weights=n_weights_q, n_hlayers=n_hlayers, drate=drate, 
-                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv,strides=strides,num_det=num_det)  
+                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv,conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det)  
 
         # reduce the y data size
         y_conv = r2_conv.dimensionanily_reduction(y_ph)
