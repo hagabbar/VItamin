@@ -20,6 +20,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import time
+from time import strftime
 import corner
 import glob
 
@@ -29,6 +30,13 @@ from bilby_pe import run
 from Neural_Networks import batch_manager
 from data import chris_data
 import plots
+
+import skopt
+from skopt import gp_minimize, forest_minimize
+from skopt.space import Real, Categorical, Integer
+from skopt.plots import plot_convergence
+from skopt.plots import plot_objective, plot_evaluations
+from skopt.utils import use_named_args
 
 parser = argparse.ArgumentParser(description='A tutorial of argparse!')
 parser.add_argument("--gen_train", default=False, help="generate the training data")
@@ -75,7 +83,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -86,11 +94,11 @@ def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run8' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run9' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = 'test_run' #'9par_256Hz_3det_case_256test'
     r = 2                        # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
-    tot_dataset_size = int(1e5)    # total number of training samples to use
+    tot_dataset_size = int(1e6)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
@@ -101,32 +109,35 @@ def get_params():
         tot_dataset_size = tot_dataset_size,
         tset_split = tset_split, 
         plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
+        hyperparam_optim = True,      # optimize hyperparameters for model 
+        hyperparam_optim_stop = 200000, # stopping point of hyperparameter optimizer 
+        hyperparam_n_call = 30,       # number of optimization calls
         print_values=True,            # optionally print values every report interval
         n_samples = 2000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
-        initial_training_rate=0.005, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
+        initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=80,               # batch size inference model (inverse reconstruction)
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
         n_modes=16,                  # number of modes in the latent space
-        n_hlayers=4,                # the number of hidden layers in each network
+        n_hlayers=3,                # the number of hidden layers in each network
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,
-        n_conv = 2,                # number of convolutional layers to use in each part of the networks. None if not used
-        n_filters = [33,33],
-        filter_size = [5,5],
+        n_conv = 3,                # number of convolutional layers to use in each part of the networks. None if not used
+        n_filters = [33,33,33],
+        filter_size = [5,5,5],
         drate = 0.5,
-        maxpool = [1,1],
-        conv_strides = [1,1],
-        pool_strides = [1,1],
-        ramp_start = 1e3,
-        ramp_end = 1e4,
-        save_interval=50000,           # interval at which to save inference model weights
-        plot_interval=50000,           # interval over which plotting is done
-        z_dimension=int(96),                # 24 number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = [2048,2048,2048,2048],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = [2048,2048,2048,2048],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = [2048,2048,2048,2048],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        maxpool = [1,1,1],
+        conv_strides = [1,1,1],
+        pool_strides = [1,1,1],
+        ramp_start = 1e4,
+        ramp_end = 1e5,
+        save_interval=10000000,           # interval at which to save inference model weights
+        plot_interval=10000000,           # interval over which plotting is done
+        z_dimension=96,                # 24 number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = [1024,1024,1024],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = [1024,1024,1024],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = [1024,1024,1024],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,               # the timeseries length in seconds
         r = r,                                # the grid dimension for the output tests
         rand_pars=rand_pars,
@@ -163,6 +174,62 @@ def get_params():
         #whitening_factor = np.sqrt(float(ndata)) # whitening scale factor
     )
     return params
+
+kernel_1 = Integer(low=3, high=9, name='kernel_1')
+strides_1 = Integer(low=1, high=2, name='strides_1')
+pool_1 = Integer(low=1, high=2, name='pool_1')
+kernel_2 = Integer(low=3, high=9, name='kernel_2')
+strides_2 = Integer(low=1, high=2, name='strides_2')
+pool_2 = Integer(low=1, high=2, name='pool_2')
+kernel_3 = Integer(low=3, high=9, name='kernel_3')
+strides_3 = Integer(low=1, high=2, name='strides_3')
+pool_3 = Integer(low=1, high=2, name='pool_3')
+#kernel_4 = Integer(low=3, high=9, name='kernel_4')
+#strides_4 = Integer(low=1, high=2, name='strides_4')
+#pool_4 = Integer(low=1, high=2, name='pool_4')
+#kernel_5 = Integer(low=3, high=9, name='kernel_5')
+#strides_5 = Integer(low=1, high=2, name='strides_5')
+#pool_5 = Integer(low=1, high=2, name='pool_5')
+z_dimension = Integer(low=1, high=1000, name='z_dimension')
+n_modes = Integer(low=1, high=100, name='n_modes')
+
+dimensions = [kernel_1, 
+              strides_1,
+              pool_1,
+              kernel_2, 
+              strides_2,
+              pool_2,
+              kernel_3,
+              strides_3,
+              pool_3,
+              z_dimension,
+              n_modes]
+#              kernel_4,
+#              strides_4,
+#              pool_4,
+#              kernel_5,
+#              strides_5,
+#              pool_5]
+
+# Get training/test data and parameters of run
+params=get_params()
+f = open("params_%s.txt" % params['run_label'],"w")
+f.write( str(params) )
+f.close()
+
+default_hyperparams = [params['filter_size'][0],
+                       params['conv_strides'][0],
+                       params['maxpool'][0],
+                       params['filter_size'][1],
+                       params['conv_strides'][1],
+                       params['maxpool'][1],
+                       params['filter_size'][2],
+                       params['conv_strides'][2],
+                       params['maxpool'][2],
+                       params['z_dimension'],
+                       params['n_modes']
+                      ]
+best_loss = 1000
 
 def load_data(input_dir,inf_pars,load_condor=False):
 #    tf.compat.v1.enable_eager_execution() 
@@ -236,6 +303,92 @@ def load_data(input_dir,inf_pars,load_condor=False):
 
     return x_data, y_data, y_data_noisy, y_normscale
 
+@use_named_args(dimensions=dimensions)
+def hyperparam_fitness(kernel_1, strides_1, pool_1,
+                       kernel_2, strides_2, pool_2,
+                       kernel_3, strides_3, pool_3,
+                       z_dimension,n_modes):
+
+    # print hyper-parameters
+    # Print the hyper-parameters.
+    print('kernel_1: {}'.format(kernel_1))
+    print('strides_1: {}'.format(strides_1))
+    print('pool_1: {}'.format(pool_1))
+    print('kernel_2: {}'.format(kernel_2))
+    print('strides_2: {}'.format(strides_2))
+    print('pool_2: {}'.format(pool_2))
+    print('kernel_3: {}'.format(kernel_3))
+    print('strides_3: {}'.format(strides_3))
+    print('pool_3: {}'.format(pool_3))
+#    print('kernel_4: {}'.format(kernel_4))
+#    print('strides_4: {}'.format(strides_4))
+#    print('pool_4: {}'.format(pool_4))
+#    print('kernel_5: {}'.format(kernel_5))
+#    print('strides_5: {}'.format(strides_5))
+#    print('pool_5: {}'.format(pool_5))
+    print('z_dimension: {}'.format(z_dimension))
+    print('n_modes: {}'.format(n_modes))
+    print()
+
+    # set tunable hyper-parameters
+    params['filter_size'] = [kernel_1,kernel_2,kernel_3]
+    params['conv_strides'] = [strides_1,strides_2,strides_3]
+    params['maxpool'] = [pool_1,pool_2,pool_3]
+    params['pool_strides'] = [pool_1,pool_2,pool_3]
+    params['z_dimension'] = z_dimension
+    params['n_modes'] = n_modes
+
+    start_time = time.time()
+    print('start time: {}'.format(strftime('%X %x %Z'))) 
+    # Train model with given hyperparameters
+    VICI_loss, VICI_session, VICI_saver, VICI_savedir = VICI_inverse_model.train(params, x_data_train, y_data_train,
+                             x_data_test, y_data_test, y_data_test_noisefree,
+                             y_normscale,
+                             "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'],
+                             x_data_test, bounds, fixed_vals,
+                             XS_all)
+
+    end_time = time.time()
+    print('Run time : {} h'.format((end_time-start_time)/3600))
+
+    # Print the loss.
+    print()
+    print("Total loss: {0:.2}".format(VICI_loss))
+    print()
+
+    # update variable outside of this function using global keyword
+    global best_loss
+
+    # save model if new best model
+    if VICI_loss < best_loss:
+
+        # Save model 
+        save_path = VICI_saver.save(VICI_session,VICI_savedir)
+
+        # save hyperparameters
+        converged_hyperpar_dict = dict(filter_size = params['filter_size'],
+                                       conv_strides = params['conv_strides'],
+                                       maxpool = params['maxpool'],
+                                       pool_strides = params['pool_strides'],
+                                       z_dimension = params['z_dimension'],
+                                       n_modes = params['n_modes'])
+        f = open("inverse_model_dir_%s/converged_hyperparams.txt" % params['run_label'],"w")
+        f.write( str(params) )
+        f.close()
+
+        # update the best loss
+        best_loss = VICI_loss
+        
+        # Print the loss.
+        print()
+        print("New best loss: {0:.2}".format(best_loss))
+        print()
+
+    # clear tensorflow session
+    VICI_session.close()
+
+    return VICI_loss
+
 #####################################################
 # You will need two types of sets to train the model: 
 #
@@ -254,12 +407,6 @@ def load_data(input_dir,inf_pars,load_condor=False):
 #
 # All inputs and outputs are in the form of 2D arrays, where different objects are along dimension 0 and elements of the same object are along dimension 1
 #####################################################
-
-# Get training/test data and parameters of run
-params=get_params()
-f = open("params_%s.txt" % params['run_label'],"w")
-f.write( str(params) )
-f.close()
 
 # Make training samples
 if args.gen_train:
@@ -390,8 +537,6 @@ if args.train:
              par_min = q + '_min'
              par_max = q + '_max'
              data_temp[p] = h5py.File(filename, 'r')[p][:]
-             #bounds[par_max] = h5py.File(filename, 'r')[par_max][...].item()
-             #bounds[par_min] = h5py.File(filename, 'r')[par_min][...].item()
              if p == 'geocent_time_post':
                  data_temp[p] = data_temp[p] - params['ref_geocent_time']
 #                 Nsamp = data_temp[p].shape[0]
@@ -424,10 +569,6 @@ if args.train:
             par_min = q + '_min'
             par_max = q + '_max'
 
-            # rescale parameters back to their physical values
-#            if par_min == 'geocent_time_min':
-#                continue
-
             x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
 
 #        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
@@ -459,16 +600,33 @@ if args.train:
                 y_data_train_copy[i,:,j] = y_data_train[i,idx_range]
         y_data_train = y_data_train_copy
 
-#        y_data_test = y_data_test.reshape(y_data_test.shape[0],params['ndata'],len(fixed_vals['det']))
-#        y_data_train = y_data_train.reshape(y_data_train.shape[0],params['ndata'],len(fixed_vals['det']))
-#        y_data_test_noisefree = y_data_test_noisefree.reshape(y_data_test_noisefree.shape[0],params['ndata'],len(fixed_vals['det']))
+    # run hyperparameter optimization
+    if params['hyperparam_optim'] == True:
 
-    VICI_inverse_model.train(params, x_data_train, y_data_train,
-                             x_data_test, y_data_test, y_data_test_noisefree,
-                             y_normscale,
-                             "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'],
-                             x_data_test, bounds, fixed_vals,
-                             XS_all) 
+        hyperparam_fitness(x=default_hyperparams)
+
+        # Run optimization
+        search_result = gp_minimize(func=hyperparam_fitness,
+                            dimensions=dimensions,
+                            acq_func='EI', # Negative Expected Improvement.
+                            n_calls=params['hyperparam_n_call'],
+                            x0=default_hyperparams)
+
+        from skopt import dump
+        dump(search_result, 'search_result_store')
+
+        plot_convergence(search_result)
+        plt.savefig('%s/latest_%s/hyperpar_convergence.png' % (params['plot_dir'],params['run_label']))
+        print('Did a hyperparameter search') 
+
+    # train using user defined params
+    else:
+        VICI_inverse_model.train(params, x_data_train, y_data_train,
+                                 x_data_test, y_data_test, y_data_test_noisefree,
+                                 y_normscale,
+                                 "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'],
+                                 x_data_test, bounds, fixed_vals,
+                                 XS_all) 
 
 # if we are now testing the network
 if args.test:
@@ -485,13 +643,6 @@ if args.test:
 
     # Make directory for plots
     os.system('mkdir -p %s/latest_%s' % (params['plot_dir'],params['run_label']))
-
-    # plot test waveforms
-#    for i in range(y_data_test.shape[0]):
-#        plt.plot(y_data_test[i,0,:])
-#        plt.plot(y_data_test_noisefree[i,0,:])
-#        plt.savefig('%s/latest_%s/waveform_%d.png' % (params['plot_dir'],params['run_label'],i))
-#        plt.close()
 
     # reshape arrays for multi-detector
     y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])

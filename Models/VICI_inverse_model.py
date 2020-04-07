@@ -321,11 +321,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
         next_y_data /= y_normscale  # required for fast convergence
 
-        # reshape y data into channels last format
-#        if params['reduce'] == True or params['n_conv'] != None:
-#            next_y_data = next_y_data.reshape(next_y_data.shape[0],params['ndata'],len(fixed_vals['det']))
-#            next_y_data = next_y_data.reshape(next_y_data.shape[0],params['ndata'],len(fixed_vals['det']))
-
         # train to minimise the cost function
         session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
 
@@ -344,11 +339,18 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
         if i % params['save_interval'] == 0 and i > 0:
 
-            # Save model 
-            save_path = saver.save(session,save_dir)
+            if params['hyperparam_optim'] == False:
+                # Save model 
+                save_path = saver.save(session,save_dir)
+            else:
+                pass
+
+        # stop hyperparam optim training it and return cost+kl
+        if params['hyperparam_optim'] == True and i == params['hyperparam_optim_stop']:
+            return np.array(plotdata)[-1,2], session, saver, save_dir 
 
         if i % params['plot_interval'] == 0 and i>0:
-            
+
             # use the testing data for some plots
             for j in range(params['r']*params['r']):
 
