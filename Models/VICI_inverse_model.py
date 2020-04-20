@@ -50,11 +50,13 @@
 
 import numpy as np
 import time
+import os, sys,io
 #import tensorflow as tf
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 import tensorflow_probability as tfp
 import corner
+import bilby_pe
 
 #from Neural_Networks import OELBO_decoder_difference
 #from Neural_Networks import OELBO_encoder
@@ -74,6 +76,7 @@ import matplotlib.pyplot as plt
 #from data import make_samples
 
 tfd = tfp.distributions
+SMALL_CONSTANT = 1e-8
 
 # NORMALISE DATASET FUNCTION
 def tf_normalise_dataset(xp):
@@ -155,6 +158,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     maxpool = params['maxpool']
     conv_strides = params['conv_strides']
     pool_strides = params['pool_strides']
+    batch_norm = params['batch_norm']
     red = params['reduce']
     if n_convsteps != None:
         ysh_conv = int(ysh*n_filters/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
@@ -174,7 +178,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     graph = tf.Graph()
     session = tf.Session(graph=graph)
     with graph.as_default():
-        
+
         # PLACE HOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
         x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph") # params placeholder
@@ -190,22 +194,21 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                                                      n_input1=z_dimension, n_input2=ysh_conv, n_output=xsh[1], 
                                                      n_weights=n_weights_r2, n_hlayers=n_hlayers, 
                                                      drate=drate, n_filters=n_filters, filter_size=filter_size,
-                                                     maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det)
+                                                     maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm)
         r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, 
                                                      n_weights=n_weights_r1, n_modes=n_modes, 
                                                      n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det)
+                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=ysh_conv, 
                                                         n_output=z_dimension, n_weights=n_weights_q, 
                                                         n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det) # used to sample from q(z|x,y)?
+                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
 
         # reduce the dimensionality of y using convolutional neural network
 #        y_ph = conv_dr.dimensionanily_reduction(y_ph)
 
           
-        SMALL_CONSTANT = 1e-8
         #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
         ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_end)-tf.log(ramp_start))
@@ -290,8 +293,14 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         log_r1_q = bimix_gauss.log_prob(q_zxy_samp)   # evaluate the log prob of r1 at the q samples
         KL = tf.reduce_mean(log_q_q - log_r1_q)      # average over batch
 
+        if params['l2_loss']==True:
+            # apply l1 regularization
+            regularization_penalty =  tf.nn.l2_loss(r1_weight)
+        else:
+            regularization_penalty = 0
+
         # THE VICI COST FUNCTION
-        COST = cost_R + ramp*KL
+        COST = cost_R + ramp*KL + regularization_penalty
 
         # VARIABLES LISTS
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
@@ -307,19 +316,69 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
     print('Training Inference Model...')    
     # START OPTIMISATION OF OELBO
-    indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
+    if params['do_inf_training']:
+        indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
+    else:
+        indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
     plotdata = []
     for i in range(params['num_iterations']):
 
+        start = time.time()
         next_indices = indices_generator.next_indices()
 
-        # Make noise realizations and add to training data
-        next_x_data = x_data[next_indices,:]
-        if params['reduce'] == True or params['n_conv'] != None:
-            next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
+        # make infinite training data
+        if params['do_inf_training']:
+
+            make_new_set = True
+            if make_new_set == True:
+                _, signal_train, next_x_data, _ = bilby_pe.run(sampling_frequency=params['ndata']/params['duration'],
+                                                          duration=params['duration'],
+                                                          N_gen=10000,
+                                                          ref_geocent_time=params['ref_geocent_time'],
+                                                          bounds=bounds,
+                                                          fixed_vals=fixed_vals,
+                                                          rand_pars=params['rand_pars'],
+                                                          seed=params['training_data_seed']+i,
+                                                          label=params['run_label'],
+                                                          training=True)
+ 
+                next_y_data = np.zeros((signal_train.shape[0],signal_train.shape[2],signal_train.shape[1]))
+                for k in range(signal_train.shape[0]):
+                    for j in range(signal_train.shape[1]):
+                        next_y_data[k,:,j] = signal_train[k,j]
+
+                if params['reduce'] == True or params['n_conv'] != None:
+                    next_y_data = next_y_data + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
+                else:
+                    next_y_data = next_y_data + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
+                next_y_data /= y_normscale  # required for fast convergence        
+    
+                # normalise the data parameters
+                next_x_data = np.squeeze(next_x_data,axis=1)
+                for j,k in enumerate(params['rand_pars']):
+                    par_min = k + '_min'
+                    par_max = k + '_max'
+
+                    next_x_data[:,j]=( next_x_data[:,j] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])       
+                
+                # extract inference parameters
+                idx_par = []
+                for k in params['inf_pars']:
+                    print(k)
+                    for j,q in enumerate(params['rand_pars']):
+                        m = q
+                        if k==m:
+                            idx_par.append(j)
+                next_x_data =  next_x_data[:,idx_par] 
+
         else:
-            next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
-        next_y_data /= y_normscale  # required for fast convergence
+            # Make noise realizations and add to training data
+            next_x_data = x_data[next_indices,:]
+            if params['reduce'] == True or params['n_conv'] != None:
+                next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
+            else:
+                next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
+            next_y_data /= y_normscale  # required for fast convergence
 
         # train to minimise the cost function
         session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
@@ -327,15 +386,44 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # if we are in a report iteration extract cost function values
         if i % params['report_interval'] == 0 and i > 0:
 
+            # get training loss
             cost, kl, AB_batch = session.run([cost_R, KL, r1_weight], feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
-            plotdata.append([cost,kl,cost+kl])
+
+            # get validation loss on test set
+            cost_val, kl_val = session.run([cost_R, KL], feed_dict={bs_ph:y_data_test.shape[0], x_ph:x_data_test, y_ph:y_data_test/y_normscale, idx:i})
+            plotdata.append([cost,kl,cost+kl,cost_val,kl_val,cost_val+kl_val])
+
+            # Make loss plot
+            try:
+                plt.figure()
+                xvec = params['report_interval']*np.arange(np.array(plotdata).shape[0])
+                plt.semilogx(xvec,np.array(plotdata)[:,0],label='recon',color='blue',alpha=0.5)
+                plt.semilogx(xvec,np.array(plotdata)[:,1],label='KL',color='orange',alpha=0.5)
+                plt.semilogx(xvec,np.array(plotdata)[:,2],label='total',color='green',alpha=0.5)
+                plt.semilogx(xvec,np.array(plotdata)[:,3],label='recon_val',color='blue',linestyle='dotted')
+                plt.semilogx(xvec,np.array(plotdata)[:,4],label='KL_val',color='orange',linestyle='dotted')
+                plt.semilogx(xvec,np.array(plotdata)[:,5],label='total_val',color='green',linestyle='dotted')
+                #plt.ylim([-15,12])
+                plt.xlabel('iteration')
+                plt.ylabel('cost')
+                plt.legend()
+                plt.savefig('%s/latest_%s/cost_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                plt.ylim([np.min(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,0]), np.max(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,1])])
+                plt.savefig('%s/latest_%s/cost_zoom_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
+                plt.close('all')
+            except:
+                pass
 
             if params['print_values']==True:
                 print('--------------------------------------------------------------')
                 print('Iteration:',i)
-                print('Training Set -ELBO:',cost)
-                print('Approx KL Divergence:',kl)
-                print('Total cost:',kl + cost) 
+                print('Training -ELBO:',cost)
+                print('Validation -ELBO:',cost_val)
+                print('Training KL Divergence:',kl)
+                print('Validation KL Divergence:',kl_val)
+                print('Training Total cost:',kl + cost) 
+                print('Validation Total cost:',kl_val + cost_val)
+                print()
 
         if i % params['save_interval'] == 0 and i > 0:
 
@@ -344,6 +432,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 save_path = saver.save(session,save_dir)
             else:
                 pass
+
 
         # stop hyperparam optim training it and return cost+kl
         if params['hyperparam_optim'] == True and i == params['hyperparam_optim_stop']:
@@ -547,7 +636,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             # just run the network on the test data
             for j in range(params['r']*params['r']):
 
-                
+                """ 
                 # Make single waveform w/multiple noise real mode weight histogram
                 mode_weights_all = []
                 for n in range(0,n_mode_weight_copy,50):
@@ -596,7 +685,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 except:
                     pass
                 print('Made multiple noise real mode plots')
-
+                """
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
                 if params['reduce'] == True or params['n_conv'] != None:
                     XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
@@ -619,22 +708,23 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                     if np.isin(k, params['inf_pars']):
                         parnames.append(params['cornercorner_parnames'][k_idx])
 
-                figure = corner.corner(posterior_truth_test[j], labels=parnames,
-                       quantiles=[0.16, 0.84], color='blue',
-                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       levels=[0.68,0.90,0.95],
-                       truth_color='black',
-                       plot_datapoints=False,
-                       plot_density=False,
-                       show_titles=True, title_kwargs={"fontsize": 12})
-                corner.corner(XS, labels=parnames,
-                       quantiles=[0.16, 0.84], levels=[0.68,0.90,0.95],
-                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       color='red',
+                defaults_kwargs = dict(
+                    bins=50, smooth=0.9, label_kwargs=dict(fontsize=16),
+                    title_kwargs=dict(fontsize=16),
+                    truth_color='tab:orange', quantiles=[0.16, 0.84],
+                    levels=(0.68,0.90,0.95), density=True,
+                    plot_density=False, plot_datapoints=True,
+                    max_n_ticks=3)
+
+                figure = corner.corner(posterior_truth_test[j], **defaults_kwargs,labels=parnames,
+                       color='tab:blue',
+                       show_titles=True)
+                # compute weights, otherwise the 1d histograms will be different scales, could remove this
+                #weights = np.ones(len(XS)) * (len(posterior_truth_test[j]) / len(XS))
+                corner.corner(XS,**defaults_kwargs,labels=parnames,
+                       color='tab:red',
                        fill_contours=True,
-                       plot_datapoints=False,
-                       plot_density=False,
-                       show_titles=True, title_kwargs={"fontsize": 12}, fig=figure)
+                       show_titles=True, fig=figure)#, weights=weights)
                 plt.savefig('%s/corner_plot_%s_%d-%d.png' % (params['plot_dir'],params['run_label'],i,j))
                 plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                 plt.close('all')
@@ -683,6 +773,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.semilogx(xvec,np.array(plotdata)[:,0],label='recon')
                 plt.semilogx(xvec,np.array(plotdata)[:,1],label='KL')
                 plt.semilogx(xvec,np.array(plotdata)[:,2],label='total')
+                plt.semilogx(xvec,np.array(plotdata)[:,3],label='recon_val')
+                plt.semilogx(xvec,np.array(plotdata)[:,4],label='KL_val')
+                plt.semilogx(xvec,np.array(plotdata)[:,5],label='total_val')
                 #plt.ylim([-15,12])
                 plt.xlabel('iteration')
                 plt.ylabel('cost')
@@ -692,7 +785,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.savefig('%s/latest_%s/cost_zoom_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
                 plt.close('all')
             except:
-                 pass            
+                pass            
 
             """        
             # plot the weights batch histogram
@@ -747,6 +840,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     n_filters = params['n_filters']
     filter_size = params['filter_size']
     n_convsteps = params['n_convsteps']
+    batch_norm = params['batch_norm']
     red = params['reduce']
     if n_convsteps != None:
         ysh_conv = int(ysh1*n_filters/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
@@ -759,7 +853,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     if params['reduce'] == True or params['n_conv'] != None:
         num_det = np.shape(y_data_test)[2]
     else:
-        num_det = Nones
+        num_det = None
 
     # identify the indices of wrapped and non-wrapped parameters - clunky code
     wrap_mask, nowrap_mask, idx_mask = get_wrap_index(params)
@@ -770,7 +864,6 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     session = tf.Session(graph=graph)
     with graph.as_default():
         tf.set_random_seed(np.random.randint(0,10))
-        SMALL_CONSTANT = 1e-8
 
         # PLACEHOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
@@ -786,11 +879,11 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
                                                      n_input2=ysh_conv, n_output=xsh1, n_weights=n_weights_r2, 
                                                      n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
                                                      filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
-                                                     conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det)
+                                                     conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det,batch_norm=batch_norm)
         r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, n_weights=n_weights_r1,   # generates params for r1(z|y)
                                                     n_modes=n_modes, n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
                                                     filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
-                                                    conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det)
+                                                    conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det,batch_norm=batch_norm)
         #r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, 1, n_weights_r1, n_modes, n_hlayers)
@@ -799,7 +892,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=ysh_conv, n_output=z_dimension, 
                                                         n_weights=n_weights_q, n_hlayers=n_hlayers, drate=drate, 
-                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv,conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det)  
+                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv,conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det,batch_norm=batch_norm)  
 
         # reduce the y data size
         y_conv = r2_conv.dimensionanily_reduction(y_ph)
@@ -907,7 +1000,6 @@ def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_file
     session = tf.Session(graph=graph,config=config)
     with graph.as_default():
         tf.set_random_seed(np.random.randint(0,10))
-        SMALL_CONSTANT = 1e-6
         
         # PLACE HOLDERS
         x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph")
@@ -926,7 +1018,6 @@ def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_file
         
         # DEFINE MULTI-FIDELITY FORWARD MODEL
         #####################################################################################################################
-        SMALL_CONSTANT = 1e-6
         
         # NORMALISE INPUTS
         yl_ph_n = tf_normalise_dataset(yt_ph)
@@ -1111,7 +1202,6 @@ def compute_ELBO(params, x_data, y_data_h, load_dir):
     session = tf.Session(graph=graph)
     with graph.as_default():
         tf.set_random_seed(np.random.randint(0,10))
-        SMALL_CONSTANT = 1e-6
         
         # PLACE HOLDERS
         x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph")

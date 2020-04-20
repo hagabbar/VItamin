@@ -13,6 +13,7 @@ import scipy
 from scipy.integrate import dblquad
 import h5py
 from ligo.skymap.plot import PPPlot
+import bilby
 
 from data import chris_data as data_maker
 #from Models import VICI_inverse_model
@@ -179,6 +180,7 @@ class make_plots:
             i_idx = 0
             i = 0
             i_idx_use = []
+            dt = []
             while i_idx < self.params['r']*self.params['r']:
 
                 filename_try = '%s/%s_%d.h5py' % (dataLocations_try,self.params['bilby_results_label'],i)
@@ -192,6 +194,8 @@ class make_plots:
                     continue
 
                 print(filename)
+                dt.append(np.array(h5py.File(filename, 'r')['runtime']))
+
                 post_files.append(filename)
                 data_temp = {}
                 #bounds = {}
@@ -226,7 +230,10 @@ class make_plots:
                 i+=1
                 i_idx+=1
 
-            dt = None
+            # save time per sample
+            dt = np.array(dt)
+            dt = np.array([np.min(dt),np.max(dt),np.median(dt)])
+
             return XS_all, dt
             """
             # Define variables
@@ -692,7 +699,7 @@ class make_plots:
         hf.close()
         return
 
-    def gen_kl_plots(self,model,sig_test,par_test,normscales,bounds):
+    def gen_kl_plots(self,model,sig_test,par_test,normscales,bounds,snrs_test):
 
 
         """
@@ -706,7 +713,7 @@ class make_plots:
             """
             Compute KL for one test case.
             """
-            """
+            
             # Remove samples outside of the prior mass distribution           
             cur_max = self.params['n_samples']
             
@@ -762,40 +769,52 @@ class make_plots:
 
                     del_cnt_set2+=1
 
-                set1 = sampset_1
-                set2 = sampset_2
-            
+                del_final_idx = np.min([del_cnt_set1,del_cnt_set2])
+                set1 = sampset_1[:,:del_final_idx]
+                set2 = sampset_2[:,:del_final_idx]
+
             else:
 
                 set1 = sampset_1.T
                 set2 = sampset_2.T
       
-            """
-#            if samplers[0] == 'vitamin1':
-#                set1 = sampset_1.T
-#            else:
-#                set1 = sampset_1
-#            if samplers[1] == 'vitamin1':
-#                set2 = sampset_2.T
-#            else:
-#                set2 = sampset_2                                                                                         
-            set1 = sampset_1.T
-            set2 = sampset_2.T
+            
+#            plt.hist(sampset_1[:,0])
+#            plt.savefig('/home/hunter.gabbard/public_html/test1.png')
+#            plt.close()
+#            set1 = sampset_1.T
+#            set2 = sampset_2.T
+#            plt.hist(set1[1,:])
+#            plt.savefig('/home/hunter.gabbard/public_html/test2.png')
+#            plt.close()
 
-            kl_samps = []
-            n_samps = self.params['n_samples']
-            n_pars = len(self.params['inf_pars'])
-
+#            idx_set = [5,6]
+#            set1 = set1[idx_set,:]
+#            set2 = set2[idx_set,:]
+#            kl_samps = []
+#            n_samps = self.params['n_samples']
+#            n_pars = len(self.params['inf_pars'])
+           
             # Iterate over number of randomized sample slices
-            SMALL_CONSTANT = 0
-            p = gaussian_kde(set1 + SMALL_CONSTANT)
-            q = gaussian_kde(set2 + SMALL_CONSTANT)
-            log_diff = np.log(p(set1 + SMALL_CONSTANT)/q(set1 + SMALL_CONSTANT))
+            SMALL_CONSTANT = 1e-162 # 1e-4 works best for some reason
+            def my_kde_bandwidth(obj, fac=1.0):
+
+                """We use Scott's Rule, multiplied by a constant factor."""
+
+                return np.power(obj.n, -1./(obj.d+4)) * fac
+            p = gaussian_kde(set1,bw_method=my_kde_bandwidth)#'scott') # 7.5e0 works best ... don't know why. Hope it's not over-smoothing results.
+            q = gaussian_kde(set2,bw_method=my_kde_bandwidth)#'scott')#'silverman') # 7.5e0 works best ... don't know why.
+            #log_diff = np.where(q(set1) != 0, np.log((p(set1)+SMALL_CONSTANT)/(q(set1)+SMALL_CONSTANT)), 0)
+            log_diff = np.log((p(set1)+SMALL_CONSTANT)/(q(set1)+SMALL_CONSTANT))
             # Compute KL, but ignore values equal to infinity
+#            print(set2.shape[1],set1.shape[1])
             kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
 #            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff[log_diff != np.inf])
-
-
+#            if np.isinf(kl_result):
+#                kl_result = 0
+            
+            #kl_result = np.sum(scipy.stats.entropy(set1,set2)) * (1.0/float(set1.shape[1]))
+#            kl_result = np.sum(np.where(set1 != 0, set1 * np.log(set1 / set2), 0)) * (1.0/float(set1.shape[1]))
             return kl_result
    
         # Define variables 
@@ -818,11 +837,16 @@ class make_plots:
         label_idx = 0
         vi_pred_made = None
 
-#        if params['load_plot_data'] == False:
+        if params['load_plot_data'] == False:
             # Create dataset to save KL divergence results for later plotting
-#            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
-#        else:
-#            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
+            try:
+                os.mkdir('plotting_data_%s' % params['run_label']) 
+            except:
+                print('Plotting directory already exists')
+
+            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
+        else:
+            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
       
         for i in range(len(usesamps)):
             for j in range(tmp_idx):
@@ -831,6 +855,7 @@ class make_plots:
                 if samplers[i] == samplers[::-1][j]:
                     print_cnt+=1
                     sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
+
                     # currently not doing KL of approaches with themselves, so skip here
                     continue
                     if self.params['load_plot_data'] == False:
@@ -860,28 +885,56 @@ class make_plots:
                         print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
                     tot_kl = np.array(tot_kl)
 
-#                if self.params['load_plot_data'] == False:
+                if self.params['load_plot_data'] == False:
 
                     # Save results to h5py file
-#                    hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
+                    hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
                
 #                logbins = np.histogram_bin_edges(tot_kl,bins='fd') 
                 logbins = np.logspace(-1,2.5,50)
+#                logbins = 25
 
                 if samplers[i] == 'vitamin' or samplers[::-1][j] == 'vitamin':
 #                    logbins = 25
 #                    logbins = np.logspace(-1,2.5,50)
+                    
+                    # plot x parameter values as a function of posterior kl
+#                    plt.close()
+#                    plt.scatter(tot_kl[:],np.array(snrs_test)[:tot_kl.shape[0],0],s=1.0)
+#                    plt.ylabel('SNR')
+#                    plt.xlabel('KL')
+#                    plt.savefig('%s/latest_%s/kl_vs_SNR' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
+#                    plt.close()
+#                    exit()
+                    
+#                    for m in range(self.pos_test.shape[1]):
+#                        plt.scatter(tot_kl[:],self.pos_test[:,m],s=1.0)
+#                        plt.ylabel('Parameter %d' % m)
+#                        plt.xlabel('KL')
+#                        plt.savefig('%s/latest_%s/kl_vs_x_%d' % (self.params['plot_dir'],self.params['run_label'],m),dpi=360)
+#                        plt.close()
+#                    exit()
+                    #tot_kl /= 10.0
+                    # print 10 worst and 10 best kl
+                    print(tot_kl.argsort()[-15:][::-1])
+                    print(np.sort(tot_kl)[-15:][::-1])
+                    print(tot_kl.argsort()[:15][:])
+                    print(np.sort(tot_kl)[:15][:])
                     axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[::-1][j]),zorder=2)
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
+                    print('Mean total KL vitamin vs bilby: %s' % str(np.mean(tot_kl)))
                 else:
-                    
+                    print(tot_kl.argsort()[-15:][::-1])
+                    print(np.sort(tot_kl)[-15:][::-1])
+                    print(tot_kl.argsort()[:15][:])
+                    print(np.sort(tot_kl)[:15][:]) 
                     if label_idx == 0:
                         axis_kl.hist(tot_kl,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
                         label_idx += 1
                     else:
                         axis_kl.hist(tot_kl,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',zorder=1)
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
-                    print('Mean total KL: %s' % str(np.mean(tot_kl)))
+                    print('Mean total KL between bilby samps: %s' % str(np.mean(tot_kl)))
 
                 print('Completed KL calculation %d/%d' % (print_cnt,len(usesamps)*2))
                 print_cnt+=1
@@ -891,16 +944,16 @@ class make_plots:
                 runtime[sampler1] = time1
 
 
-#        if self.params['load_plot_data'] == False:
+        if self.params['load_plot_data'] == False:
 #            # Print sampler runtimes
-#            for i in range(len(usesamps)):
-    #            if self.params['load_plot_data'] == True:
-    #                hf[]
-    #                print('%s sampler runtimes: %s' % (samplers[usesamps[i]]+'1',str(runetime)))
-    #            else:
+            for i in range(len(usesamps)):
+#                if self.params['load_plot_data'] == True:
+#                    hf[]
+#                    print('%s sampler runtimes: %s' % (samplers[usesamps[i]]+'1',str(runetime)))
+#                else:
                     # Save runtime information
-#                hf.create_dataset('%s_runtime' % (samplers[i]), data=np.array(runtime[samplers[i]+'1']))
-#                print('%s sampler runtimes: %s' % (samplers[i]+'1',str(runtime[samplers[i]+'1'])))
+                hf.create_dataset('%s_runtime' % (samplers[i]), data=np.array(runtime[samplers[i]+'1']))
+                print('%s sampler runtimes: %s' % (samplers[i]+'1',str(runtime[samplers[i]+'1'])))
 
         # Save KL corner plot
         axis_kl.set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
@@ -920,7 +973,7 @@ class make_plots:
         plt.close(fig_kl)
 
 #        hf.close()
-
+        exit()
         return
 
     def make_corner_plot(self,noisefreeY_test,noisyY_test,bounds,test_sample_idx,epoch_idx,sampler='dynesty1'):

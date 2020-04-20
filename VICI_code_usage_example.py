@@ -83,7 +83,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -94,11 +94,11 @@ def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run9' % (len(fixed_vals['det']),len(rand_pars),ndata)
-    bilby_results_label = 'test_run' #'9par_256Hz_3det_case_256test'
-    r = 2                        # number of test samples to use for plotting
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run24' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    bilby_results_label = '9par_256Hz_3det_case_256test'
+    r = 2                       # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
-    tot_dataset_size = int(1e6)    # total number of training samples to use
+    tot_dataset_size = int(1e3)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
     ref_geocent_time=1126259642.5   # reference gps time
@@ -109,37 +109,41 @@ def get_params():
         tot_dataset_size = tot_dataset_size,
         tset_split = tset_split, 
         plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,                 # plot directory
-        hyperparam_optim = True,      # optimize hyperparameters for model 
-        hyperparam_optim_stop = 200000, # stopping point of hyperparameter optimizer 
+        hyperparam_optim = False,      # optimize hyperparameters for model 
+        hyperparam_optim_stop = int(2e5), # stopping point of hyperparameter optimizer 
         hyperparam_n_call = 30,       # number of optimization calls
+
+        do_inf_training = False,       # generate an infinite amount of training data
         print_values=True,            # optionally print values every report interval
         n_samples = 2000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=80,               # batch size inference model (inverse reconstruction)
+        batch_size=64,               # batch size inference model (inverse reconstruction)
+        batch_norm=True,              # if true, do batch normalization in all layers
+        l2_loss = False,               # apply l2 regularization on mode weights
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
-        n_modes=16,                  # number of modes in the latent space
+        n_modes=15,                  # number of modes in the latent space
         n_hlayers=3,                # the number of hidden layers in each network
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,
         n_conv = 3,                # number of convolutional layers to use in each part of the networks. None if not used
         n_filters = [33,33,33],
-        filter_size = [5,5,5],
-        drate = 0.5,
-        maxpool = [1,1,1],
+        filter_size = [3,3,9],
+        drate = 1.0,
+        maxpool = [1,2,1],
         conv_strides = [1,1,1],
-        pool_strides = [1,1,1],
+        pool_strides = [1,2,1],
         ramp_start = 1e4,
         ramp_end = 1e5,
-        save_interval=10000000,           # interval at which to save inference model weights
-        plot_interval=10000000,           # interval over which plotting is done
-        z_dimension=96,                # 24 number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = [1024,1024,1024],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = [1024,1024,1024],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = [1024,1024,1024],             # 512 number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        duration = 1.0,               # the timeseries length in seconds
-        r = r,                                # the grid dimension for the output tests
+        save_interval=int(5e4),           # interval at which to save inference model weights
+        plot_interval=int(5e4),           # interval over which plotting is done
+        z_dimension=96,                    # number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = [1024,1024,1024],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = [1024,1024,1024],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = [1024,1024,1024],              # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        duration = 1.0,                             # the timeseries length in seconds
+        r = r,                                      # the grid dimension for the output tests
         rand_pars=rand_pars,
         corner_parnames = ['m_{1}\,(\mathrm{M}_{\odot})','m_{2}\,(\mathrm{M}_{\odot})','d_{\mathrm{L}}\,(\mathrm{Mpc})','t_{0}\,(\mathrm{seconds})','{\phi}','\Theta_{jn}','{\psi}','\mathrm{RA}','\mathrm{DEC}'],
         cornercorner_parnames = ['$m_{1}\,(\mathrm{M}_{\odot})$','$m_{2}\,(\mathrm{M}_{\odot})$','$d_{\mathrm{L}}\,(\mathrm{Mpc})$','$t_{0}\,(\mathrm{seconds})$','${\phi}$','$\Theta_{jn}$','${\psi}$','$\mathrm{RA}$','$\mathrm{DEC}$'],
@@ -149,10 +153,10 @@ def get_params():
         wrap_pars=['phase','psi'],                  # parameters that get wrapped on the 1D parameter 
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
-#        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
-#        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num),    # location of bilby PE results
-        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test_waveforms',
-        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test',
+        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
+        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num),    # location of bilby PE results
+#        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test_waveforms',
+#        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test',
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
         load_plot_data=False,                                                  # use old plotting data
         samplers=['vitamin','cpnest','dynesty'],#,'ptemcee','emcee'],          # samplers to use when plotting
@@ -175,6 +179,12 @@ def get_params():
     )
     return params
 
+# Get training/test data and parameters of run
+params=get_params()
+f = open("params_%s.txt" % params['run_label'],"w")
+f.write( str(params) )
+f.close()
+
 kernel_1 = Integer(low=3, high=9, name='kernel_1')
 strides_1 = Integer(low=1, high=2, name='strides_1')
 pool_1 = Integer(low=1, high=2, name='pool_1')
@@ -190,8 +200,21 @@ pool_3 = Integer(low=1, high=2, name='pool_3')
 #kernel_5 = Integer(low=3, high=9, name='kernel_5')
 #strides_5 = Integer(low=1, high=2, name='strides_5')
 #pool_5 = Integer(low=1, high=2, name='pool_5')
-z_dimension = Integer(low=1, high=1000, name='z_dimension')
-n_modes = Integer(low=1, high=100, name='n_modes')
+z_dimension = Integer(low=8, high=500, name='z_dimension')
+n_modes = Integer(low=8, high=100, name='n_modes')
+n_filters_1 = Integer(low=4, high=64, name='n_filters_1')
+n_filters_2 = Integer(low=4, high=64, name='n_filters_2')
+n_filters_3 = Integer(low=4, high=64, name='n_filters_3')
+batch_size = Integer(low=params['batch_size']-1, high=params['batch_size'], name='batch_size')
+n_weights_fc_1 = Integer(low=50, high=2048, name='n_weights_fc_1')
+n_weights_fc_2 = Integer(low=50, high=2048, name='n_weights_fc_2')
+n_weights_fc_3 = Integer(low=50, high=2048, name='n_weights_fc_3')
+#n_weights_r2_1 = Integer(low=1, high=2048, name='n_weights_r2_1')
+#n_weights_r2_2 = Integer(low=1, high=2048, name='n_weights_r2_2')
+#n_weights_r2_3 = Integer(low=1, high=2048, name='n_weights_r2_3')
+#n_weights_q_1 = Integer(low=1, high=2048, name='n_weights_q_1')
+#n_weights_q_2 = Integer(low=1, high=2048, name='n_weights_q_2')
+#n_weights_q_3 = Integer(low=1, high=2048, name='n_weights_q_3')
 
 dimensions = [kernel_1, 
               strides_1,
@@ -203,7 +226,20 @@ dimensions = [kernel_1,
               strides_3,
               pool_3,
               z_dimension,
-              n_modes]
+              n_modes,
+              n_filters_1,
+              n_filters_2,
+              n_filters_3,
+              batch_size,
+              n_weights_fc_1,
+              n_weights_fc_2,
+              n_weights_fc_3]
+#              n_weights_r2_1,
+#              n_weights_r2_2,
+#              n_weights_r2_3,
+#              n_weights_q_1,
+#              n_weights_q_2,
+#              n_weights_q_3]
 #              kernel_4,
 #              strides_4,
 #              pool_4,
@@ -211,12 +247,7 @@ dimensions = [kernel_1,
 #              strides_5,
 #              pool_5]
 
-# Get training/test data and parameters of run
-params=get_params()
-f = open("params_%s.txt" % params['run_label'],"w")
-f.write( str(params) )
-f.close()
-
+"""
 default_hyperparams = [params['filter_size'][0],
                        params['conv_strides'][0],
                        params['maxpool'][0],
@@ -227,8 +258,22 @@ default_hyperparams = [params['filter_size'][0],
                        params['conv_strides'][2],
                        params['maxpool'][2],
                        params['z_dimension'],
-                       params['n_modes']
+                       params['n_modes'],
+                       params['n_filters'][0],
+                       params['n_filters'][1],
+                       params['n_filters'][2],
+                       params['batch_size'],
+                       params['n_weights_r1'][0],
+                       params['n_weights_r1'][1],
+                       params['n_weights_r1'][2],
+#                       params['n_weights_r2'][0],
+#                       params['n_weights_r2'][1],
+#                       params['n_weights_r2'][2],
+#                       params['n_weights_q'][0],
+#                       params['n_weights_q'][1],
+#                       params['n_weights_q'][2]
                       ]
+"""
 best_loss = 1000
 
 def load_data(input_dir,inf_pars,load_condor=False):
@@ -245,11 +290,7 @@ def load_data(input_dir,inf_pars,load_condor=False):
     else:
         filenames = os.listdir(dataLocations[0])
 
-#    data['x_data'] = np.zeros((int(params['tot_dataset_size']/params['tset_split']),params['tset_split'],1,len(params['inf_pars'])))
-#    data['y_data_noisefree'] = np.zeros((int(params['tot_dataset_size']/params['tset_split']),1,params['tset_split'],len(fixed_vals['det']),params['ndata']))
-#    data['y_data_noisy'] = np.zeros((int(params['tot_dataset_size']/params['tset_split']),1,params['tset_split'],len(fixed_vals['det']),params['ndata']))
-#    data['rand_pars'] = np.zeros((len(params['inf_pars'])))
-
+    snrs = []
     for filename in filenames:
         try:
             print(filename)
@@ -262,11 +303,17 @@ def load_data(input_dir,inf_pars,load_condor=False):
             data['y_data_noisefree'].append(np.expand_dims(data_temp['y_data_noisefree'], axis=0))
             data['y_data_noisy'].append(np.expand_dims(data_temp['y_data_noisy'], axis=0))
             data['rand_pars'] = data_temp['rand_pars']
+            snrs.append(h5py.File(dataLocations[0]+'/'+filename, 'r')['snrs'][:])
         except OSError:
             print('Could not load requested file')
             continue
 
-#    print(np.array(data['x_data']).shape,np.array(data['y_data_noisefree']).shape,np.array(data['y_data_noisy']).shape,np.array(data['rand_pars']).shape)
+    snrs = np.array(snrs)
+#    plt.hist(snrs[0,:,0])
+#    plt.hist(snrs[0,:,1])
+#    plt.hist(snrs[0,:,2])
+#    plt.savefig('/home/hunter.gabbard/public_html/test.png')
+#    plt.close()
 #    exit()
     # extract the prior bounds
     bounds = {}
@@ -301,13 +348,37 @@ def load_data(input_dir,inf_pars,load_condor=False):
                 idx.append(i)
     x_data = x_data[:,idx]
 
-    return x_data, y_data, y_data_noisy, y_normscale
+
+    return x_data, y_data, y_data_noisy, y_normscale, snrs
 
 @use_named_args(dimensions=dimensions)
 def hyperparam_fitness(kernel_1, strides_1, pool_1,
                        kernel_2, strides_2, pool_2,
                        kernel_3, strides_3, pool_3,
-                       z_dimension,n_modes):
+                       z_dimension,n_modes,
+                       n_filters_1,n_filters_2,n_filters_3,
+                       batch_size,
+                       n_weights_fc_1,n_weights_fc_2,n_weights_fc_3):
+#                       n_weights_r2_1,n_weights_r2_2,n_weights_r2_3,
+#                       n_weights_q_1,n_weights_q_2,n_weights_q_3):
+
+    # set tunable hyper-parameters
+    params['filter_size'] = [kernel_1,kernel_2,kernel_3]
+    params['n_filters'] = [n_filters_1,n_filters_2,n_filters_3]
+    for filt_idx in range(len(params['n_filters'])):
+        if (params['n_filters'][filt_idx] % 3) != 0:
+            # keep adding 1 until filter size is divisible by 3
+            while (params['n_filters'][filt_idx] % 3) != 0:
+                params['n_filters'][filt_idx] += 1
+    params['conv_strides'] = [strides_1,strides_2,strides_3]
+    params['maxpool'] = [pool_1,pool_2,pool_3]
+    params['pool_strides'] = [pool_1,pool_2,pool_3]
+    params['z_dimension'] = z_dimension
+    params['n_modes'] = n_modes
+    params['batch_size'] = batch_size
+    params['n_weights_r1'] = [n_weights_fc_1,n_weights_fc_2,n_weights_fc_3]
+    params['n_weights_r2'] = [n_weights_fc_1,n_weights_fc_2,n_weights_fc_3]
+    params['n_weights_q'] = [n_weights_fc_1,n_weights_fc_2,n_weights_fc_3]
 
     # print hyper-parameters
     # Print the hyper-parameters.
@@ -328,15 +399,20 @@ def hyperparam_fitness(kernel_1, strides_1, pool_1,
 #    print('pool_5: {}'.format(pool_5))
     print('z_dimension: {}'.format(z_dimension))
     print('n_modes: {}'.format(n_modes))
+    print('n_filters_1: {}'.format(params['n_filters'][0]))
+    print('n_filters_2: {}'.format(params['n_filters'][1]))
+    print('n_filters_3: {}'.format(params['n_filters'][2]))
+    print('batch_size: {}'.format(batch_size))
+    print('n_weights_r1_1: {}'.format(n_weights_fc_1))
+    print('n_weights_r1_2: {}'.format(n_weights_fc_2))
+    print('n_weights_r1_3: {}'.format(n_weights_fc_3))
+#    print('n_weights_r2_1: {}'.format(n_weights_r2_1))
+#    print('n_weights_r2_2: {}'.format(n_weights_r2_2))
+#    print('n_weights_r2_3: {}'.format(n_weights_r2_3))
+#    print('n_weights_q_1: {}'.format(n_weights_q_1))
+#    print('n_weights_q_2: {}'.format(n_weights_q_2))
+#    print('n_weights_q_3: {}'.format(n_weights_q_3))
     print()
-
-    # set tunable hyper-parameters
-    params['filter_size'] = [kernel_1,kernel_2,kernel_3]
-    params['conv_strides'] = [strides_1,strides_2,strides_3]
-    params['maxpool'] = [pool_1,pool_2,pool_3]
-    params['pool_strides'] = [pool_1,pool_2,pool_3]
-    params['z_dimension'] = z_dimension
-    params['n_modes'] = n_modes
 
     start_time = time.time()
     print('start time: {}'.format(strftime('%X %x %Z'))) 
@@ -371,9 +447,16 @@ def hyperparam_fitness(kernel_1, strides_1, pool_1,
                                        maxpool = params['maxpool'],
                                        pool_strides = params['pool_strides'],
                                        z_dimension = params['z_dimension'],
-                                       n_modes = params['n_modes'])
+                                       n_modes = params['n_modes'],
+                                       n_filters = params['n_filters'],
+                                       batch_size = params['batch_size'],
+                                       n_weights_fc = params['n_weights_r1'],
+                                       best_loss = best_loss)
+                                       #n_weights_r2 = params['n_weights_r2'],
+                                       #n_weights_q = params['n_weights_q'])
+
         f = open("inverse_model_dir_%s/converged_hyperparams.txt" % params['run_label'],"w")
-        f.write( str(params) )
+        f.write( str(converged_hyperpar_dict) )
         f.close()
 
         # update the best loss
@@ -492,10 +575,13 @@ if args.gen_test:
 if args.train:
 
     # load the noisefree training data back in
-    x_data_train, y_data_train, _, y_normscale = load_data(params['train_set_dir'],params['inf_pars'])
+    x_data_train, y_data_train, _, y_normscale, snrs_train = load_data(params['train_set_dir'],params['inf_pars'])
+
+    if params['do_inf_training']:
+        y_normscale = 36.0 # choose a standard normalization number for inf training.
 
     # load the noisy testing data back in
-    x_data_test, y_data_test_noisefree, y_data_test,_ = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
+    x_data_test, y_data_test_noisefree, y_data_test,_,snrs_test = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
 
     # reshape arrays for multi-detector
     y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
@@ -505,6 +591,10 @@ if args.train:
 
     # Make directory for plots
     os.system('mkdir -p %s/latest_%s' % (params['plot_dir'],params['run_label']))
+
+    f = open('%s/latest_%s/params_%s.txt' % (params['plot_dir'],params['run_label'],params['run_label']),"w")
+    f.write( str(params) )
+    f.close()
 
     # load up the posterior samples (if they exist)
     # load generated samples back in
@@ -569,7 +659,7 @@ if args.train:
             par_min = q + '_min'
             par_max = q + '_max'
 
-            x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+            #x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
 
 #        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
         i_idx_use.append(i)
@@ -603,7 +693,7 @@ if args.train:
     # run hyperparameter optimization
     if params['hyperparam_optim'] == True:
 
-        hyperparam_fitness(x=default_hyperparams)
+        #hyperparam_fitness(x=default_hyperparams)
 
         # Run optimization
         search_result = gp_minimize(func=hyperparam_fitness,
@@ -632,14 +722,18 @@ if args.train:
 if args.test:
 
     # load the noisefree training data back in
-    x_data_train, y_data_train, _, y_normscale = load_data(params['train_set_dir'],params['inf_pars'])
+    x_data_train, y_data_train, _, y_normscale,snrs_train = load_data(params['train_set_dir'],params['inf_pars'])
 
     # TODO: remove this when not doing debugging
-    print('YOU ARE CURRENTLY IN DEBUGGING MODE. REMOVE THIS LINE IF NOT!!')
-    y_normscale = 36.43879218007172
+    if params['do_inf_training']:
+        y_normscale=36.0
+    else:
+        print('YOU ARE CURRENTLY IN DEBUGGING MODE. REMOVE THIS LINE IF NOT!!')
+        y_normscale = 36.438613192970415
+        #y_normscale = 36.43879218007172
 
     # load the noisy testing data back in
-    x_data_test, y_data_test_noisefree, y_data_test,_ = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
+    x_data_test, y_data_test_noisefree, y_data_test,_,snrs_test = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
 
     # Make directory for plots
     os.system('mkdir -p %s/latest_%s' % (params['plot_dir'],params['run_label']))
@@ -764,7 +858,7 @@ if args.test:
 #        y_data_test = y_data_test.reshape(y_data_test.shape[0],params['ndata'],len(fixed_vals['det']))
 
     VI_pred_all = []
-    make_corner_plots = False   
+    make_corner_plots = False
 
     for i in range(params['r']*params['r']):
 
@@ -833,38 +927,43 @@ if args.test:
 #        plotter.make_corner_plot(y_data_test_noisefree[i,:params['ndata']],y_data_test[i,:params['ndata']],bounds,i,0,sampler='dynesty1')
 
         # Make corner corner plots
+        bins=50
+        #area = sum(numpy.diff(bins)*values)
+        defaults_kwargs = dict(
+                    bins=bins, smooth=0.9, label_kwargs=dict(fontsize=16),
+                    title_kwargs=dict(fontsize=16),
+                    truth_color='tab:orange', quantiles=[0.16, 0.84],
+                    levels=(0.68,0.90,0.95), density=True,
+                    plot_density=False, plot_datapoints=True,
+                    max_n_ticks=3)
 
         matplotlib.rc('text', usetex=True)                
         parnames = []
         for k_idx,k in enumerate(params['rand_pars']):
             if np.isin(k, params['inf_pars']):
                 parnames.append(params['cornercorner_parnames'][k_idx])
-        figure = corner.corner(XS_all[i], labels=parnames,
-                       quantiles=[0.16, 0.84], color='blue',
-                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       truths=x_data_test[i,:], levels=[0.68,0.90,0.95],
-                       truth_color='black',
-                       plot_datapoints=False,
-                       plot_density=False,
-                       show_titles=True, title_kwargs={"fontsize": 12})
-        corner.corner(VI_pred, labels=parnames,
-                       quantiles=[0.16, 0.84],
+        figure = corner.corner(XS_all[i],**defaults_kwargs,labels=parnames,
+                       color='tab:blue',
+                       truths=x_data_test[i,:],
+                       show_titles=True)
+        # compute weights, otherwise the 1d histograms will be different scales, could remove this
+        #weights = np.ones(len(VI_pred)) * (len(XS_all[i]) / len(VI_pred))
+        corner.corner(VI_pred, **defaults_kwargs, labels=parnames,
                        fill_contours=True,
-                       plot_datapoints=False,
-                       plot_density=False,
-                       #range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                        color='red', levels=[0.68,0.90,0.95],
-                       show_titles=True, title_kwargs={"fontsize": 12}, fig=figure)
+                       color='tab:red',
+                       show_titles=True, fig=figure)#, weights=weights)
 
         left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
         ax2 = figure.add_axes([left, bottom, width, height])
 
         # plot waveform in upper-right hand corner
         ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[i,:params['ndata']],color='cyan',zorder=50)
+#        snr = 'No SNR info'
+        snr = snrs_test[i,0]
         if params['reduce'] == True or params['n_conv'] != None:
-            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],0],color='darkblue')
+            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],0],color='darkblue',label=str(snr))
         else:
-            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata']],color='darkblue')
+            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata']],color='darkblue',label=str(snr))
         ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
         ax2.yaxis.set_visible(False)
         ax2.tick_params(axis="x", labelsize=11)
@@ -872,10 +971,12 @@ if args.test:
         ax2.set_ylim([-6,6])
         ax2.grid(False)
         ax2.margins(x=0,y=0)
+        ax2.legend()
 
         plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
         plt.close()
         del figure
+        print('Made corner plot: %s' % str(i+1))
 #        del plotter
         
         VI_pred_all.append(VI_pred)
@@ -887,7 +988,7 @@ if args.test:
     
 
     # Make KL plot
-    plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_train,y_normscale,bounds)
+    plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_train,y_normscale,bounds,snrs_test)
 #    exit()
 
     # Make pp plot

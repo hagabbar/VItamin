@@ -357,6 +357,7 @@ def gen_par(pars,
     # make distance
     if np.any([r=='luminosity_distance' for r in rand_pars]):
         pars['luminosity_distance'] = np.random.uniform(low=bounds['luminosity_distance_min'], high=bounds['luminosity_distance_max'])
+#        pars['luminosity_distance'] = np.random.triangular(left=bounds['luminosity_distance_min'], mode=1000, right=bounds['luminosity_distance_max'])
         print('{}: selected bbh luminosity distance = {}'.format(time.asctime(),pars['luminosity_distance']))
 
     # make inclination

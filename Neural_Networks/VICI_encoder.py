@@ -15,7 +15,7 @@ SMALL_CONSTANT = 1e-6
 
 class VariationalAutoencoder(object):
 
-    def __init__(self, name, n_input=256, n_output=4, n_weights=2048, n_modes=2, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, conv_strides=1, pool_strides=1, num_det=1):
+    def __init__(self, name, n_input=256, n_output=4, n_weights=2048, n_modes=2, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, conv_strides=1, pool_strides=1, num_det=1, batch_norm=False):
         
         self.n_input = n_input
         self.n_output = n_output
@@ -30,6 +30,7 @@ class VariationalAutoencoder(object):
         self.conv_strides = conv_strides
         self.pool_strides = pool_strides
         self.num_det = num_det
+        self.batch_norm = batch_norm
 
         network_weights = self._create_weights()
         self.weights = network_weights
@@ -51,7 +52,11 @@ class VariationalAutoencoder(object):
                     bias_name = 'b_conv_' + str(i)
                     conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_encoder'][weight_name],strides=[1,1,self.conv_strides[i],1],padding='SAME'),self.weights['VICI_encoder'][bias_name])
                     conv_post = self.nonlinearity(conv_pre)
-                    conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
+                    if self.batch_norm == True:
+                        conv_batchNorm = tf.nn.batch_normalization(conv_post,tf.Variable(tf.zeros([1,conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),tf.Variable(tf.ones([1,conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),None,None,0.000001)
+                        conv_dropout = tf.layers.dropout(conv_batchNorm,rate=self.drate)
+                    else:
+                        conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
                     conv_pool = tf.nn.max_pool(conv_dropout,ksize=[1, 1, self.maxpool[i], 1],strides=[1, 1, self.pool_strides[i], 1],padding='SAME')
 
                 fc = tf.reshape(conv_pool, [-1, int(conv_pool.shape[2]*conv_pool.shape[3])])
@@ -64,7 +69,11 @@ class VariationalAutoencoder(object):
                 bias_name = 'b_hidden' + str(i)
                 hidden_pre = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_encoder'][weight_name]), self.weights['VICI_encoder'][bias_name])
                 hidden_post = self.nonlinearity(hidden_pre)
-                hidden_dropout = tf.layers.dropout(hidden_post,rate=self.drate)
+                if self.batch_norm == True:
+                    hidden_batchNorm = tf.nn.batch_normalization(hidden_post,tf.Variable(tf.zeros([hidden_post.shape[1]], dtype=tf.float32)),tf.Variable(tf.ones([hidden_post.shape[1]], dtype=tf.float32)),None,None,0.000001)
+                    hidden_dropout = tf.layers.dropout(hidden_batchNorm,rate=self.drate)
+                else:
+                    hidden_dropout = tf.layers.dropout(hidden_post,rate=self.drate)
             loc = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_encoder']['w_loc']), self.weights['VICI_encoder']['b_loc'])
             scale = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_encoder']['w_scale']), self.weights['VICI_encoder']['b_scale'])
             weight = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_encoder']['w_weight']), self.weights['VICI_encoder']['b_weight']) 
