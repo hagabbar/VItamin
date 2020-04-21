@@ -132,7 +132,7 @@ def get_wrap_index(params):
     idx_mask = idx_nowrap + idx_wrap
     return wrap_mask, nowrap_mask, idx_mask
 
-def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefree, y_normscale, save_dir, truth_test, bounds, fixed_vals, posterior_truth_test):    
+def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefree, y_normscale, save_dir, truth_test, bounds, fixed_vals, posterior_truth_test,snrs_test):    
 
     # if True, do multi-modal
     multi_modal = True
@@ -316,69 +316,19 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
     print('Training Inference Model...')    
     # START OPTIMISATION OF OELBO
-    if params['do_inf_training']:
-        indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
-    else:
-        indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
+    indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
     plotdata = []
     for i in range(params['num_iterations']):
 
-        start = time.time()
         next_indices = indices_generator.next_indices()
 
-        # make infinite training data
-        if params['do_inf_training']:
-
-            make_new_set = True
-            if make_new_set == True:
-                _, signal_train, next_x_data, _ = bilby_pe.run(sampling_frequency=params['ndata']/params['duration'],
-                                                          duration=params['duration'],
-                                                          N_gen=10000,
-                                                          ref_geocent_time=params['ref_geocent_time'],
-                                                          bounds=bounds,
-                                                          fixed_vals=fixed_vals,
-                                                          rand_pars=params['rand_pars'],
-                                                          seed=params['training_data_seed']+i,
-                                                          label=params['run_label'],
-                                                          training=True)
- 
-                next_y_data = np.zeros((signal_train.shape[0],signal_train.shape[2],signal_train.shape[1]))
-                for k in range(signal_train.shape[0]):
-                    for j in range(signal_train.shape[1]):
-                        next_y_data[k,:,j] = signal_train[k,j]
-
-                if params['reduce'] == True or params['n_conv'] != None:
-                    next_y_data = next_y_data + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
-                else:
-                    next_y_data = next_y_data + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
-                next_y_data /= y_normscale  # required for fast convergence        
-    
-                # normalise the data parameters
-                next_x_data = np.squeeze(next_x_data,axis=1)
-                for j,k in enumerate(params['rand_pars']):
-                    par_min = k + '_min'
-                    par_max = k + '_max'
-
-                    next_x_data[:,j]=( next_x_data[:,j] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])       
-                
-                # extract inference parameters
-                idx_par = []
-                for k in params['inf_pars']:
-                    print(k)
-                    for j,q in enumerate(params['rand_pars']):
-                        m = q
-                        if k==m:
-                            idx_par.append(j)
-                next_x_data =  next_x_data[:,idx_par] 
-
+        # Make noise realizations and add to training data
+        next_x_data = x_data[next_indices,:]
+        if params['reduce'] == True or params['n_conv'] != None:
+            next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
         else:
-            # Make noise realizations and add to training data
-            next_x_data = x_data[next_indices,:]
-            if params['reduce'] == True or params['n_conv'] != None:
-                next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
-            else:
-                next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
-            next_y_data /= y_normscale  # required for fast convergence
+            next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
+        next_y_data /= y_normscale  # required for fast convergence
 
         # train to minimise the cost function
         session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
@@ -703,6 +653,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 # Make corner plots
 #                plotter.make_corner_plot(y_data_test_noisefree[j,:params['ndata']],y_data_test[j,:params['ndata']],bounds,j,i,sampler='dynesty1')
                 # Get corner parnames to use in plotting labels
+                matplotlib.rc('text', usetex=True)
                 parnames = []
                 for k_idx,k in enumerate(params['rand_pars']):
                     if np.isin(k, params['inf_pars']):
@@ -717,7 +668,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                     max_n_ticks=3)
 
                 figure = corner.corner(posterior_truth_test[j], **defaults_kwargs,labels=parnames,
-                       color='tab:blue',
+                       color='tab:blue',truths=x_data_test[j,:],
                        show_titles=True)
                 # compute weights, otherwise the 1d histograms will be different scales, could remove this
                 #weights = np.ones(len(XS)) * (len(posterior_truth_test[j]) / len(XS))
@@ -725,11 +676,34 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                        color='tab:red',
                        fill_contours=True,
                        show_titles=True, fig=figure)#, weights=weights)
+
+                left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
+                ax2 = figure.add_axes([left, bottom, width, height])
+
+                # plot waveform in upper-right hand corner
+                ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[j,:params['ndata']],color='cyan',zorder=50)  
+                #snr = 'No SNR info'
+                snr = snrs_test[j,0]
+                if params['reduce'] == True or params['n_conv'] != None:
+                    ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[j,:params['ndata'],0],color='darkblue',label=str(snr))
+                else:
+                    ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[j,:params['ndata']],color='darkblue',label=str(snr))
+                ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
+                ax2.yaxis.set_visible(False)
+                ax2.tick_params(axis="x", labelsize=11)
+                ax2.tick_params(axis="y", labelsize=11)
+                ax2.set_ylim([-6,6])
+                ax2.grid(False)
+                ax2.margins(x=0,y=0)
+                ax2.legend()
+
                 plt.savefig('%s/corner_plot_%s_%d-%d.png' % (params['plot_dir'],params['run_label'],i,j))
                 plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                 plt.close('all')
                 print('Made corner plot %d' % j)
 
+                del figure
+                
 
                 """
                 try:

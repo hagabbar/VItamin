@@ -83,7 +83,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -94,13 +94,14 @@ def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run24' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run25' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = '9par_256Hz_3det_case_256test'
-    r = 2                       # number of test samples to use for plotting
+    r = 6                       # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
-    tot_dataset_size = int(1e3)    # total number of training samples to use
+    tot_dataset_size = int(1e6)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
+    save_interval = int(1e5)
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
         ndata = ndata,
@@ -113,9 +114,8 @@ def get_params():
         hyperparam_optim_stop = int(2e5), # stopping point of hyperparameter optimizer 
         hyperparam_n_call = 30,       # number of optimization calls
 
-        do_inf_training = False,       # generate an infinite amount of training data
         print_values=True,            # optionally print values every report interval
-        n_samples = 2000,             # number of posterior samples to save per reconstruction upon inference 
+        n_samples = 5000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=64,               # batch size inference model (inverse reconstruction)
@@ -130,15 +130,15 @@ def get_params():
         n_conv = 3,                # number of convolutional layers to use in each part of the networks. None if not used
         n_filters = [33,33,33],
         filter_size = [3,3,9],
-        drate = 1.0,
+        drate = 0.5,
         maxpool = [1,2,1],
         conv_strides = [1,1,1],
         pool_strides = [1,2,1],
         ramp_start = 1e4,
         ramp_end = 1e5,
-        save_interval=int(5e4),           # interval at which to save inference model weights
-        plot_interval=int(5e4),           # interval over which plotting is done
-        z_dimension=96,                    # number of latent space dimensions inference model (inverse reconstruction)
+        save_interval=save_interval,           # interval at which to save inference model weights
+        plot_interval=save_interval,           # interval over which plotting is done
+        z_dimension=960,                    # number of latent space dimensions inference model (inverse reconstruction)
         n_weights_r1 = [1024,1024,1024],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         n_weights_r2 = [1024,1024,1024],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         n_weights_q = [1024,1024,1024],              # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
@@ -577,9 +577,6 @@ if args.train:
     # load the noisefree training data back in
     x_data_train, y_data_train, _, y_normscale, snrs_train = load_data(params['train_set_dir'],params['inf_pars'])
 
-    if params['do_inf_training']:
-        y_normscale = 36.0 # choose a standard normalization number for inf training.
-
     # load the noisy testing data back in
     x_data_test, y_data_test_noisefree, y_data_test,_,snrs_test = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
 
@@ -600,18 +597,36 @@ if args.train:
     # load generated samples back in
     post_files = []
     #~/bilby_outputs/bilby_output_dynesty1/multi-modal3_0.h5py
+
+     # choose directory with lowest number of total finished posteriors
+    num_finished_post = int(1e8)
+    for i in params['samplers']:
+        if i == 'vitamin':
+            continue
+        for j in range(1):
+            input_dir = '%s_%s%d/' % (params['pe_dir'],i,j+1)
+            if type("%s" % input_dir) is str:
+                dataLocations = ["%s" % input_dir]
+
+            filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))      
+            if len(filenames) < num_finished_post:
+                sampler_loc = i + str(j+1)
+
+    dataLocations_try = '%s_%s' % (params['pe_dir'],sampler_loc)
     dataLocations = '%s_%s1' % (params['pe_dir'],params['samplers'][1])
+
     #for i,filename in enumerate(glob.glob(dataLocations[0])):
     i_idx = 0
     i = 0
     i_idx_use = []
     while i_idx < params['r']*params['r']:
 #    for i in range(params['r']*params['r']):
+        filename_try = '%s/%s_%d.h5py' % (dataLocations_try,params['bilby_results_label'],i)
         filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
 
         # If file does not exist, skip to next file
         try:
-            h5py.File(filename, 'r')
+            h5py.File(filename_try, 'r')
         except Exception as e:
             i+=1
             print(e)
@@ -662,7 +677,7 @@ if args.train:
             #x_data_test[i,q_idx] = (x_data_test[i,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
 
 #        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
-        i_idx_use.append(i)
+        i_idx_use.append(i_idx)
         i+=1
         i_idx+=1
 
@@ -716,7 +731,7 @@ if args.train:
                                  y_normscale,
                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'],
                                  x_data_test, bounds, fixed_vals,
-                                 XS_all) 
+                                 XS_all,snrs_test) 
 
 # if we are now testing the network
 if args.test:
@@ -724,12 +739,8 @@ if args.test:
     # load the noisefree training data back in
     x_data_train, y_data_train, _, y_normscale,snrs_train = load_data(params['train_set_dir'],params['inf_pars'])
 
-    # TODO: remove this when not doing debugging
-    if params['do_inf_training']:
-        y_normscale=36.0
-    else:
-        print('YOU ARE CURRENTLY IN DEBUGGING MODE. REMOVE THIS LINE IF NOT!!')
-        y_normscale = 36.438613192970415
+#    print('YOU ARE CURRENTLY IN DEBUGGING MODE. REMOVE THIS LINE IF NOT!!')
+#    y_normscale = 36.438613192970415
         #y_normscale = 36.43879218007172
 
     # load the noisy testing data back in
@@ -766,52 +777,54 @@ if args.test:
             if len(filenames) < num_finished_post:
                 sampler_loc = i + str(j+1)
 
-    dataLocations_try = '%s_%s' % (params['pe_dir'],sampler_loc)
-    dataLocations = '%s_%s' % (params['pe_dir'],params['samplers'][1]+'1')
-    #for i,filename in enumerate(glob.glob(dataLocations[0])):
-    i_idx = 0
-    i = 0
-    i_idx_use = []
-    x_data_test_unnorm = np.copy(x_data_test)
-    while i_idx < params['r']*params['r']:
+    samp_posteriors = {}
+    for samp_idx in params['samplers'][1:]:
+        dataLocations_try = '%s_%s' % (params['pe_dir'],sampler_loc)
+        dataLocations = '%s_%s' % (params['pe_dir'],samp_idx+'1')
+        #for i,filename in enumerate(glob.glob(dataLocations[0])):
+        i_idx = 0
+        i = 0
+        i_idx_use = []
+        x_data_test_unnorm = np.copy(x_data_test)
+        while i_idx < params['r']*params['r']:
 
 #    for i in range(params['r']*params['r']):
-        filename_try = '%s/%s_%d.h5py' % (dataLocations_try,params['bilby_results_label'],i)
-        filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
+            filename_try = '%s/%s_%d.h5py' % (dataLocations_try,params['bilby_results_label'],i)
+            filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
 
-        # If file does not exist, skip to next file
-        try:
-            h5py.File(filename_try, 'r')
-        except Exception as e:
-            i+=1
-            print(e)
-            continue
+            # If file does not exist, skip to next file
+            try:
+                h5py.File(filename_try, 'r')
+            except Exception as e:
+                i+=1
+                print(e)
+                continue
 
-        print(filename)
-        post_files.append(filename)
-        data_temp = {}
-        #bounds = {}
-        n = 0
-        for q in params['inf_pars']:
-             p = q + '_post'
-             par_min = q + '_min'
-             par_max = q + '_max'
-             data_temp[p] = h5py.File(filename, 'r')[p][:]
-             #bounds[par_max] = h5py.File(filename, 'r')[par_max][...].item()
-             #bounds[par_min] = h5py.File(filename, 'r')[par_min][...].item()
-             if p == 'geocent_time_post':
-                 data_temp[p] = data_temp[p] - params['ref_geocent_time']
+            print(filename)
+            post_files.append(filename)
+            data_temp = {}
+            #bounds = {}
+            n = 0
+            for q in params['inf_pars']:
+                 p = q + '_post'
+                 par_min = q + '_min'
+                 par_max = q + '_max'
+                 data_temp[p] = h5py.File(filename, 'r')[p][:]
+                 #bounds[par_max] = h5py.File(filename, 'r')[par_max][...].item()
+                 #bounds[par_min] = h5py.File(filename, 'r')[par_min][...].item()
+                 if p == 'geocent_time_post':
+                     data_temp[p] = data_temp[p] - params['ref_geocent_time']
 #                 Nsamp = data_temp[p].shape[0]
 #                 n = n + 1
 #                 continue
-             data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
-             Nsamp = data_temp[p].shape[0]
-             n = n + 1
-        XS = np.zeros((Nsamp,n))
-        j = 0
-        for p,d in data_temp.items():
-            XS[:,j] = d
-            j += 1
+                 data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
+                 Nsamp = data_temp[p].shape[0]
+                 n = n + 1
+            XS = np.zeros((Nsamp,n))
+            j = 0
+            for p,d in data_temp.items():
+                XS[:,j] = d
+                j += 1
 
         # Make corner plot of VItamin posterior samples
 #        figure = corner.corner(XS, labels=params['inf_pars'],
@@ -820,27 +833,29 @@ if args.test:
 #                       truths=x_data_test[i,:],
 #                       show_titles=True, title_kwargs={"fontsize": 12})
 
-        if i_idx == 0:
-            XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
-        else:
-            # save all posteriors in array
-            XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
+            if i_idx == 0:
+                XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
+            else:
+                # save all posteriors in array
+                XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
 
 
-        for q_idx,q in enumerate(params['inf_pars']):
-            par_min = q + '_min'
-            par_max = q + '_max'
+            for q_idx,q in enumerate(params['inf_pars']):
+                par_min = q + '_min'
+                par_max = q + '_max'
 
             # rescale parameters back to their physical values
 #            if par_min == 'geocent_time_min':
 #                continue
 
-            x_data_test_unnorm[i_idx,q_idx] = (x_data_test_unnorm[i_idx,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
+                x_data_test_unnorm[i_idx,q_idx] = (x_data_test_unnorm[i_idx,q_idx] * (bounds[par_max] - bounds[par_min])) + bounds[par_min]
 
 #        plt.savefig('%s/latest_%s/truepost_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
-        i_idx_use.append(i_idx)
-        i+=1
-        i_idx+=1
+            i_idx_use.append(i_idx)
+            i+=1
+            i_idx+=1
+
+        samp_posteriors[samp_idx+'1'] = XS_all
 
     x_data_test = x_data_test[i_idx_use,:]
     x_data_test_unnorm = x_data_test_unnorm[i_idx_use,:]
@@ -858,7 +873,7 @@ if args.test:
 #        y_data_test = y_data_test.reshape(y_data_test.shape[0],params['ndata'],len(fixed_vals['det']))
 
     VI_pred_all = []
-    make_corner_plots = False
+    make_corner_plots = True
 
     for i in range(params['r']*params['r']):
 
@@ -939,19 +954,22 @@ if args.test:
 
         matplotlib.rc('text', usetex=True)                
         parnames = []
+        samp_posteriors
         for k_idx,k in enumerate(params['rand_pars']):
             if np.isin(k, params['inf_pars']):
                 parnames.append(params['cornercorner_parnames'][k_idx])
-        figure = corner.corner(XS_all[i],**defaults_kwargs,labels=parnames,
+        figure = corner.corner(samp_posteriors['cpnest1'][i],**defaults_kwargs,labels=parnames,
                        color='tab:blue',
                        truths=x_data_test[i,:],
                        show_titles=True)
+        figure = corner.corner(samp_posteriors['dynesty1'][i], **defaults_kwargs, labels=parnames,
+                           color='tab:green',
+                           show_titles=True, fig=figure)#, weights=weights)
+        corner.corner(VI_pred, **defaults_kwargs, labels=parnames,
+                           color='tab:red', fill_contours=True,
+                           show_titles=True, fig=figure)#, weights=weights)
         # compute weights, otherwise the 1d histograms will be different scales, could remove this
         #weights = np.ones(len(VI_pred)) * (len(XS_all[i]) / len(VI_pred))
-        corner.corner(VI_pred, **defaults_kwargs, labels=parnames,
-                       fill_contours=True,
-                       color='tab:red',
-                       show_titles=True, fig=figure)#, weights=weights)
 
         left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
         ax2 = figure.add_axes([left, bottom, width, height])
