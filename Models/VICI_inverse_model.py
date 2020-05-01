@@ -57,6 +57,7 @@ tf.disable_v2_behavior()
 import tensorflow_probability as tfp
 import corner
 import bilby_pe
+import h5py
 
 #from Neural_Networks import OELBO_decoder_difference
 #from Neural_Networks import OELBO_encoder
@@ -76,7 +77,7 @@ import matplotlib.pyplot as plt
 #from data import make_samples
 
 tfd = tfp.distributions
-SMALL_CONSTANT = 1e-8
+SMALL_CONSTANT = 1e-20 
 
 # NORMALISE DATASET FUNCTION
 def tf_normalise_dataset(xp):
@@ -132,6 +133,89 @@ def get_wrap_index(params):
     idx_mask = idx_nowrap + idx_wrap
     return wrap_mask, nowrap_mask, idx_mask
 
+def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
+#    tf.compat.v1.enable_eager_execution() 
+
+    # load generated samples back in
+    train_files = []
+    if type("%s" % input_dir) is str:
+        dataLocations = ["%s" % input_dir]
+        data={'x_data': [], 'y_data_noisefree': [], 'y_data_noisy': [], 'rand_pars': []}
+
+    if load_condor == True:
+        filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))
+    else:
+        filenames = os.listdir(dataLocations[0])
+
+    snrs = []
+    for filename in filenames:
+        try:
+            print(filename)
+            train_files.append(filename)
+        except OSError:
+            print('Could not load requested file')
+            continue
+
+    train_files_idx = np.arange(len(train_files))[:int(params['load_chunk_size']/1000.0)]
+    np.random.shuffle(train_files_idx)
+    train_files = np.array(train_files)[train_files_idx]
+    for filename in train_files: 
+            data_temp={'x_data': h5py.File(dataLocations[0]+'/'+filename, 'r')['x_data'][:],
+                  'y_data_noisefree': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisefree'][:],
+                  'rand_pars': h5py.File(dataLocations[0]+'/'+filename, 'r')['rand_pars'][:]}
+            data['x_data'].append(data_temp['x_data'])
+            data['y_data_noisefree'].append(np.expand_dims(data_temp['y_data_noisefree'], axis=0))
+            data['rand_pars'] = data_temp['rand_pars']
+
+
+    # extract the prior bounds
+    bounds = {}
+    bounds = {}
+    for k in data_temp['rand_pars']:
+        par_min = k.decode('utf-8') + '_min'
+        par_max = k.decode('utf-8') + '_max'
+        bounds[par_max] = h5py.File(dataLocations[0]+'/'+filename, 'r')[par_max][...].item()
+        bounds[par_min] = h5py.File(dataLocations[0]+'/'+filename, 'r')[par_min][...].item()
+    data['x_data'] = np.concatenate(np.array(data['x_data']), axis=0).squeeze()
+    data['y_data_noisefree'] = np.concatenate(np.array(data['y_data_noisefree']), axis=0)
+
+
+    # normalise the data parameters
+    for i,k in enumerate(data_temp['rand_pars']):
+        par_min = k.decode('utf-8') + '_min'
+        par_max = k.decode('utf-8') + '_max'
+
+        data['x_data'][:,i]=(data['x_data'][:,i] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
+    x_data = data['x_data']
+    y_data = data['y_data_noisefree']
+
+    # extract inference parameters
+    idx = []
+    for k in inf_pars:
+        print(k)
+        for i,q in enumerate(data['rand_pars']):
+            m = q.decode('utf-8')
+            if k==m:
+                idx.append(i)
+    x_data = x_data[:,idx]
+
+    
+    # reshape arrays for multi-detector
+    y_data_train = y_data
+    y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
+
+    # reshape y data into channels last format for convolutional approach
+    if params['reduce'] == True or params['n_conv'] != None:
+        y_data_train_copy = np.zeros((y_data_train.shape[0],params['ndata'],len(fixed_vals['det'])))
+
+        for i in range(y_data_train.shape[0]):
+            for j in range(len(fixed_vals['det'])):
+                idx_range = np.linspace(int(j*params['ndata']),int((j+1)*params['ndata'])-1,num=params['ndata'],dtype=int)
+                y_data_train_copy[i,:,j] = y_data_train[i,idx_range]
+        y_data_train = y_data_train_copy
+
+    return x_data, y_data_train
+
 def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefree, y_normscale, save_dir, truth_test, bounds, fixed_vals, posterior_truth_test,snrs_test):    
 
     # if True, do multi-modal
@@ -183,7 +267,10 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
         x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph") # params placeholder
         if params['reduce'] == True or params['n_conv'] != None:
-            y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh,len(fixed_vals['det'])], name="y_ph")    # data placeholder
+           if params['by_channel'] == True:
+               y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh,len(fixed_vals['det'])], name="y_ph")    # data placeholder
+           else:
+               y_ph = tf.placeholder(dtype=tf.float32, shape=[None,len(fixed_vals['det']),ysh], name="y_ph")
         else:
             y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh], name="y_ph")    # data placeholder
         idx = tf.placeholder(tf.int32)
@@ -194,15 +281,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                                                      n_input1=z_dimension, n_input2=ysh_conv, n_output=xsh[1], 
                                                      n_weights=n_weights_r2, n_hlayers=n_hlayers, 
                                                      drate=drate, n_filters=n_filters, filter_size=filter_size,
-                                                     maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm)
+                                                     maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init'])
         r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, 
                                                      n_weights=n_weights_r1, n_modes=n_modes, 
                                                      n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm)
+                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init'])
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=ysh_conv, 
                                                         n_output=z_dimension, n_weights=n_weights_q, 
                                                         n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm) # used to sample from q(z|x,y)?
+                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init']) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
 
         # reduce the dimensionality of y using convolutional neural network
@@ -213,8 +300,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
         ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_end)-tf.log(ramp_start))
         ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
-
-        #ramp = 1.0
+        
+        if params['ramp'] == False:
+            ramp = 1.0
  
         # reduce the y data size
         y_conv = r2_conv.dimensionanily_reduction(y_ph)
@@ -223,6 +311,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
         r1_loc, r1_scale, r1_weight = r1_zy._calc_z_mean_and_sigma(y_conv)
         r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_scale))
+        # get l1 loss term
+        l1_loss_weight = ramp*1e-3*tf.reduce_sum(tf.math.abs(r1_weight),1)
         r1_weight = ramp*tf.squeeze(r1_weight)
         #r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa = r1_zy_a._calc_z_mean_and_sigma(y_ph)        
         #r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
@@ -293,14 +383,10 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         log_r1_q = bimix_gauss.log_prob(q_zxy_samp)   # evaluate the log prob of r1 at the q samples
         KL = tf.reduce_mean(log_q_q - log_r1_q)      # average over batch
 
-        if params['l2_loss']==True:
-            # apply l1 regularization
-            regularization_penalty =  tf.nn.l2_loss(r1_weight)
-        else:
-            regularization_penalty = 0
-
+        if params['l1_loss'] == False:
+            l1_loss_weight = 0
         # THE VICI COST FUNCTION
-        COST = cost_R + ramp*KL + regularization_penalty
+        COST = cost_R + params['KL_coef']*ramp*KL + l1_loss_weight 
 
         # VARIABLES LISTS
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
@@ -318,9 +404,20 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     # START OPTIMISATION OF OELBO
     indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
     plotdata = []
+    if params['by_channel'] == False:
+        y_data_test_new = []
+        for sig in y_data_test:
+            y_data_test_new.append(sig.T)
+        y_data_test = np.array(y_data_test_new)
+        del y_data_test_new
+
     for i in range(params['num_iterations']):
 
         next_indices = indices_generator.next_indices()
+
+        # if load chunks true, load in data by chunks
+        if params['load_by_chunks'] == True:
+            x_data, y_data = load_chunk(params['train_set_dir'],params['inf_pars'],params,bounds,fixed_vals)
 
         # Make noise realizations and add to training data
         next_x_data = x_data[next_indices,:]
@@ -330,6 +427,13 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
         next_y_data /= y_normscale  # required for fast convergence
 
+        if params['by_channel'] == False:
+            next_y_data_new = [] 
+            for sig in next_y_data:
+                next_y_data_new.append(sig.T)
+            next_y_data = np.array(next_y_data_new)
+            del next_y_data_new
+        
         # train to minimise the cost function
         session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
 
@@ -343,8 +447,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             cost_val, kl_val = session.run([cost_R, KL], feed_dict={bs_ph:y_data_test.shape[0], x_ph:x_data_test, y_ph:y_data_test/y_normscale, idx:i})
             plotdata.append([cost,kl,cost+kl,cost_val,kl_val,cost_val+kl_val])
 
-            # Make loss plot
+            
             try:
+                # Make loss plot
                 plt.figure()
                 xvec = params['report_interval']*np.arange(np.array(plotdata).shape[0])
                 plt.semilogx(xvec,np.array(plotdata)[:,0],label='recon',color='blue',alpha=0.5)
@@ -353,7 +458,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.semilogx(xvec,np.array(plotdata)[:,3],label='recon_val',color='blue',linestyle='dotted')
                 plt.semilogx(xvec,np.array(plotdata)[:,4],label='KL_val',color='orange',linestyle='dotted')
                 plt.semilogx(xvec,np.array(plotdata)[:,5],label='total_val',color='green',linestyle='dotted')
-                #plt.ylim([-15,12])
+                plt.ylim([-25,15])
                 plt.xlabel('iteration')
                 plt.ylabel('cost')
                 plt.legend()
@@ -393,6 +498,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             # use the testing data for some plots
             for j in range(params['r']*params['r']):
 
+                """
                 # only make these plots for fully-connected network
                 if params['reduce'] == True or params['n_conv'] != None:
                     # make spcific data for plots that contains a training data sample with lots of different noise  
@@ -405,7 +511,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                     y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1))
                     y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],(params['ndata']*len(fixed_vals['det']))))
                 y_data_zplot /= y_normscale  # required for fast convergence                
-                
+                """
                 # run a training pass and extract parameters (do it multiple times for ease of reading)
                 # get q(z) data
 #                q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
@@ -653,7 +759,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 # Make corner plots
 #                plotter.make_corner_plot(y_data_test_noisefree[j,:params['ndata']],y_data_test[j,:params['ndata']],bounds,j,i,sampler='dynesty1')
                 # Get corner parnames to use in plotting labels
-                matplotlib.rc('text', usetex=True)
                 parnames = []
                 for k_idx,k in enumerate(params['rand_pars']):
                     if np.isin(k, params['inf_pars']):
@@ -677,6 +782,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                        fill_contours=True,
                        show_titles=True, fig=figure)#, weights=weights)
 
+                """
                 left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
                 ax2 = figure.add_axes([left, bottom, width, height])
 
@@ -696,14 +802,13 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 ax2.grid(False)
                 ax2.margins(x=0,y=0)
                 ax2.legend()
+                """
 
                 plt.savefig('%s/corner_plot_%s_%d-%d.png' % (params['plot_dir'],params['run_label'],i,j))
                 plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                 plt.close('all')
                 print('Made corner plot %d' % j)
 
-                del figure
-                
 
                 """
                 try:
@@ -739,7 +844,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                     pass 
                 """
 
-
+            """
             # Make loss plot
             try:
                 plt.figure()
@@ -760,6 +865,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.close('all')
             except:
                 pass            
+            """
 
             """        
             # plot the weights batch histogram
@@ -802,8 +908,12 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
     # USEFUL SIZES
     xsh1 = siz_x_data
-    ysh0 = np.shape(y_data_test)[0]
-    ysh1 = np.shape(y_data_test)[1]
+    if params['by_channel'] == True:
+        ysh0 = np.shape(y_data_test)[0]
+        ysh1 = np.shape(y_data_test)[1]
+    else:
+        ysh0 = np.shape(y_data_test)[1]
+        ysh1 = np.shape(y_data_test)[2]
     z_dimension = params['z_dimension']
     n_weights_r1 = params['n_weights_r1']
     n_weights_r2 = params['n_weights_r2']
@@ -825,7 +935,10 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     conv_strides = params['conv_strides']
     pool_strides = params['pool_strides']
     if params['reduce'] == True or params['n_conv'] != None:
-        num_det = np.shape(y_data_test)[2]
+        if params['by_channel'] == True:
+            num_det = np.shape(y_data_test)[2]
+        else:
+            num_det = ysh0
     else:
         num_det = None
 
@@ -842,7 +955,10 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         # PLACEHOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
         if params['reduce'] == True or params['n_conv'] != None:
-            y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1, num_det], name="y_ph")
+            if params['by_channel'] == True:
+                y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1, num_det], name="y_ph")
+            else:
+                y_ph = tf.placeholder(dtype=tf.float32, shape=[None, num_det, ysh1], name="y_ph")
         else:
             y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="y_ph")
 
@@ -853,11 +969,11 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
                                                      n_input2=ysh_conv, n_output=xsh1, n_weights=n_weights_r2, 
                                                      n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
                                                      filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
-                                                     conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det,batch_norm=batch_norm)
+                                                     conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])
         r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, n_weights=n_weights_r1,   # generates params for r1(z|y)
                                                     n_modes=n_modes, n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
                                                     filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
-                                                    conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det,batch_norm=batch_norm)
+                                                    conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])
         #r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, 1, n_weights_r1, n_modes, n_hlayers)
@@ -866,7 +982,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=ysh_conv, n_output=z_dimension, 
                                                         n_weights=n_weights_q, n_hlayers=n_hlayers, drate=drate, 
-                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv,conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det,batch_norm=batch_norm)  
+                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv,conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])  
 
         # reduce the y data size
         y_conv = r2_conv.dimensionanily_reduction(y_ph)

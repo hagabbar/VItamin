@@ -795,6 +795,39 @@ class make_plots:
 #            n_samps = self.params['n_samples']
 #            n_pars = len(self.params['inf_pars'])
            
+            """
+            set1 = set1.T
+            set2 = set2.T
+            def MMD_multiscale(x, y):
+                xx, yy, zz = np.matmul(x,x.T), np.matmul(y,y.T), np.matmul(x,y.T)
+
+                rx = (np.expand_dims(np.diag(xx),axis=0))
+                ry = (np.expand_dims(np.diag(yy),axis=0))
+                rx = np.tile(rx,(rx.shape[1],1))
+                ry = np.tile(ry,(ry.shape[1],1))
+                
+
+                dxx = rx.T + rx - 2.*xx
+                dyy = ry.T + ry - 2.*yy
+                dxy = rx.T + ry - 2.*zz
+
+                XX, YY, XY = (np.zeros(xx.shape),
+                  np.zeros(xx.shape),
+                  np.zeros(xx.shape))
+
+                alphas = [0.05,0.2,0.5,0.9,1.3]
+                for a in alphas:
+                    XX += a**2 * (a**2 + dxx)**-1
+                    YY += a**2 * (a**2 + dyy)**-1
+                    XY += a**2 * (a**2 + dxy)**-1
+
+                return np.mean(XX + YY - 2.*XY)
+
+            mmd_result = MMD_multiscale(set1,set2)
+            return mmd_result * 1e3
+
+            exit()
+            """
             # Iterate over number of randomized sample slices
             SMALL_CONSTANT = 1e-162 # 1e-4 works best for some reason
             def my_kde_bandwidth(obj, fac=1.0):
@@ -804,17 +837,15 @@ class make_plots:
                 return np.power(obj.n, -1./(obj.d+4)) * fac
             p = gaussian_kde(set1,bw_method=my_kde_bandwidth)#'scott') # 7.5e0 works best ... don't know why. Hope it's not over-smoothing results.
             q = gaussian_kde(set2,bw_method=my_kde_bandwidth)#'scott')#'silverman') # 7.5e0 works best ... don't know why.
-            #log_diff = np.where(q(set1) != 0, np.log((p(set1)+SMALL_CONSTANT)/(q(set1)+SMALL_CONSTANT)), 0)
             log_diff = np.log((p(set1)+SMALL_CONSTANT)/(q(set1)+SMALL_CONSTANT))
             # Compute KL, but ignore values equal to infinity
-#            print(set2.shape[1],set1.shape[1])
             kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
-#            kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff[log_diff != np.inf])
-#            if np.isinf(kl_result):
-#                kl_result = 0
+
+            # compute symetric kl
+            anti_log_diff = np.log((q(set2)+SMALL_CONSTANT)/(p(set2)+SMALL_CONSTANT))
+            anti_kl_result = (1.0/float(set1.shape[1])) * np.sum(anti_log_diff)
+            kl_result = kl_result + anti_kl_result
             
-            #kl_result = np.sum(scipy.stats.entropy(set1,set2)) * (1.0/float(set1.shape[1]))
-#            kl_result = np.sum(np.where(set1 != 0, set1 * np.log(set1 / set2), 0)) * (1.0/float(set1.shape[1]))
             return kl_result
    
         # Define variables 
@@ -844,7 +875,11 @@ class make_plots:
             except:
                 print('Plotting directory already exists')
 
-            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
+            try:
+                hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
+            except:
+                os.remove('plotting_data_%s/KL_plot_data.h5' % params['run_label'])
+                hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
         else:
             hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
       
@@ -881,6 +916,9 @@ class make_plots:
                     # Iterate over test cases
                     tot_kl = []
                     for r in range(self.params['r']**2):
+                        #if snrs_test[r,0] < 8.0:
+                        #    continue
+                        #else:
                         tot_kl.append(compute_kl(set1[r],set2[r],[sampler1,sampler2]))
                         print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
                     tot_kl = np.array(tot_kl)
@@ -892,7 +930,7 @@ class make_plots:
                
 #                logbins = np.histogram_bin_edges(tot_kl,bins='fd') 
                 logbins = np.logspace(-1,2.5,50)
-#                logbins = 25
+                #logbins = 50
 
                 if samplers[i] == 'vitamin' or samplers[::-1][j] == 'vitamin':
 #                    logbins = 25

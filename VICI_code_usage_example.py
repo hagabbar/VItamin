@@ -83,25 +83,27 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="1"
+os.environ["CUDA_VISIBLE_DEVICES"]="7"
 
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
+
+n_fc = 2048
 
 # Defining the list of parameter that need to be fed into the models
 def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run25' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run161' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = '9par_256Hz_3det_case_256test'
     r = 6                       # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
-    tot_dataset_size = int(1e6)    # total number of training samples to use
+    tot_dataset_size = int(1e3)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
-    save_interval = int(1e5)
+    save_interval = int(5e4)
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
         ndata = ndata,
@@ -113,35 +115,42 @@ def get_params():
         hyperparam_optim = False,      # optimize hyperparameters for model 
         hyperparam_optim_stop = int(2e5), # stopping point of hyperparameter optimizer 
         hyperparam_n_call = 30,       # number of optimization calls
+        load_by_chunks = False,
+        load_chunk_size = 5e3,
+        load_iteration = 1e4,
+        weight_init = 'xavier',#[xavier,VarianceScaling,Orthogonal]
+        ramp = True,                 # if true, do ramp on KL loss
+        KL_coef = 0.2,                # coefficient to place in front of KL loss
 
         print_values=True,            # optionally print values every report interval
-        n_samples = 5000,             # number of posterior samples to save per reconstruction upon inference 
-        num_iterations=int(1e8)+1,    # number of iterations inference model (inverse reconstruction)
+        n_samples = 1000,             # number of posterior samples to save per reconstruction upon inference 
+        num_iterations=int(1e7)+1,    # number of iterations inference model (inverse reconstruction)
         initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=64,               # batch size inference model (inverse reconstruction)
         batch_norm=True,              # if true, do batch normalization in all layers
-        l2_loss = False,               # apply l2 regularization on mode weights
+        l1_loss = False,               # apply l1 regularization on mode weights
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
-        n_modes=15,                  # number of modes in the latent space
+        n_modes=7,                  # number of modes in the latent space
         n_hlayers=3,                # the number of hidden layers in each network
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,
         n_conv = 3,                # number of convolutional layers to use in each part of the networks. None if not used
-        n_filters = [33,33,33],
-        filter_size = [3,3,9],
+        by_channel = True,        # if True, do convolutions as seperate channels
+        n_filters = [33,33,33],#,16,32,32],
+        filter_size = [3,3,3],#,3,3,3],
         drate = 0.5,
-        maxpool = [1,2,1],
-        conv_strides = [1,1,1],
-        pool_strides = [1,2,1],
-        ramp_start = 1e4,
-        ramp_end = 1e5,
+        maxpool = [1,1,1],#,2,1,2],
+        conv_strides = [1,1,1],#,1,1,1],
+        pool_strides = [1,1,1],#,2,1,2],
+        ramp_start = 1e5,
+        ramp_end = 2e5,
         save_interval=save_interval,           # interval at which to save inference model weights
         plot_interval=save_interval,           # interval over which plotting is done
-        z_dimension=960,                    # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = [1024,1024,1024],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = [1024,1024,1024],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = [1024,1024,1024],              # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        z_dimension=100,                    # number of latent space dimensions inference model (inverse reconstruction)
+        n_weights_r1 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = [n_fc,n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,                             # the timeseries length in seconds
         r = r,                                      # the grid dimension for the output tests
         rand_pars=rand_pars,
@@ -150,8 +159,8 @@ def get_params():
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
-        wrap_pars=['phase','psi'],                  # parameters that get wrapped on the 1D parameter 
-        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],#,'geocent_time','phase','theta_jn','psi'], # parameter names
+        wrap_pars=[],#['phase','psi'],                  # parameters that get wrapped on the 1D parameter 
+        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
         test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
         pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num),    # location of bilby PE results
@@ -293,8 +302,20 @@ def load_data(input_dir,inf_pars,load_condor=False):
     snrs = []
     for filename in filenames:
         try:
-            print(filename)
             train_files.append(filename)
+
+        except OSError:
+            print('Could not load requested file')
+            continue
+
+    if params['load_by_chunks'] == True:
+        train_files_idx = np.arange(len(train_files))[:int(params['load_chunk_size']/1000.0)]
+        np.random.shuffle(train_files_idx)
+        train_files = np.array(train_files)[train_files_idx]
+
+    for filename in train_files:
+        try:
+            print(filename)
             data_temp={'x_data': h5py.File(dataLocations[0]+'/'+filename, 'r')['x_data'][:],
                   'y_data_noisefree': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisefree'][:],
                   'y_data_noisy': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisy'][:],
@@ -336,7 +357,10 @@ def load_data(input_dir,inf_pars,load_condor=False):
     x_data = data['x_data']
     y_data = data['y_data_noisefree']
     y_data_noisy = data['y_data_noisy']
-    y_normscale = np.max(np.abs(y_data_noisy))
+    if params['load_by_chunks'] == True:
+        y_normscale = 36.43879218007172 
+    else:
+        y_normscale = np.max(np.abs(y_data_noisy))
     
     # extract inference parameters
     idx = []
@@ -740,7 +764,8 @@ if args.test:
     x_data_train, y_data_train, _, y_normscale,snrs_train = load_data(params['train_set_dir'],params['inf_pars'])
 
 #    print('YOU ARE CURRENTLY IN DEBUGGING MODE. REMOVE THIS LINE IF NOT!!')
-#    y_normscale = 36.438613192970415
+#    y_normscale = 36.43879218007172 # for 2 million and 5 million
+    y_normscale = 36.438613192970415 # for 1 million
         #y_normscale = 36.43879218007172
 
     # load the noisy testing data back in
@@ -873,7 +898,14 @@ if args.test:
 #        y_data_test = y_data_test.reshape(y_data_test.shape[0],params['ndata'],len(fixed_vals['det']))
 
     VI_pred_all = []
-    make_corner_plots = True
+    make_corner_plots = False 
+
+    if params['by_channel'] == False:
+        y_data_test_new = []
+        for sig in y_data_test:
+            y_data_test_new.append(sig.T)
+        y_data_test = np.array(y_data_test_new)
+        del y_data_test_new
 
     for i in range(params['r']*params['r']):
 
@@ -977,11 +1009,14 @@ if args.test:
         # plot waveform in upper-right hand corner
         ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[i,:params['ndata']],color='cyan',zorder=50)
 #        snr = 'No SNR info'
-        snr = snrs_test[i,0]
+        snr = round(snrs_test[i,0],2)
         if params['reduce'] == True or params['n_conv'] != None:
-            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],0],color='darkblue',label=str(snr))
+            if params['by_channel'] == False:
+                 ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,0,:params['ndata']],color='darkblue',label='SNR: '+str(snr))
+            else:
+                ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],0],color='darkblue',label='SNR: '+str(snr))
         else:
-            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata']],color='darkblue',label=str(snr))
+            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata']],color='darkblue',label='SNR: '+str(snr))
         ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
         ax2.yaxis.set_visible(False)
         ax2.tick_params(axis="x", labelsize=11)

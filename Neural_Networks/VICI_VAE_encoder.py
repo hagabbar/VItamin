@@ -15,7 +15,7 @@ SMALL_CONSTANT = 1e-6
 
 class VariationalAutoencoder(object):
 
-    def __init__(self, name, n_input1=3, n_input2=256, n_output=4, n_weights=2048, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, conv_strides=1, pool_strides=1, num_det=1, batch_norm=False):
+    def __init__(self, name, n_input1=3, n_input2=256, n_output=4, n_weights=2048, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, conv_strides=1, pool_strides=1, num_det=1, batch_norm=False, by_channel=False, weight_init='xavier'):
         
         self.n_input1 = n_input1
         self.n_input2 = n_input2
@@ -32,6 +32,8 @@ class VariationalAutoencoder(object):
         self.pool_strides = pool_strides
         self.num_det = num_det
         self.batch_norm = batch_norm
+        self.by_channel = by_channel
+        self.weight_init = weight_init
 
         network_weights = self._create_weights()
         self.weights = network_weights
@@ -42,21 +44,36 @@ class VariationalAutoencoder(object):
 
             # Reshape input to a 3D tensor - single channel
             if self.n_conv is not None:
-                conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], self.num_det])
-                for i in range(self.n_conv):
-                    weight_name = 'w_conv_' + str(i)
-                    bias_name = 'b_conv_' + str(i)
-                    conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_VAE_encoder'][weight_name],strides=[1,1,self.conv_strides[i],1],padding='SAME'),self.weights['VICI_VAE_encoder'][bias_name])
-                    conv_post = self.nonlinearity(conv_pre)
-                    if self.batch_norm == True:
-                        conv_batchNorm = tf.nn.batch_normalization(conv_post,tf.Variable(tf.zeros([1,conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),tf.Variable(tf.ones([1,conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),None,None,0.000001)
-                        conv_dropout = tf.layers.dropout(conv_batchNorm,rate=self.drate)
-                    else:
-                        conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
-                    conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
-                    conv_pool = tf.nn.max_pool(conv_dropout,ksize=[1, 1, self.maxpool[i], 1],strides=[1, 1, self.pool_strides[i], 1],padding='SAME')
+                if self.by_channel == True:
+                    conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], self.num_det])
+                    for i in range(self.n_conv):
+                        weight_name = 'w_conv_' + str(i)
+                        bias_name = 'b_conv_' + str(i)
+                        conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_VAE_encoder'][weight_name],strides=[1,1,self.conv_strides[i],1],padding='SAME'),self.weights['VICI_VAE_encoder'][bias_name])
+                        conv_post = self.nonlinearity(conv_pre)
+                        if self.batch_norm == True:
+                            conv_batchNorm = tf.nn.batch_normalization(conv_post,tf.Variable(tf.zeros([1,conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),tf.Variable(tf.ones([1,conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),None,None,0.000001)
+                            conv_dropout = tf.layers.dropout(conv_batchNorm,rate=self.drate)
+                        else:
+                            conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
+                        conv_pool = tf.nn.max_pool(conv_dropout,ksize=[1, 1, self.maxpool[i], 1],strides=[1, 1, self.pool_strides[i], 1],padding='SAME')
 
-                fc = tf.concat([x,tf.reshape(conv_pool, [-1, int(conv_pool.shape[2]*conv_pool.shape[3])])],axis=1)
+                    fc = tf.concat([x,tf.reshape(conv_pool, [-1, int(conv_pool.shape[2]*conv_pool.shape[3])])],axis=1)
+                if self.by_channel == False:
+                    conv_pool = tf.reshape(y, shape=[-1, y.shape[1], y.shape[2], 1])
+                    for i in range(self.n_conv):
+                        weight_name = 'w_conv_' + str(i)
+                        bias_name = 'b_conv_' + str(i)
+                        conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_VAE_encoder'][weight_name],strides=[1,self.conv_strides[i],self.conv_strides[i],1],padding='SAME'),self.weights['VICI_VAE_encoder'][bias_name])
+                        conv_post = self.nonlinearity(conv_pre)
+                        if self.batch_norm == True:
+                            conv_batchNorm = tf.nn.batch_normalization(conv_post,tf.Variable(tf.zeros([conv_post.shape[1],conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),tf.Variable(tf.ones([conv_post.shape[1],conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),None,None,0.000001)
+                            #conv_dropout = tf.layers.dropout(conv_batchNorm,rate=self.drate)
+                        #else:
+                            #conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
+                        conv_pool = tf.nn.max_pool(conv_batchNorm,ksize=[1, self.maxpool[i], self.maxpool[i], 1],strides=[1, self.pool_strides[i], self.pool_strides[i], 1],padding='SAME')
+
+                    fc = tf.concat([x,tf.reshape(conv_pool, [-1, int(conv_pool.shape[1]*conv_pool.shape[2]*conv_pool.shape[3])])],axis=1)
             else:
                 fc = tf.concat([x,y],axis=1)
 
@@ -71,7 +88,6 @@ class VariationalAutoencoder(object):
                     hidden_dropout = tf.layers.dropout(hidden_batchNorm,rate=self.drate)
                 else:
                     hidden_dropout = tf.layers.dropout(hidden_post,rate=self.drate)
-                hidden_dropout = tf.layers.dropout(hidden_post,rate=self.drate)
             loc = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_VAE_encoder']['w_loc']), self.weights['VICI_VAE_encoder']['b_loc'])
             scale = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_VAE_encoder']['w_scale']), self.weights['VICI_VAE_encoder']['b_scale'])
 
@@ -97,7 +113,19 @@ class VariationalAutoencoder(object):
                 for i in range(self.n_conv):
                     weight_name = 'w_conv_' + str(i)
                     bias_name = 'b_conv_' + str(i)
-                    all_weights['VICI_VAE_encoder'][weight_name] = tf.Variable(tf.reshape(vae_utils.xavier_init(self.filter_size[i], dummy*self.n_filters[i]),[self.filter_size[i], 1, dummy, self.n_filters[i]]), dtype=tf.float32)
+                    # orthogonal init
+                    if self.weight_init == 'Orthogonal':
+                        shape_init = (self.filter_size[i],dummy*self.n_filters[i])
+                        initializer = tf.keras.initializers.Orthogonal()
+                        all_weights['VICI_VAE_encoder'][weight_name] = tf.Variable(tf.reshape(initializer(shape=shape_init),[self.filter_size[i], 1, dummy, self.n_filters[i]]), dtype=tf.float32)
+                    # Variance scaling
+                    if self.weight_init == 'VarianceScaling':
+                        shape_init = (self.filter_size[i],dummy*self.n_filters[i])
+                        initializer = tf.keras.initializers.VarianceScaling()
+                        all_weights['VICI_VAE_encoder'][weight_name] = tf.Variable(tf.reshape(initializer(shape=shape_init),[self.filter_size[i], 1, dummy, self.n_filters[i]]), dtype=tf.float32)
+                    # xavier initilization
+                    if self.weight_init == 'xavier':
+                        all_weights['VICI_VAE_encoder'][weight_name] = tf.Variable(tf.reshape(vae_utils.xavier_init(self.filter_size[i], dummy*self.n_filters[i]),[self.filter_size[i], 1, dummy, self.n_filters[i]]), dtype=tf.float32)
                     all_weights['VICI_VAE_encoder'][bias_name] = tf.Variable(tf.zeros([self.n_filters[i]], dtype=tf.float32))
                     tf.summary.histogram(weight_name, all_weights['VICI_VAE_encoder'][weight_name])
                     tf.summary.histogram(bias_name, all_weights['VICI_VAE_encoder'][bias_name])
@@ -114,8 +142,10 @@ class VariationalAutoencoder(object):
                             total_pool_stride_sum += 1
                     if self.conv_strides[j] != 1:
                         total_pool_stride_sum += 1
-                fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[i]/(2**total_pool_stride_sum))
-#                fc_input_size = 2023
+                if self.by_channel == True:
+                    fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[i]/(2**total_pool_stride_sum))
+                else:
+                    fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[i]/(2**total_pool_stride_sum)*2) 
             else:
                 fc_input_size = self.n_input1 + self.n_input2
 
