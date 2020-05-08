@@ -99,7 +99,7 @@ class VariationalAutoencoder(object):
             weight = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_encoder']['w_weight']), self.weights['VICI_encoder']['b_weight']) 
 
             # apply l1 regularization to mode weight
-            weight = self.nonlinearity(weight)
+#            weight = self.nonlinearity(weight)
 
             tf.summary.histogram('loc', loc)
             tf.summary.histogram('scale', scale)

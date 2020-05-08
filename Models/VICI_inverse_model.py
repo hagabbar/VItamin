@@ -355,9 +355,22 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # COST FROM RECONSTRUCTION - Gaussian parts
         normalising_factor_x = -0.5*tf.log(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)) - 0.5*np.log(2.0*np.pi)   # -0.5*log(sig^2) - 0.5*log(2*pi)
         square_diff_between_mu_and_x = tf.square(r2_xzy_mean_nowrap - tf.boolean_mask(x_ph,nowrap_mask,axis=1))         # (mu - x)^2
+
         inside_exp_x = -0.5 * tf.divide(square_diff_between_mu_and_x,SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)) # -0.5*(mu - x)^2 / sig^2
+        if params['weighted_pars'] != None:
+            inside_exp_x_new=[]
+            for k_idx,k in enumerate(params['inf_pars']):
+                if k == params['weighted_pars']:
+                    inside_exp_x_new = tf.math.multiply(inside_exp_x[:,k_idx],tf.Variable(params['weighted_pars_factor'],dtype=tf.float32))
+                else:
+                    inside_exp_x_new = inside_exp_x[:,k_idx]
+                if k_idx == 0:
+                    inside_exp_x_new_tensor = tf.expand_dims(inside_exp_x_new,1)
+                else:
+                    inside_exp_x_new_tensor = tf.concat([inside_exp_x_new_tensor,tf.expand_dims(inside_exp_x_new,1)],axis=1)
+            inside_exp_x = inside_exp_x_new_tensor
         reconstr_loss_x = tf.reduce_sum(normalising_factor_x + inside_exp_x,axis=1,keepdims=True)                       # sum_dim(-0.5*log(sig^2) - 0.5*log(2*pi) - 0.5*(mu - x)^2 / sig^2)
-        
+
         # COST FROM RECONSTRUCTION - Von Mises parts
         if np.sum(wrap_mask)>0:
             #kappa = tf.math.reciprocal(SMALL_CONSTANT + r2_xzy_log_sig_sq_wrap)
@@ -392,7 +405,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
         
         # DEFINE OPTIMISER (using ADAM here)
-        optimizer = tf.train.AdamOptimizer(params['initial_training_rate']) 
+#        optimizer = tf.train.AdamOptimizer(params['initial_training_rate']) 
+        optimizer = tf.train.RMSPropOptimizer(params['initial_training_rate'])
         minimize = optimizer.minimize(COST,var_list = var_list_VICI)
         
         # INITIALISE AND RUN SESSION
@@ -411,13 +425,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         y_data_test = np.array(y_data_test_new)
         del y_data_test_new
 
+    load_chunk_it = 1
     for i in range(params['num_iterations']):
 
         next_indices = indices_generator.next_indices()
 
         # if load chunks true, load in data by chunks
-        if params['load_by_chunks'] == True:
+        if params['load_by_chunks'] == True and i == int(params['load_iteration']*load_chunk_it):
             x_data, y_data = load_chunk(params['train_set_dir'],params['inf_pars'],params,bounds,fixed_vals)
+            load_chunk_it += 1
 
         # Make noise realizations and add to training data
         next_x_data = x_data[next_indices,:]
@@ -479,6 +495,12 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 print('Training Total cost:',kl + cost) 
                 print('Validation Total cost:',kl_val + cost_val)
                 print()
+
+                # terminate training if vanishing gradient
+                if np.isnan(kl+cost) == True or np.isnan(kl_val+cost_val) == True:
+                    print('Network is returning NaN values')
+                    print('Terminating network training')
+                    exit()
 
         if i % params['save_interval'] == 0 and i > 0:
 

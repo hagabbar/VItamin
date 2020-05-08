@@ -83,7 +83,8 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-os.environ["CUDA_VISIBLE_DEVICES"]="7"
+gpu_num = str(2)
+os.environ["CUDA_VISIBLE_DEVICES"]=gpu_num
 
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -96,16 +97,19 @@ def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run161' % (len(fixed_vals['det']),len(rand_pars),ndata)
-    bilby_results_label = '9par_256Hz_3det_case_256test'
-    r = 6                       # number of test samples to use for plotting
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run43' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    bilby_results_label = 'attempt_to_fix_astropy_bug'
+    r = 2                       # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
-    tot_dataset_size = int(1e3)    # total number of training samples to use
+    tot_dataset_size = int(1e7)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
-    save_interval = int(5e4)
+    save_interval = int(1e5)
     ref_geocent_time=1126259642.5   # reference gps time
+    load_chunk_size = 1e4
+    batch_size = 64
     params = dict(
+        gpu_num=gpu_num,
         ndata = ndata,
         run_label=run_label,            # label for run
         bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
@@ -115,42 +119,42 @@ def get_params():
         hyperparam_optim = False,      # optimize hyperparameters for model 
         hyperparam_optim_stop = int(2e5), # stopping point of hyperparameter optimizer 
         hyperparam_n_call = 30,       # number of optimization calls
-        load_by_chunks = False,
-        load_chunk_size = 5e3,
-        load_iteration = 1e4,
+        load_by_chunks = True,
+        load_chunk_size = load_chunk_size,
+        load_iteration = int((load_chunk_size * 25)/batch_size),
         weight_init = 'xavier',#[xavier,VarianceScaling,Orthogonal]
         ramp = True,                 # if true, do ramp on KL loss
-        KL_coef = 0.2,                # coefficient to place in front of KL loss
+        KL_coef = 1.0,                # coefficient to place in front of KL loss
 
         print_values=True,            # optionally print values every report interval
-        n_samples = 1000,             # number of posterior samples to save per reconstruction upon inference 
+        n_samples = 3000,             # number of posterior samples to save per reconstruction upon inference 
         num_iterations=int(1e7)+1,    # number of iterations inference model (inverse reconstruction)
-        initial_training_rate=0.0001, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=64,               # batch size inference model (inverse reconstruction)
+        initial_training_rate=1e-4, # initial training rate for ADAM optimiser inference model (inverse reconstruction)
+        batch_size=batch_size,               # batch size inference model (inverse reconstruction)
         batch_norm=True,              # if true, do batch normalization in all layers
         l1_loss = False,               # apply l1 regularization on mode weights
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
-        n_modes=7,                  # number of modes in the latent space
-        n_hlayers=3,                # the number of hidden layers in each network
+        n_modes=12,                  # number of modes in the latent space
+        n_hlayers=2,                # the number of hidden layers in each network
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,
-        n_conv = 3,                # number of convolutional layers to use in each part of the networks. None if not used
+        n_conv = 5,                # number of convolutional layers to use in each part of the networks. None if not used
         by_channel = True,        # if True, do convolutions as seperate channels
-        n_filters = [33,33,33],#,16,32,32],
-        filter_size = [3,3,3],#,3,3,3],
+        n_filters = [9, 9, 15, 15, 33],#,16,32,32],
+        filter_size = [11, 9, 7, 3, 3],#,3,3,3],
         drate = 0.5,
-        maxpool = [1,1,1],#,2,1,2],
-        conv_strides = [1,1,1],#,1,1,1],
-        pool_strides = [1,1,1],#,2,1,2],
-        ramp_start = 1e5,
-        ramp_end = 2e5,
+        maxpool = [1,2,1,1,1],#,	2,1,2],
+        conv_strides = [1,1,1,1,1],#,1,1,1],
+        pool_strides = [1,2,1,1,1],#,2,1,2],
+        ramp_start = 1e4,
+        ramp_end = 1e5,
         save_interval=save_interval,           # interval at which to save inference model weights
         plot_interval=save_interval,           # interval over which plotting is done
         z_dimension=100,                    # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = [n_fc,n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r1 = [n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = [n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = [n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,                             # the timeseries length in seconds
         r = r,                                      # the grid dimension for the output tests
         rand_pars=rand_pars,
@@ -160,15 +164,17 @@ def get_params():
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
         wrap_pars=[],#['phase','psi'],                  # parameters that get wrapped on the 1D parameter 
+        weighted_pars=None,#['ra','dec','goecent_time','theta_jn'],                     # set to None if not using, pars to weight during training
+        weighted_pars_factor=2,                         # weighting scalar factor
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
-        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
-        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num),    # location of bilby PE results
-#        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test_waveforms',
-#        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/publication_results/test',
+#        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
+#        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num),    # location of bilby PE results
+        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/attempt_to_fix_astropy_bug/test_waveforms',
+        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/attempt_to_fix_astropy_bug/test',
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
         load_plot_data=False,                                                  # use old plotting data
-        samplers=['vitamin','cpnest','dynesty'],#,'ptemcee','emcee'],          # samplers to use when plotting
+        samplers=['vitamin','dynesty','cpnest'],#,'ptemcee','emcee'],          # samplers to use when plotting
 
         #add_noise_real=True,                  # whether or not to add extra noise realizations in training set
         #do_normscale=True,                    # if true normalize parameters
@@ -308,7 +314,7 @@ def load_data(input_dir,inf_pars,load_condor=False):
             print('Could not load requested file')
             continue
 
-    if params['load_by_chunks'] == True:
+    if params['load_by_chunks'] == True and load_condor == False:
         train_files_idx = np.arange(len(train_files))[:int(params['load_chunk_size']/1000.0)]
         np.random.shuffle(train_files_idx)
         train_files = np.array(train_files)[train_files_idx]
@@ -767,6 +773,8 @@ if args.test:
 #    y_normscale = 36.43879218007172 # for 2 million and 5 million
     y_normscale = 36.438613192970415 # for 1 million
         #y_normscale = 36.43879218007172
+    if params['load_by_chunks'] == True:
+        y_normscale = 36.43879218007172
 
     # load the noisy testing data back in
     x_data_test, y_data_test_noisefree, y_data_test,_,snrs_test = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
@@ -862,8 +870,11 @@ if args.test:
                 XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
             else:
                 # save all posteriors in array
-                XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
-
+                try:
+                    XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
+                except ValueError:
+                    print(XS_all.shape,np.expand_dims(XS[:params['n_samples'],:], axis=0).shape)
+                    exit()
 
             for q_idx,q in enumerate(params['inf_pars']):
                 par_min = q + '_min'
@@ -898,7 +909,7 @@ if args.test:
 #        y_data_test = y_data_test.reshape(y_data_test.shape[0],params['ndata'],len(fixed_vals['det']))
 
     VI_pred_all = []
-    make_corner_plots = False 
+    make_corner_plots = False
 
     if params['by_channel'] == False:
         y_data_test_new = []
@@ -997,6 +1008,13 @@ if args.test:
         figure = corner.corner(samp_posteriors['dynesty1'][i], **defaults_kwargs, labels=parnames,
                            color='tab:green',
                            show_titles=True, fig=figure)#, weights=weights)
+#        figure = corner.corner(samp_posteriors['emcee1'][i], **defaults_kwargs, labels=parnames,
+#                           color='tab:orchid',
+#                           show_titles=True, fig=figure)#, weights=weights)
+#        figure = corner.corner(samp_posteriors['ptemcee1'][i], **defaults_kwargs, labels=parnames,
+#                           color='tab:turquoise',
+#                           show_titles=True, fig=figure)#, weights=weights)
+
         corner.corner(VI_pred, **defaults_kwargs, labels=parnames,
                            color='tab:red', fill_contours=True,
                            show_titles=True, fig=figure)#, weights=weights)
