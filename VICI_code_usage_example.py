@@ -83,7 +83,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-gpu_num = str(2)
+gpu_num = str(5)
 os.environ["CUDA_VISIBLE_DEVICES"]=gpu_num
 
 config = tf.compat.v1.ConfigProto()
@@ -97,19 +97,20 @@ def get_params():
 
     ndata = 256 # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run43' % (len(fixed_vals['det']),len(rand_pars),ndata)
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run49' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = 'attempt_to_fix_astropy_bug'
-    r = 2                       # number of test samples to use for plotting
+    r = 6                       # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
     tot_dataset_size = int(1e7)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
     save_interval = int(1e5)
     ref_geocent_time=1126259642.5   # reference gps time
-    load_chunk_size = 1e4
+    load_chunk_size = 1e6
     batch_size = 64
     params = dict(
         gpu_num=gpu_num,
+        resume_training=False,           # if True, resume training from checkpoint
         ndata = ndata,
         run_label=run_label,            # label for run
         bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
@@ -124,7 +125,7 @@ def get_params():
         load_iteration = int((load_chunk_size * 25)/batch_size),
         weight_init = 'xavier',#[xavier,VarianceScaling,Orthogonal]
         ramp = True,                 # if true, do ramp on KL loss
-        KL_coef = 1.0,                # coefficient to place in front of KL loss
+        KL_coef = 1e0,                # coefficient to place in front of KL loss
 
         print_values=True,            # optionally print values every report interval
         n_samples = 3000,             # number of posterior samples to save per reconstruction upon inference 
@@ -135,26 +136,26 @@ def get_params():
         l1_loss = False,               # apply l1 regularization on mode weights
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
-        n_modes=12,                  # number of modes in the latent space
-        n_hlayers=2,                # the number of hidden layers in each network
+        n_modes=7,                  # number of modes in the latent space
+        n_hlayers=3,                # the number of hidden layers in each network
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,
-        n_conv = 5,                # number of convolutional layers to use in each part of the networks. None if not used
+        n_conv = 4,                # number of convolutional layers to use in each part of the networks. None if not used
         by_channel = True,        # if True, do convolutions as seperate channels
-        n_filters = [9, 9, 15, 15, 33],#,16,32,32],
-        filter_size = [11, 9, 7, 3, 3],#,3,3,3],
+        n_filters = [33, 33, 33, 33],#,16,32,32],
+        filter_size = [3, 3, 3, 3],#,3,3,3],
         drate = 0.5,
-        maxpool = [1,2,1,1,1],#,	2,1,2],
-        conv_strides = [1,1,1,1,1],#,1,1,1],
-        pool_strides = [1,2,1,1,1],#,2,1,2],
+        maxpool = [1,2,1,1],#,	2,1,2],
+        conv_strides = [1,1,1,1],#,1,1,1],
+        pool_strides = [1,2,1,1],#,2,1,2],
         ramp_start = 1e4,
         ramp_end = 1e5,
         save_interval=save_interval,           # interval at which to save inference model weights
         plot_interval=save_interval,           # interval over which plotting is done
         z_dimension=100,                    # number of latent space dimensions inference model (inverse reconstruction)
-        n_weights_r1 = [n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_r2 = [n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
-        n_weights_q = [n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r1 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_r2 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
+        n_weights_q = [n_fc,n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the inference model (inverse reconstruction)
         duration = 1.0,                             # the timeseries length in seconds
         r = r,                                      # the grid dimension for the output tests
         rand_pars=rand_pars,
@@ -164,8 +165,8 @@ def get_params():
         training_data_seed=43,                              # random seed number
         testing_data_seed=44,
         wrap_pars=[],#['phase','psi'],                  # parameters that get wrapped on the 1D parameter 
-        weighted_pars=None,#['ra','dec','goecent_time','theta_jn'],                     # set to None if not using, pars to weight during training
-        weighted_pars_factor=2,                         # weighting scalar factor
+        weighted_pars=['ra','dec','geocent_time'],#['ra','dec','goecent_time','theta_jn'],                     # set to None if not using, pars to weight during training
+        weighted_pars_factor=1,                         # weighting scalar factor
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
 #        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set

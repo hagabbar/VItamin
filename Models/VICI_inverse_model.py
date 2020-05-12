@@ -405,8 +405,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
         
         # DEFINE OPTIMISER (using ADAM here)
-#        optimizer = tf.train.AdamOptimizer(params['initial_training_rate']) 
-        optimizer = tf.train.RMSPropOptimizer(params['initial_training_rate'])
+        optimizer = tf.train.AdamOptimizer(params['initial_training_rate']) 
+#        optimizer = tf.train.RMSPropOptimizer(params['initial_training_rate'])
         minimize = optimizer.minimize(COST,var_list = var_list_VICI)
         
         # INITIALISE AND RUN SESSION
@@ -424,6 +424,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             y_data_test_new.append(sig.T)
         y_data_test = np.array(y_data_test_new)
         del y_data_test_new
+
 
     load_chunk_it = 1
     for i in range(params['num_iterations']):
@@ -449,7 +450,12 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 next_y_data_new.append(sig.T)
             next_y_data = np.array(next_y_data_new)
             del next_y_data_new
-        
+       
+        # restore session if wanted
+        if params['resume_training'] == True and i == 0 :
+            print(save_dir)
+            saver.restore(session, save_dir)
+ 
         # train to minimise the cost function
         session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
 

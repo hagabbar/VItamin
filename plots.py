@@ -842,9 +842,9 @@ class make_plots:
             kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
 
             # compute symetric kl
-#            anti_log_diff = np.log((q(set2)+SMALL_CONSTANT)/(p(set2)+SMALL_CONSTANT))
-#            anti_kl_result = (1.0/float(set1.shape[1])) * np.sum(anti_log_diff)
-#            kl_result = kl_result + anti_kl_result
+            anti_log_diff = np.log((q(set2)+SMALL_CONSTANT)/(p(set2)+SMALL_CONSTANT))
+            anti_kl_result = (1.0/float(set1.shape[1])) * np.sum(anti_log_diff)
+            kl_result = kl_result + anti_kl_result
             
             return kl_result
    
