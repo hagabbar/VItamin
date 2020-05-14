@@ -205,7 +205,7 @@ def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
     y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
 
     # reshape y data into channels last format for convolutional approach
-    if params['reduce'] == True or params['n_conv'] != None:
+    if params['reduce'] == True or params['n_filters_r1'] != None:
         y_data_train_copy = np.zeros((y_data_train.shape[0],params['ndata'],len(fixed_vals['det'])))
 
         for i in range(y_data_train.shape[0]):
@@ -230,24 +230,42 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     n_convsteps = params['n_convsteps']
     z_dimension = params['z_dimension']
     bs = params['batch_size']
-    filt_siz = params['filter_size']
+#    filt_siz = params['filter_size']
     n_weights_r1 = params['n_weights_r1']
     n_weights_r2 = params['n_weights_r2']
     n_weights_q = params['n_weights_q']
     n_modes = params['n_modes']
-    n_hlayers = params['n_hlayers']
-    n_conv = params['n_conv']
-    n_filters = params['n_filters']
-    filter_size = params['filter_size']
-    maxpool = params['maxpool']
-    conv_strides = params['conv_strides']
-    pool_strides = params['pool_strides']
+    n_hlayers_r1 = len(params['n_weights_r1'])
+    n_hlayers_r2 = len(params['n_weights_r2'])
+    n_hlayers_q = len(params['n_weights_q'])
+    n_conv_r1 = len(params['n_filters_r1'])
+    n_conv_r2 = len(params['n_filters_r2'])
+    n_conv_q = len(params['n_filters_q'])
+    n_filters_r1 = params['n_filters_r1']
+    n_filters_r2 = params['n_filters_r2']
+    n_filters_q = params['n_filters_q']
+    filter_size_r1 = params['filter_size_r1']
+    filter_size_r2 = params['filter_size_r2']
+    filter_size_q = params['filter_size_q']
+    maxpool_r1 = params['maxpool_r1']
+    maxpool_r2 = params['maxpool_r2']
+    maxpool_q = params['maxpool_q']
+    conv_strides_r1 = params['conv_strides_r1']
+    conv_strides_r2 = params['conv_strides_r2']
+    conv_strides_q = params['conv_strides_q']
+    pool_strides_r1 = params['pool_strides_r1']
+    pool_strides_r2 = params['pool_strides_r2']
+    pool_strides_q = params['pool_strides_q']
     batch_norm = params['batch_norm']
     red = params['reduce']
     if n_convsteps != None:
-        ysh_conv = int(ysh*n_filters/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
+        ysh_conv_r1 = int(ysh*n_filters_r1/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
+        ysh_conv_r2 = int(ysh*n_filters_r2/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
+        ysh_conv_q = int(ysh*n_filters_q/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
     else:
-        ysh_conv = int(ysh)
+        ysh_conv_r1 = int(ysh_r1)
+        ysh_conv_r2 = int(ysh_r2)
+        ysh_conv_q = int(ysh_q)
     drate = params['drate']
     ramp_start = params['ramp_start']
     ramp_end = params['ramp_end']
@@ -266,7 +284,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # PLACE HOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
         x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph") # params placeholder
-        if params['reduce'] == True or params['n_conv'] != None:
+        if params['reduce'] == True or n_conv_r1 != None:
            if params['by_channel'] == True:
                y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh,len(fixed_vals['det'])], name="y_ph")    # data placeholder
            else:
@@ -276,20 +294,20 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         idx = tf.placeholder(tf.int32)
 
         # LOAD VICI NEURAL NETWORKS
-        r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh, filter_size, n_filters, n_convsteps)
+        r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh, filter_size_r1, n_filters_r1, n_convsteps)
         r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', wrap_mask, nowrap_mask, 
-                                                     n_input1=z_dimension, n_input2=ysh_conv, n_output=xsh[1], 
-                                                     n_weights=n_weights_r2, n_hlayers=n_hlayers, 
-                                                     drate=drate, n_filters=n_filters, filter_size=filter_size,
-                                                     maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init'])
-        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, 
+                                                     n_input1=z_dimension, n_input2=ysh_conv_r2, n_output=xsh[1], 
+                                                     n_weights=n_weights_r2, n_hlayers=n_hlayers_r2, 
+                                                     drate=drate, n_filters=n_filters_r2, filter_size=filter_size_r2,
+                                                     maxpool=maxpool_r2, n_conv=n_conv_r2, conv_strides=conv_strides_r2, pool_strides=pool_strides_r2, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init'])
+        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv_r1, n_output=z_dimension, 
                                                      n_weights=n_weights_r1, n_modes=n_modes, 
-                                                     n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                     filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init'])
-        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=ysh_conv, 
+                                                     n_hlayers=n_hlayers_r1, drate=drate, n_filters=n_filters_r1, 
+                                                     filter_size=filter_size_r1,maxpool=maxpool_r1, n_conv=n_conv_r1, conv_strides=conv_strides_r1, pool_strides=pool_strides_r1, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init'])
+        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=ysh_conv_q, 
                                                         n_output=z_dimension, n_weights=n_weights_q, 
-                                                        n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                        filter_size=filter_size,maxpool=maxpool, n_conv=n_conv, conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init']) # used to sample from q(z|x,y)?
+                                                        n_hlayers=n_hlayers_q, drate=drate, n_filters=n_filters_q, 
+                                                        filter_size=filter_size_q,maxpool=maxpool_q, n_conv=n_conv_q, conv_strides=conv_strides_q, pool_strides=pool_strides_q, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init']) # used to sample from q(z|x,y)?
         tf.set_random_seed(np.random.randint(0,10))
 
         # reduce the dimensionality of y using convolutional neural network
@@ -438,7 +456,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
         # Make noise realizations and add to training data
         next_x_data = x_data[next_indices,:]
-        if params['reduce'] == True or params['n_conv'] != None:
+        if params['reduce'] == True or n_conv_r1 != None:
             next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
         else:
             next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
@@ -771,7 +789,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 print('Made multiple noise real mode plots')
                 """
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                if params['reduce'] == True or params['n_conv'] != None:
+                if params['reduce'] == True or params['n_filters_r1'] != None:
                     XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
                                                  y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
@@ -947,22 +965,40 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     n_weights_r2 = params['n_weights_r2']
     n_weights_q = params['n_weights_q']
     n_modes = params['n_modes']
-    n_hlayers = params['n_hlayers']
-    n_conv = params['n_conv']
-    n_filters = params['n_filters']
-    filter_size = params['filter_size']
+    n_hlayers_r1 = len(params['n_weights_r1'])
+    n_hlayers_r2 = len(params['n_weights_r2'])
+    n_hlayers_q = len(params['n_weights_q'])
+    n_conv_r1 = len(params['n_filters_r1'])
+    n_conv_r2 = len(params['n_filters_r2'])
+    n_conv_q = len(params['n_filters_q'])
+    n_filters_r1 = params['n_filters_r1']
+    n_filters_r2 = params['n_filters_r2']
+    n_filters_q = params['n_filters_q']
+    filter_size_r1 = params['filter_size_r1']
+    filter_size_r2 = params['filter_size_r2']
+    filter_size_q = params['filter_size_q']
     n_convsteps = params['n_convsteps']
     batch_norm = params['batch_norm']
     red = params['reduce']
     if n_convsteps != None:
-        ysh_conv = int(ysh1*n_filters/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
+        ysh_conv_r1 = int(ysh1*n_filters_r1/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
+        ysh_conv_r2 = int(ysh1*n_filters_r2/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
+        ysh_conv_q = int(ysh1*n_filters_q/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
     else:
-        ysh_conv = int(ysh1)
+        ysh_conv_r1 = int(ysh1)
+        ysh_conv_r2 = int(ysh1)
+        ysh_conv_q = int(ysh1)
     drate = params['drate']
-    maxpool = params['maxpool']
-    conv_strides = params['conv_strides']
-    pool_strides = params['pool_strides']
-    if params['reduce'] == True or params['n_conv'] != None:
+    maxpool_r1 = params['maxpool_r1']
+    maxpool_r2 = params['maxpool_r2']
+    maxpool_q = params['maxpool_q']
+    conv_strides_r1 = params['conv_strides_r1']
+    conv_strides_r2 = params['conv_strides_r2']
+    conv_strides_q = params['conv_strides_q']
+    pool_strides_r1 = params['pool_strides_r1']
+    pool_strides_r2 = params['pool_strides_r2']
+    pool_strides_q = params['pool_strides_q']
+    if params['reduce'] == True or n_filters_r1 != None:
         if params['by_channel'] == True:
             num_det = np.shape(y_data_test)[2]
         else:
@@ -982,7 +1018,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
         # PLACEHOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
-        if params['reduce'] == True or params['n_conv'] != None:
+        if params['reduce'] == True or n_filters_r1 != None:
             if params['by_channel'] == True:
                 y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1, num_det], name="y_ph")
             else:
@@ -992,25 +1028,25 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
 
         # LOAD VICI NEURAL NETWORKS
-        r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh1, filter_size, n_filters, n_convsteps)
+        r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh1, filter_size_r1, n_filters_r1, n_convsteps)
         r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', wrap_mask, nowrap_mask, n_input1=z_dimension, 
-                                                     n_input2=ysh_conv, n_output=xsh1, n_weights=n_weights_r2, 
-                                                     n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                     filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
-                                                     conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])
-        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv, n_output=z_dimension, n_weights=n_weights_r1,   # generates params for r1(z|y)
-                                                    n_modes=n_modes, n_hlayers=n_hlayers, drate=drate, n_filters=n_filters, 
-                                                    filter_size=filter_size, maxpool=maxpool, n_conv=n_conv, 
-                                                    conv_strides=conv_strides, pool_strides=pool_strides, num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])
+                                                     n_input2=ysh_conv_r2, n_output=xsh1, n_weights=n_weights_r2, 
+                                                     n_hlayers=n_hlayers_r2, drate=drate, n_filters=n_filters_r2, 
+                                                     filter_size=filter_size_r2, maxpool=maxpool_r2, n_conv=n_conv_r2, 
+                                                     conv_strides=conv_strides_r2, pool_strides=pool_strides_r2,num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])
+        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv_r1, n_output=z_dimension, n_weights=n_weights_r1,   # generates params for r1(z|y)
+                                                    n_modes=n_modes, n_hlayers=n_hlayers_r1, drate=drate, n_filters=n_filters_r1, 
+                                                    filter_size=filter_size_r1, maxpool=maxpool_r1, n_conv=n_conv_r1, 
+                                                    conv_strides=conv_strides_r1, pool_strides=pool_strides_r1, num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])
         #r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, 1, n_weights_r1, n_modes, n_hlayers)
         #r1_zy_a = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         #r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
         #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
-        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=ysh_conv, n_output=z_dimension, 
-                                                        n_weights=n_weights_q, n_hlayers=n_hlayers, drate=drate, 
-                                                        n_filters=n_filters, filter_size=filter_size, maxpool=maxpool, n_conv=n_conv,conv_strides=conv_strides, pool_strides=pool_strides,num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])  
+        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=ysh_conv_q, n_output=z_dimension, 
+                                                        n_weights=n_weights_q, n_hlayers=n_hlayers_q, drate=drate, 
+                                                        n_filters=n_filters_q, filter_size=filter_size_q, maxpool=maxpool_q, n_conv=n_conv_q,conv_strides=conv_strides_q, pool_strides=pool_strides_q,num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])  
 
         # reduce the y data size
         y_conv = r2_conv.dimensionanily_reduction(y_ph)
@@ -1081,7 +1117,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     # ESTIMATE TEST SET RECONSTRUCTION PER-PIXEL APPROXIMATE MARGINAL LIKELIHOOD and draw from q(x|y)
     ns = params['n_samples'] # number of samples to save per reconstruction
 
-    if params['reduce'] == True or params['n_conv'] != None:
+    if params['reduce'] == True or n_filters_r1 != None:
         y_data_test_exp = np.tile(y_data_test,(ns,1,1))/y_normscale
     else:
         y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale

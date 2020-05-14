@@ -99,14 +99,14 @@ def get_params():
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase','theta_jn','psi','ra','dec']
     run_label = 'multi-modal_%ddet_%dpar_%dHz_run49' % (len(fixed_vals['det']),len(rand_pars),ndata)
     bilby_results_label = 'attempt_to_fix_astropy_bug'
-    r = 6                       # number of test samples to use for plotting
+    r = 16                       # number of test samples to use for plotting
     pe_test_num = 256               # total number of test samples available to use in directory
     tot_dataset_size = int(1e7)    # total number of training samples to use
 
     tset_split = int(1e3)          # number of training samples per saved data files
     save_interval = int(1e5)
     ref_geocent_time=1126259642.5   # reference gps time
-    load_chunk_size = 1e6
+    load_chunk_size = 1e4
     batch_size = 64
     params = dict(
         gpu_num=gpu_num,
@@ -137,17 +137,27 @@ def get_params():
         report_interval=500,          # interval at which to save objective function values and optionally print info during inference training
                # number of latent space dimensions inference model (inverse reconstruction)
         n_modes=7,                  # number of modes in the latent space
-        n_hlayers=3,                # the number of hidden layers in each network
+#        n_hlayers=2,                # the number of hidden layers in each network
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,
-        n_conv = 4,                # number of convolutional layers to use in each part of the networks. None if not used
+#        n_conv = 4,                # number of convolutional layers to use in each part of the networks. None if not used
         by_channel = True,        # if True, do convolutions as seperate channels
-        n_filters = [33, 33, 33, 33],#,16,32,32],
-        filter_size = [3, 3, 3, 3],#,3,3,3],
+        n_filters_r1 = [33, 33, 33, 33],#,16,32,32],
+        n_filters_r2 = [33, 33, 33,33],#,16,32,32],
+        n_filters_q = [33, 33, 33,33],#,16,32,32],
+        filter_size_r1 = [3, 3, 3, 3],#,3,3,3],
+        filter_size_r2 = [3, 3, 3,3],#,3,3,3],
+        filter_size_q = [3, 3, 3,3],#,3,3,3],
         drate = 0.5,
-        maxpool = [1,2,1,1],#,	2,1,2],
-        conv_strides = [1,1,1,1],#,1,1,1],
-        pool_strides = [1,2,1,1],#,2,1,2],
+        maxpool_r1 = [1,2,1,1],#,	2,1,2],
+        conv_strides_r1 = [1,1,1,1],#,1,1,1],
+        pool_strides_r1 = [1,2,1,1],#,2,1,2],
+        maxpool_r2 = [1,2,1,1],#,  2,1,2],
+        conv_strides_r2 = [1,1,1,1],#,1,1,1],
+        pool_strides_r2 = [1,2,1,1],#,2,1,2],
+        maxpool_q = [1,2,1,1],#,  2,1,2],
+        conv_strides_q = [1,1,1,1],#,1,1,1],
+        pool_strides_q = [1,2,1,1],#,2,1,2],
         ramp_start = 1e4,
         ramp_end = 1e5,
         save_interval=save_interval,           # interval at which to save inference model weights
@@ -166,7 +176,7 @@ def get_params():
         testing_data_seed=44,
         wrap_pars=[],#['phase','psi'],                  # parameters that get wrapped on the 1D parameter 
         weighted_pars=['ra','dec','geocent_time'],#['ra','dec','goecent_time','theta_jn'],                     # set to None if not using, pars to weight during training
-        weighted_pars_factor=1,                         # weighting scalar factor
+        weighted_pars_factor=2,                         # weighting scalar factor
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
 #        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
@@ -195,11 +205,13 @@ def get_params():
     )
     return params
 
+
 # Get training/test data and parameters of run
 params=get_params()
-f = open("params_%s.txt" % params['run_label'],"w")
-f.write( str(params) )
-f.close()
+if args.train:
+    f = open("params_%s.txt" % params['run_label'],"w")
+    f.write( str(params) )
+    f.close()
 
 kernel_1 = Integer(low=3, high=9, name='kernel_1')
 strides_1 = Integer(low=1, high=2, name='strides_1')
@@ -718,7 +730,7 @@ if args.train:
     x_data_test = x_data_test[i_idx_use,:]
 
     # reshape y data into channels last format for convolutional approach
-    if params['reduce'] == True or params['n_conv'] != None:
+    if params['reduce'] == True or params['n_filters_r1'] != None:
         y_data_test_copy = np.zeros((y_data_test.shape[0],params['ndata'],len(fixed_vals['det'])))
         y_data_test_noisefree_copy = np.zeros((y_data_test_noisefree.shape[0],params['ndata'],len(fixed_vals['det'])))
         y_data_train_copy = np.zeros((y_data_train.shape[0],params['ndata'],len(fixed_vals['det'])))
@@ -901,7 +913,7 @@ if args.test:
 
     # reshape y data into channels last format for convolutional approach
     y_data_test_copy = np.zeros((y_data_test.shape[0],params['ndata'],len(fixed_vals['det'])))
-    if params['reduce'] == True or params['n_conv'] != None:
+    if params['reduce'] == True or params['n_filters_r1'] != None:
         for i in range(y_data_test.shape[0]):
             for j in range(len(fixed_vals['det'])):
                 idx_range = np.linspace(int(j*params['ndata']),int((j+1)*params['ndata'])-1,num=params['ndata'],dtype=int)
