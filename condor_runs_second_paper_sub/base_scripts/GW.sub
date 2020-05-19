@@ -6,10 +6,10 @@ error=GW.$(Process).err
 log=GW.log
 accounting_group = ligo.dev.o3.cbc.explore.test
 RequestMemory=4000
-RequestCpus=4
+RequestCpus=2
 getenv=True
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 transfer_input_files = ../../bilby_pe.py
-transfer_output_files = test, test_waveforms, test_ptemcee1, test_ptemcee2, test_emcee1, test_emcee2, test_dynesty1, test_dynesty2, test_cpnest1, test_cpnest2
+transfer_output_files = test_waveforms,test_ptemcee1_h5py_files,test_emcee1_h5py_files,test_dynesty1,test_cpnest1
 queue 1

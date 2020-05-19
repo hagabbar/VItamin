@@ -5,10 +5,11 @@ import numpy as np
 def get_params():
     ndata = 256
     rand_pars='mass_1,mass_2,luminosity_distance,geocent_time,phase,ra,dec,theta_jn,psi'
-    r = 16
-    bilby_results_label = '9par_%dHz_3det_case_%dtest' % (ndata,int(r*r))
+    r = 256 # total number of samples to make
+    bilby_results_label = 'emcee_and_ptemcee_fix_walkers'
     ref_geocent_time=1126259642.5   # reference gps time
     params = dict(
+        start_job_idx=0,
         ndata = ndata,
         bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
         print_values=True,            # optionally print values every report interval
@@ -18,8 +19,9 @@ def get_params():
         ref_geocent_time=ref_geocent_time,            # reference gps time
         testing_data_seed=44,
         inf_pars='mass_1,mass_2,luminosity_distance,phase,geocent_time,ra,dec,theta_jn,psi',#,'geocent_time','phase','theta_jn','psi'], # parameter names
-        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test' % bilby_results_label,    # location of bilby PE results
-        samplers='vitamin,dynesty,emcee,ptemcee,cpnest',          # samplers to use when plotting
+#        pe_dir='/scratch/hunter.gabbard/condor_runs/%s/test' % bilby_results_label,  # location of bilby PE results
+        pe_dir = 'test',
+        samplers='vitamin,emcee,ptemcee,dynesty,cpnest',          # samplers to use when plotting
         doPE = True,                          # if True then do bilby PE
         )
     return params
@@ -42,12 +44,12 @@ if __name__ == "__main__":
     f.close()
 
     r = params['r']
-    test_samples=int(r*r)
+    test_samples=int(r)
 
     fdag = open("my.dag",'w')
 
     for idx in range(test_samples):
-        add_job(fdag, idx, samplingfrequency='%s' % str(params['ndata']/params['duration']),
+        add_job(fdag, idx+params['start_job_idx'], samplingfrequency='%s' % str(params['ndata']/params['duration']),
                                                       duration='%s' % str(params['duration']),
                                                       Ngen='%s' % str(1),
                                                       refgeocenttime='%s' % str(params['ref_geocent_time']),
