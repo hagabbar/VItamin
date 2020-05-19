@@ -629,7 +629,7 @@ def run(sampling_frequency=256.0,
         # look for cpnest sampler option
         if np.any([r=='cpnest' for r in samplers]):
 
-            # run cpnest sampler 1
+            # run cpnest sampler 1 
             run_startt = time.time()
             result = bilby.run_sampler(
                 likelihood=likelihood, priors=priors, sampler='cpnest',
@@ -690,13 +690,14 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             result = bilby.run_sampler(
                 likelihood=likelihood, priors=priors, sampler='ptemcee',
-                nwalkers=5000, nsteps=1000, nburn=950, plot=True,
+                nwalkers=7000, nsteps=1000, nburn=900, plot=True,
                 injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee1', label=label,
-                save='hdf5')
+                save=False)
             run_endt = time.time()
 
             # save test sample waveform
-            hf = h5py.File('%s/%s.h5py' % (out_dir+'_ptemcee1',label), 'w')
+            os.mkdir('%s_h5py_files' % (out_dir+'_ptemcee1'))
+            hf = h5py.File('%s_h5py_files/%s.h5py' % ((out_dir+'_ptemcee1'),label), 'w')
             hf.create_dataset('noisy_waveform', data=test_samples_noisy)
             hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
 
@@ -754,13 +755,14 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             result = bilby.run_sampler(
             likelihood=likelihood, priors=priors, sampler='emcee',
-            nwalkers=5000, nsteps=1000, nburn=950,
+            nwalkers=7000, nsteps=1000, nburn=900,
             injection_parameters=injection_parameters, outdir=out_dir+'_emcee1', label=label,
-            save='hdf5',plot=True)
+            save=False,plot=True)
             run_endt = time.time()
 
             # save test sample waveform
-            hf = h5py.File('%s/%s.h5py' % (out_dir+'_emcee1',label), 'w')
+            os.mkdir('%s_h5py_files' % (out_dir+'_emcee1'))
+            hf = h5py.File('%s_h5py_files/%s.h5py' % ((out_dir+'_emcee1'),label), 'w')
             hf.create_dataset('noisy_waveform', data=test_samples_noisy)
             hf.create_dataset('noisefree_waveform', data=test_samples_noisefree)
 
