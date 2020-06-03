@@ -51,7 +51,6 @@
 import numpy as np
 import time
 import os, sys,io
-#import tensorflow as tf
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 import tensorflow_probability as tfp
@@ -59,9 +58,6 @@ import corner
 import bilby_pe
 import h5py
 
-#from Neural_Networks import OELBO_decoder_difference
-#from Neural_Networks import OELBO_encoder
-#from Neural_Networks import VAE_encoder
 from Neural_Networks import VICI_decoder
 from Neural_Networks import VICI_encoder
 from Neural_Networks import VICI_VAE_encoder
@@ -73,11 +69,9 @@ import plots
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-#from Neural_Networks import conv_dim_red
-#from data import make_samples
 
 tfd = tfp.distributions
-SMALL_CONSTANT = 1e-20 
+SMALL_CONSTANT = 1e-10 # necessary to prevent the division by zero in many operations 
 
 # NORMALISE DATASET FUNCTION
 def tf_normalise_dataset(xp):
@@ -98,9 +92,7 @@ def tf_normalise_sum_dataset(xp):
     Xs = tf.shape(xp)
     
     log_norm = tf.math.reduce_logsumexp(xp,1)
-    #norm = tf.reshape(tf.reduce_sum(xp,1),[Xs[0],1])
     log_norm = tf.reshape(log_norm,[Xs[0],1])
-    #x_data = tf.divide(xp,norm)
     x_data = tf.add(xp,-log_norm)    
 
     return x_data
@@ -150,16 +142,16 @@ def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
     snrs = []
     for filename in filenames:
         try:
-            print(filename)
             train_files.append(filename)
         except OSError:
             print('Could not load requested file')
             continue
 
     train_files_idx = np.arange(len(train_files))[:int(params['load_chunk_size']/1000.0)]
-    np.random.shuffle(train_files_idx)
+    np.random.shuffle(train_files)
     train_files = np.array(train_files)[train_files_idx]
     for filename in train_files: 
+            print(filename)
             data_temp={'x_data': h5py.File(dataLocations[0]+'/'+filename, 'r')['x_data'][:],
                   'y_data_noisefree': h5py.File(dataLocations[0]+'/'+filename, 'r')['y_data_noisefree'][:],
                   'rand_pars': h5py.File(dataLocations[0]+'/'+filename, 'r')['rand_pars'][:]}
@@ -216,7 +208,7 @@ def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
 
     return x_data, y_data_train
 
-def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefree, y_normscale, save_dir, truth_test, bounds, fixed_vals, posterior_truth_test,snrs_test):    
+def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefree, y_normscale, save_dir, truth_test, bounds, fixed_vals, posterior_truth_test,snrs_test=None):    
 
     # if True, do multi-modal
     multi_modal = True
@@ -524,7 +516,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 if np.isnan(kl+cost) == True or np.isnan(kl_val+cost_val) == True:
                     print('Network is returning NaN values')
                     print('Terminating network training')
-                    exit()
+                    if params['hyperparam_optim'] == True:
+                        save_path = saver.save(session,save_dir)
+                        return 5000.0, session, saver, save_dir
+                    else:
+                        exit()
 
         if i % params['save_interval'] == 0 and i > 0:
 
@@ -535,9 +531,17 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 pass
 
 
-        # stop hyperparam optim training it and return cost+kl
+        # stop hyperparam optim training it and return KL divergence as figure of merit
         if params['hyperparam_optim'] == True and i == params['hyperparam_optim_stop']:
-            return np.array(plotdata)[-1,2], session, saver, save_dir 
+            save_path = saver.save(session,save_dir)
+
+            # compute KL divergence over test set
+#            VI_pred_hyperparam_all = None
+#            plotter = plots.make_plots(params,posterior_truth_test,VI_pred_hyperparam_all,x_data_test)
+#            KL_result = plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_test,y_normscale,bounds,snrs_test)
+#            del plotter
+#            return KL_result, session, saver, save_dir
+            return np.array(plotdata)[-1,2], session, saver, save_dir
 
         if i % params['plot_interval'] == 0 and i>0:
 

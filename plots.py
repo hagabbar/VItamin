@@ -14,10 +14,55 @@ from scipy.integrate import dblquad
 import h5py
 from ligo.skymap.plot import PPPlot
 import bilby
+from universal_divergence import estimate
 
 from data import chris_data as data_maker
+#from VICI_code_usage_example import prune_samples
 #from Models import VICI_inverse_model
 #from Models import CVAE
+
+def prune_samples(chain_file_loc,params):
+    """ Function to remove bad likelihood emcee chains 
+    """
+    nsteps = 5000
+    nburnin = 4000
+    nwalkers = 250
+    ndim=len(params['inf_pars'])
+    chain_file = h5py.File(chain_file_loc, 'r')
+
+    # Iterate over all parameters in chain file
+    XS = np.array([])
+    for idx in range(ndim):
+#        print(chain_file)
+#        print(params['inf_pars'][idx]+'_post')
+        chains_before = np.array(chain_file[params['inf_pars'][idx]+'_post']).reshape((nsteps-nburnin,nwalkers))
+        logL = np.array(chain_file['log_like_eval']).reshape((nsteps-nburnin,nwalkers))
+        logL_max = np.max(logL)
+
+        XS = np.append(XS,np.expand_dims(chains_before,0))
+
+    # data starts as (nsteps*nwalkers) x ndim -> 2D
+    XS = XS.transpose()                                     # now ndim x (nsteps*nwalkers) -> 2D
+    XS = XS.reshape(ndim,nwalkers,nsteps-nburnin)                      # now ndim x nwalkers x nsteps -> 3D
+    XSex = XS[:,0,:].squeeze().transpose()        # take one walker nsteps x ndim -> 2D
+    XS = XS.transpose((2,1,0))                          # now nsteps x nwalkers x ndim -> 3D
+
+    # identify good walkers
+    # logL starts off with shape (nsteps*nwalkers) -> 1D
+    thresh = logL_max - 40                                 # define log likelihood threshold
+    idx_walkers = np.argwhere([np.all(logL[:,i]>thresh) for i in range(nwalkers)])       # get the indices of good chains
+    Nsamp = len(idx_walkers)*(nsteps-nburnin)                                 # redefine total number of good samples 
+
+    # select good walkers
+    XS = np.array([XS[:,i,:] for i in idx_walkers]).squeeze()     # just pick out good walkers
+
+    XS = XS.reshape(-1,ndim)                                    # now back to original shape (but different order) (walkers*nstep) x 
+#    idx = np.random.choice(Nsamp,10000)          # choose 10000 random indices for corner plots
+
+        # pick out random samples from clean set
+#    XS = XS[idx,:]                                                  # select 10000 random samples
+
+    return XS
 
 def make_dirs(params,out_dir):
     """
@@ -197,33 +242,38 @@ class make_plots:
                 dt.append(np.array(h5py.File(filename, 'r')['runtime']))
 
                 post_files.append(filename)
+                if sampler == 'emcee':
+                    emcee_pruned_samples = prune_samples(filename)
                 data_temp = {}
-                #bounds = {}
                 n = 0
                 for q in self.params['inf_pars']:
                      p = q + '_post'
                      par_min = q + '_min'
                      par_max = q + '_max'
-                     data_temp[p] = h5py.File(filename, 'r')[p][:]
-                     if p == 'geocent_time_post':
+                     if sampler == 'emcee':
+                         data_temp[p] = emcee_pruned_samples[:,q_idx]
+                     else:
+                         data_temp[p] = h5py.File(filename, 'r')[p][:]
+                     if p == 'geocent_time_post' or p == 'geocent_time_post_with_cut':
                          data_temp[p] = data_temp[p] - self.params['ref_geocent_time']
-        #                 Nsamp = data_temp[p].shape[0]
-        #                 n = n + 1
-        #                 continue
                      data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
                      Nsamp = data_temp[p].shape[0]
                      n = n + 1
+
                 XS = np.zeros((Nsamp,n))
                 j = 0
                 for p,d in data_temp.items():
                     XS[:,j] = d
                     j += 1
 
+                rand_idx_posterior = np.random.choice(np.linspace(0,XS.shape[0]-1,dtype=np.int),self.params['n_samples']) 
                 if i_idx == 0:
+                    #XS_all = np.expand_dims(XS[rand_idx_posterior,:], axis=0)
                     XS_all = np.expand_dims(XS[:self.params['n_samples'],:], axis=0)
                 else:
                     # save all posteriors in array
                     max_allow_idx = np.min([XS_all.shape[1],np.expand_dims(XS[:self.params['n_samples'],:], axis=0).shape[1]])
+                    #XS_all = np.vstack((XS_all[:,:max_allow_idx,:],np.expand_dims(XS[rand_idx_posterior,:], axis=0)[:,:max_allow_idx,:]))
                     XS_all = np.vstack((XS_all[:,:max_allow_idx,:],np.expand_dims(XS[:self.params['n_samples'],:], axis=0)[:,:max_allow_idx,:]))
 
                 i_idx_use.append(i)
@@ -529,7 +579,7 @@ class make_plots:
         for cnt in range(Npp):
 
             # generate Vitamin samples
-            if self.params['reduce'] == True or self.params['n_conv'] != None:
+            if self.params['reduce'] == True or self.params['n_filters_r1'] != None:
                 y = sig_test[cnt,:].reshape(1,sig_test.shape[1],sig_test.shape[2])
             else:
                 y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
@@ -838,29 +888,42 @@ class make_plots:
             if one_D:
                 kl_result_all = np.zeros((1,len(self.params['inf_pars'])))
                 for r in range(len(self.params['inf_pars'])):
-                    p = gaussian_kde(set1[r],bw_method=my_kde_bandwidth)#'scott') # 7.5e0 works best ... don't know why. Hope it's not over-smoothing results.
-                    q = gaussian_kde(set2[r],bw_method=my_kde_bandwidth)#'scott')#'silverman') # 7.5e0 works best ... don't know why.   
-                    log_diff = np.log((p(set1[r])+SMALL_CONSTANT)/(q(set1[r])+SMALL_CONSTANT))
-                    # Compute KL, but ignore values equal to infinity
-                    kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
+                    if self.params['gen_indi_KLs'] == True:
+                        p = gaussian_kde(set1[r],bw_method=my_kde_bandwidth)#'scott') # 7.5e0 works best ... don't know why. Hope it's not over-smoothing results.
+                        q = gaussian_kde(set2[r],bw_method=my_kde_bandwidth)#'scott')#'silverman') # 7.5e0 works best ... don't know why.   
+                        # Compute KL Divergence
+                        log_diff = np.log((p(set1[r])+SMALL_CONSTANT)/(q(set1[r])+SMALL_CONSTANT))
+                        kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
 
-                    # compute symetric kl
-                    anti_log_diff = np.log((q(set2[r])+SMALL_CONSTANT)/(p(set2[r])+SMALL_CONSTANT))
-                    anti_kl_result = (1.0/float(set1.shape[1])) * np.sum(anti_log_diff)
-                    kl_result_all[:,r] = kl_result + anti_kl_result
+                        # compute symetric kl
+                        anti_log_diff = np.log((q(set2[r])+SMALL_CONSTANT)/(p(set2[r])+SMALL_CONSTANT))
+                        anti_kl_result = (1.0/float(set1.shape[1])) * np.sum(anti_log_diff)
+                        kl_result_all[:,r] = kl_result + anti_kl_result
+#                        kl_result = estimate(np.expand_dims(set1[r],1),np.expand_dims(set2[r],1))
+#                        kl_result_all[:,r] = kl_result 
+                    else:
+                        kl_result_all[:,r] = 0   
 
                 return kl_result_all
             else:
-                p = gaussian_kde(set1,bw_method=my_kde_bandwidth)#'scott') # 7.5e0 works best ... don't know why. Hope it's not over-smoothing results.
-                q = gaussian_kde(set2,bw_method=my_kde_bandwidth)#'scott')#'silverman') # 7.5e0 works best ... don't know why.
-                log_diff = np.log((p(set1)+SMALL_CONSTANT)/(q(set1)+SMALL_CONSTANT))
+                kl_result = []
+                set1 = set1.T
+                set2 = set2.T
+                for kl_idx in range(10):
+                    rand_idx_kl = np.random.choice(np.linspace(0,set1.shape[0]-1,dtype=np.int),size=100)
+                    kl_result.append(estimate(set1[rand_idx_kl,:],set2[rand_idx_kl,:]) + estimate(set2[rand_idx_kl,:],set1[rand_idx_kl,:]))
+                kl_result = np.mean(kl_result)
+
+#                p = gaussian_kde(set1,bw_method=my_kde_bandwidth)#'scott') # 7.5e0 works best ... don't know why. Hope it's not over-smoothing results.
+#                q = gaussian_kde(set2,bw_method=my_kde_bandwidth)#'scott')#'silverman') # 7.5e0 works best ... don't know why.
+#                log_diff = np.log((p(set1)+SMALL_CONSTANT)/(q(set1)+SMALL_CONSTANT))
                 # Compute KL, but ignore values equal to infinity
-                kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
+#                kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
 
                 # compute symetric kl
-                anti_log_diff = np.log((q(set2)+SMALL_CONSTANT)/(p(set2)+SMALL_CONSTANT))
-                anti_kl_result = (1.0/float(set1.shape[1])) * np.sum(anti_log_diff)
-                kl_result = kl_result + anti_kl_result
+#                anti_log_diff = np.log((q(set2)+SMALL_CONSTANT)/(p(set2)+SMALL_CONSTANT))
+#                anti_kl_result = (1.0/float(set1.shape[1])) * np.sum(anti_log_diff)
+#                kl_result = kl_result + anti_kl_result
             
                 return kl_result
    
@@ -934,9 +997,11 @@ class make_plots:
                     # Iterate over test cases
                     tot_kl = []  # total KL over all infered parameters
                     indi_kl = np.zeros((self.params['r']**2,len(self.params['inf_pars']))) # KL for each individual paramter
-                    for r in range(self.params['r']**2):
-                        indi_kl[r,:] = compute_kl(set1[r],set2[r],[sampler1,sampler2],one_D=True)
-                        print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
+
+                    if self.params['make_indi_kl'] == True:
+                        for r in range(self.params['r']**2):
+                            indi_kl[r,:] = compute_kl(set1[r],set2[r],[sampler1,sampler2],one_D=True)
+                            print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
                     for r in range(self.params['r']**2):
                         #if snrs_test[r,0] < 8.0:
                         #    continue
@@ -951,7 +1016,9 @@ class make_plots:
                     hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
                
 #                logbins = np.histogram_bin_edges(tot_kl,bins='fd') 
-                logbins = np.logspace(-1,2.5,50)
+                print(tot_kl)
+                logbins = np.logspace(-3,2.5,50)
+                logbins_indi = np.logspace(-3,3,50)
                 #logbins = 50
 
                 if samplers[i] == 'vitamin' or samplers[::-1][j] == 'vitamin':
@@ -985,11 +1052,16 @@ class make_plots:
                     axis_kl.hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[::-1][j]),zorder=2)
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
 
-                    # plot indi vitamin kls
-                    for u in range(len(self.params['inf_pars'])):
-                        indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[::-1][j]),zorder=2)
-                        indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=0.5,edgecolor=CB_color_cycle[print_cnt],zorder=10)    
-                    print('Mean total KL vitamin vs bilby: %s' % str(np.mean(tot_kl)))
+                    if self.params['make_indi_kl'] == True:
+                        # plot indi vitamin kls
+                        for u in range(len(self.params['inf_pars'])):
+                            indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[::-1][j]),zorder=2)
+                            indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,histtype='step',density=True,facecolor='None',ls='-',lw=0.5,edgecolor=CB_color_cycle[print_cnt],zorder=10)    
+                        print('Mean total KL vitamin vs bilby: %s' % str(np.mean(tot_kl)))
+                    
+                    # Return the mean KL if doing hyperparameter optimization
+                    if self.params['hyperparam_optim'] == True:
+                        return np.mean(tot_kl)
                 else:
                     print(tot_kl.argsort()[-15:][::-1])
                     print(np.sort(tot_kl)[-15:][::-1])
@@ -997,23 +1069,27 @@ class make_plots:
                     print(np.sort(tot_kl)[:15][:]) 
                     if label_idx == 0:
 
-                        # plot indi bayesian kls
-                        for u in range(len(self.params['inf_pars'])):
-                            indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
+                        if self.params['make_indi_kl'] == True:
+                            # plot indi bayesian kls
+                            for u in range(len(self.params['inf_pars'])):
+                                indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
 
                         # plot non indi bayesian kls
                         axis_kl.hist(tot_kl,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
                         label_idx += 1
                     else:
-                        # plot indi bayesian kls
-                        for u in range(len(self.params['inf_pars'])):
-                            indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',zorder=1)
+                        if self.params['make_indi_kl'] == True:
+                            # plot indi bayesian kls
+                            for u in range(len(self.params['inf_pars'])):
+                                indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,alpha=0.8,histtype='stepfilled',density=True,color='grey',zorder=1)
 
                         # plot non indi bayesian kls  
                         axis_kl.hist(tot_kl,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',zorder=1)
-                    # plot indi bayesian kls
-                    for u in range(len(self.params['inf_pars'])):
-                        indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=0.2,edgecolor='grey',zorder=1)
+                   
+                    if self.params['make_indi_kl'] == True:
+                        # plot indi bayesian kls
+                        for u in range(len(self.params['inf_pars'])):
+                            indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,histtype='step',density=True,facecolor='None',ls='-',lw=0.2,edgecolor='grey',zorder=1)
                     # plot non indi bayesian kls
                     axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
                     print('Mean total KL between bilby samps: %s' % str(np.mean(tot_kl)))
@@ -1048,7 +1124,7 @@ class make_plots:
         for l in leg.legendHandles: 
             l.set_alpha(1.0)
 
-        axis_kl.set_xlim(left=1e-1)
+        axis_kl.set_xlim(left=1e-3)
         axis_kl.set_xscale('log')
         axis_kl.set_yscale('log')
         axis_kl.grid(False)
@@ -1056,25 +1132,26 @@ class make_plots:
         fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig_kl)
 
-        # save indi kl histogram
-        for u in range(len(self.params['inf_pars'])):
-            indi_axis_kl[u].set_xlabel(r'$\mathrm{%s}$' % self.params['inf_pars'][u],fontsize=5)
+        if self.params['make_indi_kl'] == True:
+            # save indi kl histogram
+            for u in range(len(self.params['inf_pars'])):
+                indi_axis_kl[u].set_xlabel(r'$\mathrm{%s}$' % self.params['inf_pars'][u],fontsize=5)
 #            indi_axis_kl[u].set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
-            indi_axis_kl[u].tick_params(axis="x", labelsize=5)
-            indi_axis_kl[u].tick_params(axis="y", labelsize=5)
+                indi_axis_kl[u].tick_params(axis="x", labelsize=5)
+                indi_axis_kl[u].tick_params(axis="y", labelsize=5)
 #            leg = indi_axis_kl[u].legend(loc='upper right', fontsize=14) #'medium')
 #            for l in leg.legendHandles:
 #                l.set_alpha(1.0)
 
-            indi_axis_kl[u].set_xlim(left=1e-1)
-            indi_axis_kl[u].set_xscale('log')
-            indi_axis_kl[u].set_yscale('log')
-            indi_axis_kl[u].grid(False)
-        indi_axis_kl[7].set_visible(False)
-        indi_axis_kl[8].set_visible(False)
-        indi_fig_kl.canvas.draw()
-        indi_fig_kl.savefig('%s/latest_%s/hist-kl_individual_par.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
-        plt.close(indi_fig_kl)
+                indi_axis_kl[u].set_xlim(left=1e-3)
+                indi_axis_kl[u].set_xscale('log')
+                indi_axis_kl[u].set_yscale('log')
+                indi_axis_kl[u].grid(False)
+            indi_axis_kl[7].set_visible(False)
+            indi_axis_kl[8].set_visible(False)
+            indi_fig_kl.canvas.draw()
+            indi_fig_kl.savefig('%s/latest_%s/hist-kl_individual_par.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
+            plt.close(indi_fig_kl)
 
 #        hf.close()
         return
