@@ -683,6 +683,9 @@ def run(sampling_frequency=256.0,
             hf.close()
             """
 
+        n_ptemcee_walkers = 250
+        n_ptemcee_steps = 5000
+        n_ptemcee_burnin = 4000
         # look for ptemcee sampler option
         if np.any([r=='ptemcee' for r in samplers]):
 
@@ -690,7 +693,7 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             result = bilby.run_sampler(
                 likelihood=likelihood, priors=priors, sampler='ptemcee',
-                nwalkers=7000, nsteps=1000, nburn=900, plot=True,
+                nwalkers=n_ptemcee_walkers, nsteps=n_ptemcee_steps, nburn=n_ptemcee_burnin, plot=True, ntemps=8,
                 injection_parameters=injection_parameters, outdir=out_dir+'_ptemcee1', label=label,
                 save=False)
             run_endt = time.time()
@@ -703,8 +706,10 @@ def run(sampling_frequency=256.0,
 
             # throw away samples with "bad" liklihood values
             all_lnp = result.log_likelihood_evaluations
+            hf.create_dataset('log_like_eval', data=all_lnp) # save log likelihood evaluations
             max_lnp = np.max(all_lnp)
-            idx_keep = np.argwhere(all_lnp>max_lnp-12.0).squeeze()
+#            idx_keep = np.argwhere(all_lnp>max_lnp-12.0).squeeze()
+            all_lnp = all_lnp.reshape((n_ptemcee_steps - n_ptemcee_burnin,n_ptemcee_walkers)) 
 
             print('Identified bad liklihood points')
 
@@ -714,7 +719,12 @@ def run(sampling_frequency=256.0,
                     if p==q:
                         name = p + '_post'
                         print('saving PE samples for parameter {}'.format(q))
-                        hf.create_dataset(name, data=np.array(qi)[idx_keep])
+                        old_samples = np.array(qi).reshape((n_ptemcee_steps - n_ptemcee_burnin,n_ptemcee_walkers))
+                        new_samples = np.array([])
+                        for m in range(old_samples.shape[0]):
+                            new_samples = np.append(new_samples,old_samples[m,np.argwhere(all_lnp[m,:]>max_lnp-12.0).squeeze()])
+                        hf.create_dataset(name, data=np.array(qi))
+                        hf.create_dataset(name+'_with_cut', data=np.array(new_samples))
             hf.create_dataset('runtime', data=(run_endt - run_startt))
             hf.close()
 
@@ -748,6 +758,9 @@ def run(sampling_frequency=256.0,
             hf.close()
             """
 
+        n_emcee_walkers = 250
+        n_emcee_steps = 5000
+        n_emcee_burnin = 4000
         # look for emcee sampler option
         if np.any([r=='emcee' for r in samplers]):
 
@@ -755,7 +768,7 @@ def run(sampling_frequency=256.0,
             run_startt = time.time()
             result = bilby.run_sampler(
             likelihood=likelihood, priors=priors, sampler='emcee',
-            nwalkers=7000, nsteps=1000, nburn=900,
+            nwalkers=n_emcee_walkers, nsteps=n_emcee_steps, nburn=n_emcee_burnin,
             injection_parameters=injection_parameters, outdir=out_dir+'_emcee1', label=label,
             save=False,plot=True)
             run_endt = time.time()
@@ -768,10 +781,14 @@ def run(sampling_frequency=256.0,
 
             # throw away samples with "bad" liklihood values
             all_lnp = result.log_likelihood_evaluations
+            hf.create_dataset('log_like_eval', data=all_lnp) # save log likelihood evaluations
             max_lnp = np.max(all_lnp)
-            idx_keep = np.argwhere(all_lnp>max_lnp-12.0).squeeze()
+#            idx_keep = np.argwhere(all_lnp>max_lnp-12.0).squeeze()
+            all_lnp = all_lnp.reshape((n_emcee_steps - n_emcee_burnin,n_emcee_walkers))
 
             print('Identified bad liklihood points')
+
+            print
 
             # loop over randomised params and save samples
             for p in inf_pars:
@@ -779,7 +796,13 @@ def run(sampling_frequency=256.0,
                     if p==q:
                         name = p + '_post'
                         print('saving PE samples for parameter {}'.format(q))
-                        hf.create_dataset(name, data=np.array(qi)[idx_keep])
+                        old_samples = np.array(qi).reshape((n_emcee_steps - n_emcee_burnin,n_emcee_walkers))
+                        new_samples = np.array([])
+                        for m in range(old_samples.shape[0]):
+                            new_samples = np.append(new_samples,old_samples[m,np.argwhere(all_lnp[m,:]>max_lnp-12.0).squeeze()])
+                        hf.create_dataset(name, data=np.array(qi))
+                        hf.create_dataset(name+'_with_cut', data=np.array(new_samples))
+                        
             hf.create_dataset('runtime', data=(run_endt - run_startt))
             hf.close()
 
