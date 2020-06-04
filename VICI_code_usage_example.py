@@ -21,6 +21,7 @@ import time
 from time import strftime
 import corner
 import glob
+from matplotlib.lines import Line2D
 
 from Models import VICI_inverse_model
 from Models import CVAE
@@ -29,6 +30,7 @@ from Neural_Networks import batch_manager
 from data import chris_data
 import plots
 from plots import prune_samples
+from plotsky import plot_sky
 
 import skopt
 from skopt import gp_minimize, forest_minimize
@@ -106,7 +108,7 @@ def get_params():
                  'theta_jn','psi','ra','dec'] # parameters to randomize
     run_label = 'multi-modal_%ddet_%dpar_%dHz_run177' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
     bilby_results_label = 'all_4_samplers' #'attempt_to_fix_astropy_bug'
-    r = 2                          # number of test samples sqaured to use for testing
+    r = 10                          # number of test samples sqaured to use for testing
     pe_test_num = 256              # total number of test samples available to use in directory
     tot_dataset_size = int(1e7)    # total number of training samples available to use
 
@@ -117,6 +119,7 @@ def get_params():
     batch_size = 64                # Number training samples shown to neural network per iteration
     params = dict(
         make_indi_kl=False,             # If True, generate individual KL plots
+        Make_sky_plot=False,             # If True, generate sky plots on corner plots
         gpu_num=gpu_num,                # gpu number run is running on
         resume_training=False,          # if True, resume training of a model from saved checkpoint
         ndata = ndata,                  # sampling frequency * duration
@@ -137,7 +140,7 @@ def get_params():
         gen_indi_KLs=False,
 
         print_values=True,            # optionally print loss values every report interval
-        n_samples = 1000,             # number of posterior samples to save per reconstruction upon inference (default 3000) 
+        n_samples = 10000,             # number of posterior samples to save per reconstruction upon inference (default 3000) 
         num_iterations=int(1e7)+1,    # total number of iterations before ending training of model
         initial_training_rate=1e-4,   # initial training rate for ADAM optimiser inference model (inverse reconstruction)
         batch_size=batch_size,        # Number training samples shown to neural network per iteration
@@ -194,8 +197,8 @@ def get_params():
         pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test' % bilby_results_label, # location of test set directory Bayesian PE samples
         # attempt_to_fix_astropy_bug is default directory
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
-        load_plot_data=False,                                                  # Plotting data which has already been generated
-        samplers=['vitamin','dynesty'],#,'dynesty','ptemcee','cpnest','emcee'],          # samplers to use when plotting (vitamin is ML approach)
+        load_plot_data=True,                                                  # Plotting data which has already been generated
+        samplers=['vitamin','dynesty','ptemcee','cpnest'],#,'emcee'],          # samplers to use when plotting (vitamin is ML approach)
 
         doPE = True,                          # if True then do bilby PE when generating new testing samples (not advised to change this)
     )
@@ -922,7 +925,7 @@ if args.test:
         y_data_test = y_data_test_copy
     
     VI_pred_all = []
-    make_corner_plots = False # if True, make corner plots
+    make_corner_plots = True # if True, make corner plots
 
     # Reshape time series  array to right format for 1-channel configuration
     if params['by_channel'] == False:
@@ -972,6 +975,7 @@ if args.test:
 
         # unnormalize the predictions from VICI (comment out if not wanted)
         color_cycle=['tab:blue','tab:green','tab:purple','tab:orange']
+        legend_color_cycle=['blue','green','purple','orange']
         for q_idx,q in enumerate(params['inf_pars']):
                 par_min = q + '_min'
                 par_max = q + '_max'
@@ -979,6 +983,7 @@ if args.test:
 
 
         # Iterate over all Bayesian PE samplers and plot results
+        custom_lines = []
         for samp_idx,samp in enumerate(params['samplers'][1:]):
 
             # compute weights, otherwise the 1d histograms will be different scales, could remove this
@@ -994,15 +999,32 @@ if args.test:
                                color=color_cycle[samp_idx],
                                truths=x_data_test_unnorm[i,:],
                                fig=figure)#, weights=weights)
+            custom_lines.append(Line2D([0], [0], color=legend_color_cycle[samp_idx], lw=4))
 
         # plot predicted ML results
         corner.corner(VI_pred, **defaults_kwargs, labels=parnames,
                            color='tab:red', fill_contours=True,
                            fig=figure)#, weights=weights)
+        custom_lines.append(Line2D([0], [0], color='red', lw=4))
 
-        left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
+
+        if params['Make_sky_plot'] == True:
+            # Compute skyplot
+            left, bottom, width, height = [0.35, 0.75, 0.3, 0.19]
+            ax_sky = figure.add_axes([left, bottom, width, height])
+
+            sky_color_cycle=['blue','green','purple','orange']
+            sky_color_map_cycle=['Blues','Greens','Purples','Oranges']
+            for samp_idx,samp in enumerate(params['samplers'][1:]):
+                if samp_idx == 0:
+                    ax_sky = plot_sky(samp_posteriors[samp+'1'][i][:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx])
+                else:
+                    ax_sky = plot_sky(samp_posteriors[samp+'1'][i][:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx], ax=ax_sky)
+            ax_sky = plot_sky(VI_pred[:,-2:],filled=True,ax=ax_sky,trueloc=x_data_test_unnorm[i,-2:])
+
+
+        left, bottom, width, height = [0.68, 0.75, 0.3, 0.19]
         ax2 = figure.add_axes([left, bottom, width, height])
-
         # plot waveform in upper-right hand corner
         ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[i,:params['ndata']],color='cyan',zorder=50)
         snr = round(snrs_test[i,0],2)
@@ -1023,6 +1045,8 @@ if args.test:
         #ax2.legend()
 
         # Save corner plot to latest public_html directory
+        figure.legend(handles=custom_lines, labels=['Dynesty', 'Ptemcee', 'Cpnest', 'VItamin'],
+                      loc='right', fontsize=16)
         plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
         plt.close()
         del figure
@@ -1030,18 +1054,20 @@ if args.test:
 
         # Store ML predictions for later plotting use
         VI_pred_all.append(VI_pred)
+        #exit()
 
     VI_pred_all = np.array(VI_pred_all)
+    exit()
 
     # Define pp and KL plotting class
     plotter = plots.make_plots(params,XS_all,VI_pred_all,x_data_test)
     
     # Make KL plots
     plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_test,y_normscale,bounds,snrs_test)
-#    exit()
+    exit()
 
     # Make pp plot
-    plotter.plot_pp(VICI_inverse_model,y_data_test,x_data_test,0,y_normscale,x_data_test,bounds)
+#    plotter.plot_pp(VICI_inverse_model,y_data_test,x_data_test,0,y_normscale,x_data_test,bounds)
 #    exit()
 
 

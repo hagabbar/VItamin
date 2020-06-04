@@ -572,53 +572,65 @@ class make_plots:
             hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'r')
         else:
             # Create dataset to save PP results for later plotting
-            pass
-#            os.remove('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'])
-#            hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'w')
-        pp = np.zeros(((self.params['r']**2)+2,len(self.params['inf_pars']))) 
-        for cnt in range(Npp):
+            try:
+                os.remove('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'])
+            except:
+                pass
+            hf = h5py.File('plotting_data_%s/pp_plot_data.h5' % self.params['run_label'], 'w')
 
-            # generate Vitamin samples
-            if self.params['reduce'] == True or self.params['n_filters_r1'] != None:
-                y = sig_test[cnt,:].reshape(1,sig_test.shape[1],sig_test.shape[2])
-            else:
-                y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
-             # The trained inverse model weights can then be used to infer a probability density of solutions 
+        if self.params['load_plot_data'] == False:
+            pp = np.zeros(((self.params['r']**2)+2,len(self.params['inf_pars']))) 
+            for cnt in range(Npp):
+
+                # generate Vitamin samples
+                if self.params['reduce'] == True or self.params['n_filters_r1'] != None:
+                    y = sig_test[cnt,:].reshape(1,sig_test.shape[1],sig_test.shape[2])
+                else:
+                    y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
+                 # The trained inverse model weights can then be used to infer a probability density of solutions 
 #given new measurements
-            x, _, _, dt,_  = model.run(self.params, y, np.shape(par_test)[1],
-                                                 normscales,
-                                                 "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
+                x, _, _, dt,_  = model.run(self.params, y, np.shape(par_test)[1],
+                                                     normscales,
+                                                     "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
 
-            # Apply mask
-            x = x.T
-            sampset_1 = x   
-            del_cnt = 0
-            # iterate over each sample   during inference training
-            for i in range(sampset_1.shape[1]):
-                # iterate over each parameter
-                for k,q in enumerate(self.params['inf_pars']):
-                    # if sample out of range, delete the sample                                              the y data (size changes by factor of  n_filter/(2**n_redsteps) )
-                    if sampset_1[k,i] < 0.0 or sampset_1[k,i] > 1.0:
-                        x = np.delete(x,del_cnt,axis=1)   
-                        del_cnt-=1
-                        break
-                    # check m1 > m2
-                    elif q == 'mass_1' or q == 'mass_2':
-                        m1_idx = np.argwhere(self.params['inf_pars']=='mass_1')
-                        m2_idx = np.argwhere(self.params['inf_pars']=='mass_2')
-                        if sampset_1[m1_idx,i] < sampset_1[m2_idx,i]:
-                            x = np.delete(x,del_cnt,axis=1)
+                # Apply mask
+                x = x.T
+                sampset_1 = x   
+                del_cnt = 0
+                # iterate over each sample   during inference training
+                for i in range(sampset_1.shape[1]):
+                    # iterate over each parameter
+                    for k,q in enumerate(self.params['inf_pars']):
+                        # if sample out of range, delete the sample                                              the y data (size changes by factor of  n_filter/(2**n_redsteps) )
+                        if sampset_1[k,i] < 0.0 or sampset_1[k,i] > 1.0:
+                            x = np.delete(x,del_cnt,axis=1)   
                             del_cnt-=1
-                            break    
-                del_cnt+=1
-            confidence_pp = np.zeros((len(self.params['samplers'])-1,int(self.params['r']**2)+2))
-            for j in range(len(self.params['inf_pars'])):
-                pp[0,j] = 0.0
-                pp[1,j] = 1.0
-                pp[cnt+2,j] = self.pp_plot(pos_test[cnt,j],x[j,:])
-#                    pp[cnt+2] = self.pp_plot(pos_test[cnt,j],x[j,int(cnt*self.params['n_samples']):int((cnt+1)*self.params['n_samples'])])
-                print('Computed param %d p-p plot iteration %d/%d' % (j,int(cnt)+1,int(Npp)))
+                            break
+                        # check m1 > m2
+                        elif q == 'mass_1' or q == 'mass_2':
+                            m1_idx = np.argwhere(self.params['inf_pars']=='mass_1')
+                            m2_idx = np.argwhere(self.params['inf_pars']=='mass_2')
+                            if sampset_1[m1_idx,i] < sampset_1[m2_idx,i]:
+                                x = np.delete(x,del_cnt,axis=1)
+                                del_cnt-=1
+                                break    
+                    del_cnt+=1
 
+                for j in range(len(self.params['inf_pars'])):
+                    pp[0,j] = 0.0
+                    pp[1,j] = 1.0
+                    pp[cnt+2,j] = self.pp_plot(pos_test[cnt,j],x[j,:])
+#                        pp[cnt+2] = self.pp_plot(pos_test[cnt,j],x[j,int(cnt*self.params['n_samples']):int((cnt+1)*self.params['n_samples'])])
+                    print('Computed param %d p-p plot iteration %d/%d' % (j,int(cnt)+1,int(Npp)))
+
+            # Save VItamin pp curves
+            hf.create_dataset('vitamin_pp_data', data=pp)
+
+        else:
+            pp = hf['vitamin_pp_data']
+            print('Loaded VItamin pp curves')
+
+        confidence_pp = np.zeros((len(self.params['samplers'])-1,int(self.params['r']**2)+2))
         # plot the pp plot
         for j in range(len(self.params['inf_pars'])):        
             if j == 0:
@@ -630,7 +642,6 @@ class make_plots:
         samplers = self.params['samplers']
         CB_color_cycle=['blue','#4daf4a','#ff7f00','#4b0092']
 
-#        test = np.zeros((16,256))
         for i in range(len(self.params['samplers'])):
             if samplers[i] == 'vitamin': continue
 
@@ -651,12 +662,10 @@ class make_plots:
                     for cnt in range(self.params['r']**2):
                         pp_bilby[cnt+2] = self.pp_plot(pos_test[cnt,j],samples[cnt,:,j].transpose())
                         print('Computed %s, param %d p-p plot iteration %d/%d' % (samplers[i],j,int(cnt)+1,int(self.params['r']**2)))
-                    # Save bilby sampler pp data
-                    # TODO add this back in later
-#                    hf.create_dataset('%s_param%d_pp' % (samplers[i],j), data=pp_bilby)           
+                    hf.create_dataset('%s_param%d_pp' % (samplers[i],j), data=pp_bilby)           
                 else:
                     pp_bilby = hf['%s_param%d_pp' % (samplers[i],j)]
-                    print('Made pp curve')
+                    print('Loaded Bilby sampler pp curve')
                 
                 # plot bilby sampler results
                 if j == 0:
@@ -707,7 +716,7 @@ class make_plots:
         fig.savefig('%s/latest_%s/latest_pp_plot.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig)
         # TODO add this back in
-#        hf.close()
+        hf.close()
         return
 
     def make_loss_plot(self,loss,kl,cad,fwd=True):
@@ -931,7 +940,6 @@ class make_plots:
         params = self.params
         usesamps = params['samplers']
         samplers = params['samplers']
-        fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
         indi_fig_kl, ((ax1, ax2, ax3), (ax4, ax5, ax6), (ax7, ax8, ax9)) = plt.subplots(3,3,figsize=(6,6))  
         indi_axis_kl = [ax1,ax2,ax3,ax4,ax5,ax6,ax7,ax8,ax9]
       
@@ -963,7 +971,94 @@ class make_plots:
                 hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
         else:
             hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
-      
+     
+        
+        # 4 pannel KL approach
+        fig_kl, axis_kl = plt.subplots(2,2,figsize=(6,6),sharey=True,sharex=True)
+        for k in range(len(usesamps)-1):
+            print_cnt = 0
+            label_idx = 0
+            tmp_idx = len(usesamps)
+            if k <= 1:
+               kl_idx_1 = 0
+               kl_idx_2 = k
+            elif k > 1:
+               kl_idx_1 = 1
+               kl_idx_2 = (k-2)
+
+            tot_kl_grey = np.array([])
+            for i in range(len(usesamps)):
+                for j in range(tmp_idx):
+                    # Load appropriate test sets
+                    if samplers[i] == samplers[::-1][j]:
+                        continue
+                    else:
+                        sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
+                    tot_kl = np.array(hf['%s-%s' % (sampler1,sampler2)])
+
+                    logbins = np.logspace(-3,2.5,50)
+                    logbins_indi = np.logspace(-3,3,50)
+
+                    # plot colored hist
+                    if samplers[i] == 'vitamin' and samplers[::-1][j] == samplers[1:][k]: 
+                        print(tot_kl.argsort()[-15:][::-1])
+                        print(np.sort(tot_kl)[-15:][::-1])
+                        print(tot_kl.argsort()[:15][:])
+                        print(np.sort(tot_kl)[:15][:])
+                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{%s vs. %s}$' % (samplers[i],samplers[::-1][j]),zorder=2)
+                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
+
+                    # record non-colored hists
+                    elif samplers[i] != 'vitamin' and samplers[::-1][j] != 'vitamin':
+                        if samplers[i] == samplers[1:][k] or samplers[::-1][j] == samplers[1:][k]:
+                            print(tot_kl.argsort()[-15:][::-1])
+                            print(np.sort(tot_kl)[-15:][::-1])
+                            print(tot_kl.argsort()[:15][:])
+                            print(np.sort(tot_kl)[:15][:])
+
+                            tot_kl_grey = np.append(tot_kl_grey,tot_kl)
+
+                            print('Mean total KL between bilby samps: %s' % str(np.mean(tot_kl)))
+                    print('Completed KL calculation %d/%d' % (print_cnt,len(usesamps)*2))
+                    print_cnt+=1
+                tmp_idx-=1
+
+            # Plot non-colored histograms
+            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{%s vs. other samplers}$' % samplers[1:][k],zorder=1)
+            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
+        
+            # plot KL histograms
+            if kl_idx_1 == 1:
+                axis_kl[kl_idx_1,kl_idx_2].set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
+            if kl_idx_2 == 0:
+                axis_kl[kl_idx_1,kl_idx_2].set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
+            axis_kl[kl_idx_1,kl_idx_2].tick_params(axis="x", labelsize=14)
+            axis_kl[kl_idx_1,kl_idx_2].tick_params(axis="y", labelsize=14)
+            leg = axis_kl[kl_idx_1,kl_idx_2].legend(loc='upper right', fontsize=4) #'medium')
+            for l in leg.legendHandles:
+                l.set_alpha(1.0)
+
+            axis_kl[kl_idx_1,kl_idx_2].set_xlim(left=8e-2,right=100)
+            #axis_kl[kl_idx_1,kl_idx_2].set_ylim(top=1.0)
+            axis_kl[kl_idx_1,kl_idx_2].set_xscale('log')
+            axis_kl[kl_idx_1,kl_idx_2].set_yscale('log')
+            axis_kl[kl_idx_1,kl_idx_2].grid(False)
+            print()
+            print('Made hist plot %d' % k)
+            print()
+
+        # Save figure
+        fig_kl.canvas.draw()
+        plt.tight_layout()
+        fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
+        plt.close(fig_kl)
+        print('Here')
+        exit()
+        
+
+        tot_kl_grey = np.array([])
+        fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
+        # single plot KL approach 
         for i in range(len(usesamps)):
             for j in range(tmp_idx):
 
@@ -1055,7 +1150,7 @@ class make_plots:
                     if self.params['make_indi_kl'] == True:
                         # plot indi vitamin kls
                         for u in range(len(self.params['inf_pars'])):
-                            indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin-%s}$' % (samplers[::-1][j]),zorder=2)
+                            indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{VItamin vs. %s}$' % (samplers[::-1][j]),zorder=2)
                             indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,histtype='step',density=True,facecolor='None',ls='-',lw=0.5,edgecolor=CB_color_cycle[print_cnt],zorder=10)    
                         print('Mean total KL vitamin vs bilby: %s' % str(np.mean(tot_kl)))
                     
@@ -1067,6 +1162,10 @@ class make_plots:
                     print(np.sort(tot_kl)[-15:][::-1])
                     print(tot_kl.argsort()[:15][:])
                     print(np.sort(tot_kl)[:15][:]) 
+
+                    
+                    tot_kl_grey = np.append(tot_kl_grey,tot_kl)
+
                     if label_idx == 0:
 
                         if self.params['make_indi_kl'] == True:
@@ -1074,8 +1173,6 @@ class make_plots:
                             for u in range(len(self.params['inf_pars'])):
                                 indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
 
-                        # plot non indi bayesian kls
-                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers}$',zorder=1)
                         label_idx += 1
                     else:
                         if self.params['make_indi_kl'] == True:
@@ -1083,15 +1180,11 @@ class make_plots:
                             for u in range(len(self.params['inf_pars'])):
                                 indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,alpha=0.8,histtype='stepfilled',density=True,color='grey',zorder=1)
 
-                        # plot non indi bayesian kls  
-                        axis_kl.hist(tot_kl,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',zorder=1)
-                   
                     if self.params['make_indi_kl'] == True:
                         # plot indi bayesian kls
                         for u in range(len(self.params['inf_pars'])):
                             indi_axis_kl[u].hist(indi_kl[:,u],bins=logbins_indi,histtype='step',density=True,facecolor='None',ls='-',lw=0.2,edgecolor='grey',zorder=1)
-                    # plot non indi bayesian kls
-                    axis_kl.hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
+                 
                     print('Mean total KL between bilby samps: %s' % str(np.mean(tot_kl)))
 
                 print('Completed KL calculation %d/%d' % (print_cnt,len(usesamps)*2))
@@ -1101,6 +1194,10 @@ class make_plots:
             if self.params['load_plot_data'] == False:
                 runtime[sampler1] = time1
 
+        # plot non indi bayesian kls
+        axis_kl.hist(tot_kl_grey,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers vs. other samplers}$',zorder=1)
+        # plot non indi bayesian kls
+        axis_kl.hist(tot_kl_grey,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
 
         if self.params['load_plot_data'] == False:
 #            # Print sampler runtimes
@@ -1120,11 +1217,11 @@ class make_plots:
         axis_kl.set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
         axis_kl.tick_params(axis="x", labelsize=14)
         axis_kl.tick_params(axis="y", labelsize=14)
-        leg = axis_kl.legend(loc='upper right', fontsize=14) #'medium')
+        leg = axis_kl.legend(loc='upper right', fontsize=10) #'medium')
         for l in leg.legendHandles: 
             l.set_alpha(1.0)
 
-        axis_kl.set_xlim(left=1e-3)
+        axis_kl.set_xlim(left=8e-2,right=100)
         axis_kl.set_xscale('log')
         axis_kl.set_yscale('log')
         axis_kl.grid(False)
@@ -1153,7 +1250,7 @@ class make_plots:
             indi_fig_kl.savefig('%s/latest_%s/hist-kl_individual_par.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
             plt.close(indi_fig_kl)
 
-#        hf.close()
+        hf.close()
         return
 
     def make_corner_plot(self,noisefreeY_test,noisyY_test,bounds,test_sample_idx,epoch_idx,sampler='dynesty1'):
