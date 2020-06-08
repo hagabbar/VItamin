@@ -8,10 +8,8 @@
 import argparse
 import numpy as np
 import tensorflow as tf
-import scipy.io as sio
 import h5py
 from sys import exit
-import shutil
 import os
 import bilby
 import matplotlib
@@ -20,15 +18,10 @@ import matplotlib.pyplot as plt
 import time
 from time import strftime
 import corner
-import glob
 from matplotlib.lines import Line2D
-import pandas as pd
 
 from Models import VICI_inverse_model
-from Models import CVAE
 from bilby_pe import run
-from Neural_Networks import batch_manager
-from data import chris_data
 import plots
 from plots import prune_samples
 from plotsky import plot_sky
@@ -108,11 +101,11 @@ def get_params():
     ndata = 256                    # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase',
                  'theta_jn','psi','ra','dec'] # parameters to randomize
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run177' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
-    bilby_results_label = 'all_4_samplers' # label given to bilby results directory
+    run_label = 'ozgrav-demo_%ddet_%dpar_%dHz_run177' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
+    bilby_results_label = 'ozgrav-demo' # label given to bilby results directory
     r = 2                               # number (to the power of 2) of test samples to use for testing
     pe_test_num = 256                   # total number of test samples available to use in directory
-    tot_dataset_size = int(1e7)         # total number of training samples available to use
+    tot_dataset_size = int(1e3)         # total number of training samples available to use
 
     tset_split = int(1e3)               # number of training samples in each training data file
     save_interval = int(5e4)            # number of iterations to save model and plot validation results corner plots
@@ -122,7 +115,6 @@ def get_params():
     params = dict(
         make_corner_plots = True,        # if True, make corner plots
         make_kl_plot = True,           # If True, go through kl plotting function
-        make_indi_kl=False,             # If True, generate individual KL plots
         make_pp_plot = True,            # If True, go through pp plotting function
         make_loss_plot = False,          # If True, generate loss plot from previous plot data
         Make_sky_plot=False,             # If True, generate sky plots on corner plots
@@ -133,7 +125,7 @@ def get_params():
         bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
         tot_dataset_size = tot_dataset_size, # total number of training samples available to use
         tset_split = tset_split,             # number of training samples in each training data file (should be in label of filename)
-        plot_dir="/home/hunter.gabbard/public_html/CBC/VItamin/gw_results/%s" % run_label,  # directory to save results plots
+        plot_dir="/home/hunter.gabbard/public_html/CBC/ozgrav_demo/gw_results/%s" % run_label,  # directory to save results plots
         hyperparam_optim = False,          # optimize hyperparameters for model during training using gaussian process minimization
         hyperparam_optim_stop = int(1.5e6), # stopping iteration of hyperparameter optimizer per call (ideally 1.5 million) 
         hyperparam_n_call = 30,           # number of hyperparameter optimization calls (ideally 30)
@@ -196,9 +188,9 @@ def get_params():
         weighted_pars=None,#['ra','dec','geocent_time'],                     # set to None if not using, parameters to weight during training
         weighted_pars_factor=1,                       # Factor by which to weight parameters if `weighted_pars` is not None.
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
-        train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
-        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test_waveforms' % bilby_results_label, # lovation of test set directory waveforms
-        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test' % bilby_results_label, # location of test set directory Bayesian PE samples
+        train_set_dir='training_sets_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
+        test_set_dir='test_sets/%s/test_waveforms' % bilby_results_label, # lovation of test set directory waveforms
+        pe_dir='test_sets/%s/test' % bilby_results_label, # location of test set directory Bayesian PE samples
         # attempt_to_fix_astropy_bug is default directory
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
         load_plot_data=False,                                                  # Plotting data which has already been generated
@@ -293,7 +285,7 @@ default_hyperparams = [params['filter_size_r1'][0],
 """
 
 # dummy value for initial hyperparameter best KL (to be minimized). Doesn't need to be changed.
-best_loss = 1000
+best_loss = int(1e6)
 
 def load_data(input_dir,inf_pars,load_condor=False):
     """ Function to load either training or testing data.
