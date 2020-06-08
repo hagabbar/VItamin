@@ -514,8 +514,6 @@ def hyperparam_fitness(kernel_1, strides_1, pool_1,
                                        batch_size = params['batch_size'],
                                        n_weights_fc = params['n_weights_r1'],
                                        best_loss = best_loss)
-                                       #n_weights_r2 = params['n_weights_r2'],
-                                       #n_weights_q = params['n_weights_q'])
 
         f = open("inverse_model_dir_%s/converged_hyperparams.txt" % params['run_label'],"w")
         f.write( str(converged_hyperpar_dict) )
@@ -636,7 +634,6 @@ if args.train:
 
     # reshape time series arrays for single channel ( N_samples,fs*duration,n_detectors -> (N_samples,fs*duration*n_detectors) )
     y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
-#    y_data_train = y_data_train.reshape(y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
     y_data_test = y_data_test.reshape(y_data_test.shape[0],y_data_test.shape[1]*y_data_test.shape[2])
     y_data_test_noisefree = y_data_test_noisefree.reshape(y_data_test_noisefree.shape[0],y_data_test_noisefree.shape[1]*y_data_test_noisefree.shape[2])
 
@@ -651,7 +648,6 @@ if args.train:
     # load up the posterior samples (if they exist)
     # load generated samples back in
     post_files = []
-    #~/bilby_outputs/bilby_output_dynesty1/multi-modal3_0.h5py
 
     # first identify directory with lowest number of total finished posteriors
     num_finished_post = int(1e8)
@@ -781,10 +777,8 @@ if args.train:
 # if we are now testing the network
 if args.test:
 
-#    print('YOU ARE CURRENTLY IN DEBUGGING MODE. REMOVE THIS LINE IF NOT!!')
-#    y_normscale = 36.43879218007172 # for 2 million and 5 million
+    # Define time series normalization scale to be using
     y_normscale = 36.438613192970415 # for 1 million
-        #y_normscale = 36.43879218007172
     if params['load_by_chunks'] == True:
         y_normscale = 36.43879218007172
 
@@ -804,7 +798,6 @@ if args.test:
     # load up the posterior samples (if they exist)
     # load generated samples back in
     post_files = []
-    #~/bilby_outputs/bilby_output_dynesty1/multi-modal3_0.h5py
 
     # Identify directory with lowest number of total finished posteriors
     num_finished_post = int(1e8)
@@ -836,29 +829,15 @@ if args.test:
         # Iterate over all requested testing samples
         while i_idx < params['r']*params['r']:
 
-
-#            if samp_idx == 'emcee':
-#                filename_try = '%s/emcee_%s_%d/chain.dat' % (dataLocations_try,params['bilby_results_label'],i)
-#                filename = '%s/emcee_%s_%d/chain.dat' % (dataLocations,params['bilby_results_label'],i)
-#            else:
-#                filename_try = '%s/%s_%d.h5py' % (dataLocations_try,params['bilby_results_label'],i)
-#                filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
             filename_try = '%s/%s_%d.h5py' % (dataLocations_try,params['bilby_results_label'],i)
             filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
 
             # If file does not exist, skip to next file
             try:
-#                if samp_idx == 'emcee':
-#                    pd.read_csv(filename, sep="\t")
-#                else:
-#                    h5py.File(filename_try, 'r')
                 h5py.File(filename_try, 'r')
             except Exception as e:
                 i+=1
                 print(e)
-#                if i > params['r']*params['r']:
-#                    print(samp_idx)
-#                    exit()
                 continue
 
             print(filename)
@@ -882,8 +861,6 @@ if args.test:
                  if p == 'geocent_time_post' or p == 'geocent_time_post_with_cut':
                      data_temp[p] = np.subtract(np.float64(data_temp[p]),np.float64(params['ref_geocent_time'])) 
 
-                 # uncomment this if you would like normalized Bayesian posteriors
-#                 data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
                  Nsamp = data_temp[p].shape[0]
                  n = n + 1
 
@@ -898,15 +875,12 @@ if args.test:
             rand_idx_posterior = np.random.choice(np.linspace(0,XS.shape[0]-1,dtype=np.int),params['n_samples'])
             # Append test sample posterior to existing array of test sample posteriors
             if i_idx == 0:
-                #XS_all = np.expand_dims(XS[rand_idx_posterior,:], axis=0)
                 XS_all = np.expand_dims(XS[:params['n_samples'],:], axis=0)
             else:
                 try:
-                    #XS_all = np.vstack((XS_all,np.expand_dims(XS[rand_idx_posterior,:], axis=0)))
                     XS_all = np.vstack((XS_all,np.expand_dims(XS[:params['n_samples'],:], axis=0)))
                 except ValueError as error: # If not enough posterior samples, exit with ValueError
                     print(error)
-                    #print(XS_all.shape,np.expand_dims(XS[rand_idx_posterior,:], axis=0).shape)
                     exit()
 
             # Get unnormalized array with source parameter truths
@@ -974,9 +948,9 @@ if args.test:
         defaults_kwargs = dict(
                     bins=bins, smooth=0.9, label_kwargs=dict(fontsize=16),
                     title_kwargs=dict(fontsize=16), show_titles=False,
-                    truth_color='tab:orange', quantiles=None,#[0.16, 0.84],
-                    levels=(0.50,0.90), density=True, # 0.69,0.90,0.95
-                    plot_density=False, plot_datapoints=True, #weights=weights,
+                    truth_color='tab:orange', quantiles=None,
+                    levels=(0.50,0.90), density=True, 
+                    plot_density=False, plot_datapoints=True, 
                     max_n_ticks=3)
 
         matplotlib.rc('text', usetex=True)                
@@ -985,9 +959,6 @@ if args.test:
         # Get infered parameter latex labels for corner plot
         for k_idx,k in enumerate(params['rand_pars']):
             if np.isin(k, params['inf_pars']):
-                # TODO: remove
-#                if k == 'geocent_time':
-#                    continue
                 parnames.append(params['cornercorner_parnames'][k_idx])
 
         # unnormalize the predictions from VICI (comment out if not wanted)
@@ -1001,34 +972,27 @@ if args.test:
 
         # Iterate over all Bayesian PE samplers and plot results
         custom_lines = []
-        # TODO: remove
         truths = x_data_test_unnorm[i,:]
-#        truths = truths[[0,1,2,4,5,6]]
-#        VI_pred = VI_pred[:,[0,1,2,4,5,6]]
         for samp_idx,samp in enumerate(params['samplers'][1:]):
 
             bilby_pred = samp_posteriors[samp+'1'][i]
-            # TODO: remove this after time test
-#            bilby_pred = bilby_pred[:,[0,1,2,4,5,6]]  
 
-            # compute weights, otherwise the 1d histograms will be different scales, could remove this
-#            weights = np.ones(len(VI_pred)) * (len(samp_posteriors[samp+'1'][i]) / len(VI_pred))
             if samp_idx == 0:
                 figure = corner.corner(bilby_pred,**defaults_kwargs,labels=parnames,
                                color=color_cycle[samp_idx],
                                truths=truths
-                               )#weights=weights)
+                               )
             else:
                 figure = corner.corner(bilby_pred,**defaults_kwargs,labels=parnames,
                                color=color_cycle[samp_idx],
                                truths=truths,
-                               fig=figure)#, weights=weights)
+                               fig=figure)
             custom_lines.append(Line2D([0], [0], color=legend_color_cycle[samp_idx], lw=4))
 
         # plot predicted ML results
         corner.corner(VI_pred, **defaults_kwargs, labels=parnames,
                            color='tab:red', fill_contours=True,
-                           fig=figure)#, weights=weights)
+                           fig=figure)
         custom_lines.append(Line2D([0], [0], color='red', lw=4))
 
 
@@ -1066,7 +1030,6 @@ if args.test:
         ax2.set_ylim([-6,6])
         ax2.grid(False)
         ax2.margins(x=0,y=0)
-        #ax2.legend()
 
         # Save corner plot to latest public_html directory
         figure.legend(handles=custom_lines, labels=['Dynesty', 'Ptemcee', 'VItamin'],
@@ -1078,7 +1041,6 @@ if args.test:
 
         # Store ML predictions for later plotting use
         VI_pred_all.append(VI_pred)
-        #exit()
 
     VI_pred_all = np.array(VI_pred_all)
 
