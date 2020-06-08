@@ -22,6 +22,7 @@ from time import strftime
 import corner
 import glob
 from matplotlib.lines import Line2D
+import pandas as pd
 
 from Models import VICI_inverse_model
 from Models import CVAE
@@ -69,7 +70,7 @@ fixed_vals = {'mass_1':50.0,
 	'tilt_2':0.0,
         'phi_12':0.0,
         'phi_jl':0.0,
-        'det':['H1','L1','V1']}
+        'det':['H1','L1','V1']}                              # feel free to edit this if more or less detectors wanted
 
 # Prior bounds on source parameters
 bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
@@ -90,9 +91,10 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-gpu_num = str(0)
+gpu_num = str(0)                                            # first GPU used by default
 os.environ["CUDA_VISIBLE_DEVICES"]=gpu_num
 
+# Let GPU consumption grow as needed
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
@@ -107,18 +109,22 @@ def get_params():
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase',
                  'theta_jn','psi','ra','dec'] # parameters to randomize
     run_label = 'multi-modal_%ddet_%dpar_%dHz_run177' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
-    bilby_results_label = 'all_4_samplers' #'attempt_to_fix_astropy_bug'
-    r = 10                          # number of test samples sqaured to use for testing
-    pe_test_num = 256              # total number of test samples available to use in directory
-    tot_dataset_size = int(1e7)    # total number of training samples available to use
+    bilby_results_label = 'all_4_samplers' # label given to bilby results directory
+    r = 2                               # number (to the power of 2) of test samples to use for testing
+    pe_test_num = 256                   # total number of test samples available to use in directory
+    tot_dataset_size = int(1e7)         # total number of training samples available to use
 
-    tset_split = int(1e3)          # number of training samples in each training data file (should be in label of filename)
-    save_interval = int(1e5)       # number of iterations to save model and plot validation results corner plots
-    ref_geocent_time=1126259642.5   # reference gps time (not advised to change this)
-    load_chunk_size = 1e4          # Number of training samples to load in at a time.
-    batch_size = 64                # Number training samples shown to neural network per iteration
+    tset_split = int(1e3)               # number of training samples in each training data file
+    save_interval = int(5e4)            # number of iterations to save model and plot validation results corner plots
+    ref_geocent_time=1126259642.5       # reference gps time (not advised to change this)
+    load_chunk_size = 1e4               # Number of training samples to load in at a time.
+    batch_size = 64                     # Number training samples shown to neural network per iteration
     params = dict(
+        make_corner_plots = True,        # if True, make corner plots
+        make_kl_plot = True,           # If True, go through kl plotting function
         make_indi_kl=False,             # If True, generate individual KL plots
+        make_pp_plot = True,            # If True, go through pp plotting function
+        make_loss_plot = False,          # If True, generate loss plot from previous plot data
         Make_sky_plot=False,             # If True, generate sky plots on corner plots
         gpu_num=gpu_num,                # gpu number run is running on
         resume_training=False,          # if True, resume training of a model from saved checkpoint
@@ -155,11 +161,11 @@ def get_params():
         # FYI, each item in lists below correspond to each layer in networks (i.e. first item first layer)
         # pool size and pool stride should be same number in each layer
         n_filters_r1 = [33, 33, 33, 33], # number of convolutional filters to use in r1 network
-        n_filters_r2 = [33, 33, 33,33],  # number of convolutional filters to use in r2 network
-        n_filters_q = [33, 33, 33,33],   # number of convolutional filters to use in q network
-        filter_size_r1 = [3,3,3,3],      # size of convolutional fitlers in r1 network
-        filter_size_r2 = [3,3,3,3],      # size of convolutional filters in r2 network
-        filter_size_q = [3,3,3,3],       # size of convolutional filters in q network
+        n_filters_r2 = [33, 33, 33, 33],  # number of convolutional filters to use in r2 network
+        n_filters_q = [33, 33, 33, 33],   # number of convolutional filters to use in q network
+        filter_size_r1 = [7,7,7,7],      # size of convolutional fitlers in r1 network
+        filter_size_r2 = [7,7,7,7],      # size of convolutional filters in r2 network
+        filter_size_q = [7,7,7,7],       # size of convolutional filters in q network
         drate = 0.5,                     # dropout rate to use in fully-connected layers
         maxpool_r1 = [1,2,1,1],          # size of maxpooling to use in r1 network
         conv_strides_r1 = [1,1,1,1],      # size of convolutional stride to use in r1 network
@@ -188,24 +194,22 @@ def get_params():
         testing_data_seed=44,                         # tensorflow testing random seed number
         wrap_pars=['phase','psi','ra'],               # Parameters to apply Von Mises wrapping on (not advised to change) 
         weighted_pars=None,#['ra','dec','geocent_time'],                     # set to None if not using, parameters to weight during training
-        weighted_pars_factor=3,                       # Factor by which to weight parameters if `weighted_pars` is not None.
+        weighted_pars_factor=1,                       # Factor by which to weight parameters if `weighted_pars` is not None.
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
-#        test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test_waveforms' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num), #location of test set
-#        pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%dpar_%dHz_%ddet_case_%dtest/test' % (len(rand_pars),ndata,len(fixed_vals['det']),pe_test_num),    # location of bilby PE results
         test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test_waveforms' % bilby_results_label, # lovation of test set directory waveforms
         pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test' % bilby_results_label, # location of test set directory Bayesian PE samples
         # attempt_to_fix_astropy_bug is default directory
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
-        load_plot_data=True,                                                  # Plotting data which has already been generated
-        samplers=['vitamin','dynesty','ptemcee','cpnest'],#,'emcee'],          # samplers to use when plotting (vitamin is ML approach)
+        load_plot_data=False,                                                  # Plotting data which has already been generated
+        samplers=['vitamin','dynesty'],          # samplers to use when plotting (vitamin is ML approach) dynesty,ptemcee,cpnest,emcee
 
         doPE = True,                          # if True then do bilby PE when generating new testing samples (not advised to change this)
     )
     return params
 
 
-# Get training/test data and parameters of run
+# Save training/test parameters of run
 params=get_params()
 if args.train:
     f = open("params_%s.txt" % params['run_label'],"w")
@@ -261,7 +265,7 @@ dimensions = [kernel_1,
               n_weights_fc_2,
               n_weights_fc_3]
 
-
+"""
 # list of initial default hyperparameters to use for GP hyperparameter optimization
 default_hyperparams = [params['filter_size_r1'][0],
                        params['conv_strides_r1'][0],
@@ -286,6 +290,7 @@ default_hyperparams = [params['filter_size_r1'][0],
                        params['n_weights_r1'][1],
                        params['n_weights_r1'][2],
                       ]
+"""
 
 # dummy value for initial hyperparameter best KL (to be minimized). Doesn't need to be changed.
 best_loss = 1000
@@ -381,7 +386,7 @@ def load_data(input_dir,inf_pars,load_condor=False):
     y_data = data['y_data_noisefree']
     y_data_noisy = data['y_data_noisy']
 
-    # Define time series normalization factor to use on test samples We consistantly use the same normscale value if loading by chunks
+    # Define time series normalization factor to use on test samples. We consistantly use the same normscale value if loading by chunks
     if params['load_by_chunks'] == True:
         y_normscale = 36.43879218007172 
     else:
@@ -410,8 +415,8 @@ def hyperparam_fitness(kernel_1, strides_1, pool_1,
                        batch_size,
                        n_weights_fc_1,n_weights_fc_2,n_weights_fc_3):
     """ Fitness function used in Gaussian Process hyperparameter optimization 
-    Returns a value to be minimized (in this case, the KL divergence between ML 
-    predicted posteriors and Bayesian sampler predicted posteriors.
+    Returns a value to be minimized (in this case, the total loss of the 
+    neural network during training.
 
     PARAMETERS:
         hyperparameters to be tuned
@@ -429,7 +434,7 @@ def hyperparam_fitness(kernel_1, strides_1, pool_1,
     params['n_filters_r2'] = [n_filters_1,n_filters_2,n_filters_3,n_filters_4]
     params['n_filters_q'] = [n_filters_1,n_filters_2,n_filters_3,n_filters_4]
 
-    # number of filters has to be odd for some reason (this ensures that is the case)
+    # number of filters has to be odd for some reason (this ensures that this is the case)
     for filt_idx in range(len(params['n_filters_r1'])):
         if (params['n_filters_r1'][filt_idx] % 3) != 0:
 
@@ -669,6 +674,7 @@ if args.train:
             filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))      
             if len(filenames) < num_finished_post:
                 sampler_loc = i + str(j+1)
+                num_finished_post = len(filenames)
 
     dataLocations_try = '%s_%s' % (params['pe_dir'],sampler_loc)
     dataLocations = '%s_%s1' % (params['pe_dir'],params['samplers'][1])
@@ -811,7 +817,7 @@ if args.test:
     # Identify directory with lowest number of total finished posteriors
     num_finished_post = int(1e8)
     for i in params['samplers']:
-        if i == 'vitamin':
+        if i == 'vitamin':# or i == 'emcee':
             continue
         for j in range(1):
             input_dir = '%s_%s%d/' % (params['pe_dir'],i,j+1)
@@ -819,8 +825,10 @@ if args.test:
                 dataLocations = ["%s" % input_dir]
 
             filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))
+            print(i,len(filenames))
             if len(filenames) < num_finished_post:
                 sampler_loc = i + str(j+1)
+                num_finished_post = len(filenames)
 
     samp_posteriors = {}
     # Iterate over all Bayesian PE samplers
@@ -832,18 +840,33 @@ if args.test:
         i_idx_use = []
         x_data_test_unnorm = np.copy(x_data_test)
 
+
         # Iterate over all requested testing samples
         while i_idx < params['r']*params['r']:
 
+
+#            if samp_idx == 'emcee':
+#                filename_try = '%s/emcee_%s_%d/chain.dat' % (dataLocations_try,params['bilby_results_label'],i)
+#                filename = '%s/emcee_%s_%d/chain.dat' % (dataLocations,params['bilby_results_label'],i)
+#            else:
+#                filename_try = '%s/%s_%d.h5py' % (dataLocations_try,params['bilby_results_label'],i)
+#                filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
             filename_try = '%s/%s_%d.h5py' % (dataLocations_try,params['bilby_results_label'],i)
             filename = '%s/%s_%d.h5py' % (dataLocations,params['bilby_results_label'],i)
 
             # If file does not exist, skip to next file
             try:
+#                if samp_idx == 'emcee':
+#                    pd.read_csv(filename, sep="\t")
+#                else:
+#                    h5py.File(filename_try, 'r')
                 h5py.File(filename_try, 'r')
             except Exception as e:
                 i+=1
                 print(e)
+#                if i > params['r']*params['r']:
+#                    print(samp_idx)
+#                    exit()
                 continue
 
             print(filename)
@@ -925,7 +948,6 @@ if args.test:
         y_data_test = y_data_test_copy
     
     VI_pred_all = []
-    make_corner_plots = True # if True, make corner plots
 
     # Reshape time series  array to right format for 1-channel configuration
     if params['by_channel'] == False:
@@ -939,7 +961,7 @@ if args.test:
     for i in range(params['r']*params['r']):
 
         # If True, continue through and make corner plots
-        if make_corner_plots == False:
+        if params['make_corner_plots'] == False:
             break
 
         # Generate ML posteriors using pre-trained model
@@ -971,6 +993,9 @@ if args.test:
         # Get infered parameter latex labels for corner plot
         for k_idx,k in enumerate(params['rand_pars']):
             if np.isin(k, params['inf_pars']):
+                # TODO: remove
+#                if k == 'geocent_time':
+#                    continue
                 parnames.append(params['cornercorner_parnames'][k_idx])
 
         # unnormalize the predictions from VICI (comment out if not wanted)
@@ -984,20 +1009,27 @@ if args.test:
 
         # Iterate over all Bayesian PE samplers and plot results
         custom_lines = []
+        # TODO: remove
+        truths = x_data_test_unnorm[i,:]
+#        truths = truths[[0,1,2,4,5,6]]
+#        VI_pred = VI_pred[:,[0,1,2,4,5,6]]
         for samp_idx,samp in enumerate(params['samplers'][1:]):
+
+            bilby_pred = samp_posteriors[samp+'1'][i]
+            # TODO: remove this after time test
+#            bilby_pred = bilby_pred[:,[0,1,2,4,5,6]]  
 
             # compute weights, otherwise the 1d histograms will be different scales, could remove this
 #            weights = np.ones(len(VI_pred)) * (len(samp_posteriors[samp+'1'][i]) / len(VI_pred))
-            
             if samp_idx == 0:
-                figure = corner.corner(samp_posteriors[samp+'1'][i],**defaults_kwargs,labels=parnames,
+                figure = corner.corner(bilby_pred,**defaults_kwargs,labels=parnames,
                                color=color_cycle[samp_idx],
-                               truths=x_data_test_unnorm[i,:]
+                               truths=truths
                                )#weights=weights)
             else:
-                figure = corner.corner(samp_posteriors[samp+'1'][i],**defaults_kwargs,labels=parnames,
+                figure = corner.corner(bilby_pred,**defaults_kwargs,labels=parnames,
                                color=color_cycle[samp_idx],
-                               truths=x_data_test_unnorm[i,:],
+                               truths=truths,
                                fig=figure)#, weights=weights)
             custom_lines.append(Line2D([0], [0], color=legend_color_cycle[samp_idx], lw=4))
 
@@ -1010,20 +1042,20 @@ if args.test:
 
         if params['Make_sky_plot'] == True:
             # Compute skyplot
-            left, bottom, width, height = [0.35, 0.75, 0.3, 0.19]
+            left, bottom, width, height = [0.55, 0.47, 0.5, 0.39]
             ax_sky = figure.add_axes([left, bottom, width, height])
 
             sky_color_cycle=['blue','green','purple','orange']
             sky_color_map_cycle=['Blues','Greens','Purples','Oranges']
             for samp_idx,samp in enumerate(params['samplers'][1:]):
                 if samp_idx == 0:
-                    ax_sky = plot_sky(samp_posteriors[samp+'1'][i][:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx])
+                    ax_sky = plot_sky(bilby_pred[:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx])
                 else:
-                    ax_sky = plot_sky(samp_posteriors[samp+'1'][i][:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx], ax=ax_sky)
-            ax_sky = plot_sky(VI_pred[:,-2:],filled=True,ax=ax_sky,trueloc=x_data_test_unnorm[i,-2:])
+                    ax_sky = plot_sky(bilby_pred[:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx], ax=ax_sky)
+            ax_sky = plot_sky(VI_pred[:,-2:],filled=True,ax=ax_sky,trueloc=truths[-2:])
 
 
-        left, bottom, width, height = [0.68, 0.75, 0.3, 0.19]
+        left, bottom, width, height = [0.34, 0.82, 0.3, 0.17]
         ax2 = figure.add_axes([left, bottom, width, height])
         # plot waveform in upper-right hand corner
         ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[i,:params['ndata']],color='cyan',zorder=50)
@@ -1045,8 +1077,8 @@ if args.test:
         #ax2.legend()
 
         # Save corner plot to latest public_html directory
-        figure.legend(handles=custom_lines, labels=['Dynesty', 'Ptemcee', 'Cpnest', 'VItamin'],
-                      loc='right', fontsize=16)
+        figure.legend(handles=custom_lines, labels=['Dynesty', 'Ptemcee', 'VItamin'],
+                      loc=(0.86,0.22), fontsize=20)
         plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],i))
         plt.close()
         del figure
@@ -1057,17 +1089,18 @@ if args.test:
         #exit()
 
     VI_pred_all = np.array(VI_pred_all)
-    exit()
 
     # Define pp and KL plotting class
     plotter = plots.make_plots(params,XS_all,VI_pred_all,x_data_test)
-    
-    # Make KL plots
-    plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_test,y_normscale,bounds,snrs_test)
-    exit()
 
-    # Make pp plot
-#    plotter.plot_pp(VICI_inverse_model,y_data_test,x_data_test,0,y_normscale,x_data_test,bounds)
-#    exit()
+    if params['make_kl_plot'] == True:    
+        # Make KL plots
+        plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_test,y_normscale,bounds,snrs_test)
 
+    if params['make_pp_plot'] == True:
+        # Make pp plot
+        plotter.plot_pp(VICI_inverse_model,y_data_test,x_data_test,0,y_normscale,x_data_test,bounds)
+
+    if params['make_loss_plot'] == True:
+        plotter.plot_loss()
 

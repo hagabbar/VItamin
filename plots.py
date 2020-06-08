@@ -15,18 +15,77 @@ import h5py
 from ligo.skymap.plot import PPPlot
 import bilby
 from universal_divergence import estimate
+import pandas as pd
+from matplotlib.ticker import (MultipleLocator, FormatStrFormatter, FixedLocator,
+                               AutoMinorLocator)
+import matplotlib.ticker as ticker
 
 from data import chris_data as data_maker
 #from VICI_code_usage_example import prune_samples
 #from Models import VICI_inverse_model
 #from Models import CVAE
 
+"""
+def prune_samples(chain_file_loc,params):
+    nsteps = 5000
+    nburnin = 2000
+    nwalkers = 250
+    thresh_num = 50
+    ndim=len(params['inf_pars'])
+    chain_file = pd.read_csv(chain_file_loc, sep="\t", dtype=np.float64)
+#    chain_file = h5py.File(chain_file_loc, 'r')
+
+    # Iterate over all parameters in chain file
+    XS = np.array([])
+    chain_file_header = list(chain_file.columns.values)
+    for par_idx,par in enumerate(params['inf_pars']):
+#        print(list(chain_file.columns.values))
+#        print(chain_file.values.shape)
+#        chains_before = np.array(chain_file[params['inf_pars'][idx]+'_post']).reshape((nsteps-nburnin,nwalkers))
+#        logL = np.array(chain_file['log_like_eval']).reshape((nsteps-nburnin,nwalkers))
+        chains_before = np.array(chain_file.loc[:,par])#.reshape((nsteps,nwalkers))
+
+        if par_idx == 0:
+            XS = np.expand_dims(chains_before[-(nsteps-nburnin)*nwalkers:],0)
+        else:
+            XS = np.vstack((XS,np.expand_dims(chains_before[-(nsteps-nburnin)*nwalkers:],0)))
+        #XS = np.append(XS,np.expand_dims(chains_before,0))
+
+    logL = np.array(chain_file.values[:,-2]).reshape((nsteps,nwalkers))
+    logL = logL[-(nsteps-nburnin):,:]
+    logL_max = np.max(logL)
+
+    # data starts as (nsteps*nwalkers) x ndim -> 2D
+#    XS = XS.transpose()                                     # now ndim x (nsteps*nwalkers) -> 2D
+    XS = XS.reshape(ndim,nwalkers,nsteps-nburnin)                      # now ndim x nwalkers x nsteps -> 3D
+    XSex = XS[:,0,:].squeeze().transpose()        # take one walker nsteps x ndim -> 2D
+    XS = XS.transpose((2,1,0))                          # now nsteps x nwalkers x ndim -> 3D
+
+    # identify good walkers
+    # logL starts off with shape (nsteps*nwalkers) -> 1D
+    thresh = logL_max - thresh_num                                 # define log likelihood threshold
+    idx_walkers = np.argwhere([np.all(logL[:,i]>thresh) for i in range(nwalkers)])       # get the indices of good chains
+    Nsamp = len(idx_walkers)*(nsteps-nburnin)                                 # redefine total number of good samples 
+
+    # select good walkers
+    XS = np.array([XS[:,i,:] for i in idx_walkers]).squeeze()     # just pick out good walkers
+
+    XS = XS.reshape(-1,ndim)                                    # now back to original shape (but different order) (walkers*nstep) x 
+    idx = np.random.choice(Nsamp,10000)          # choose 10000 random indices for corner plots
+
+        # pick out random samples from clean set
+    XS = XS[idx,:]                                                  # select 10000 random samples
+
+    return XS
+"""
+
 def prune_samples(chain_file_loc,params):
     """ Function to remove bad likelihood emcee chains 
     """
-    nsteps = 5000
+    nsteps = 14000
     nburnin = 4000
     nwalkers = 250
+    thresh_num = 50
     ndim=len(params['inf_pars'])
     chain_file = h5py.File(chain_file_loc, 'r')
 
@@ -49,7 +108,7 @@ def prune_samples(chain_file_loc,params):
 
     # identify good walkers
     # logL starts off with shape (nsteps*nwalkers) -> 1D
-    thresh = logL_max - 40                                 # define log likelihood threshold
+    thresh = logL_max - thresh_num                                # define log likelihood threshold
     idx_walkers = np.argwhere([np.all(logL[:,i]>thresh) for i in range(nwalkers)])       # get the indices of good chains
     Nsamp = len(idx_walkers)*(nsteps-nburnin)                                 # redefine total number of good samples 
 
@@ -57,10 +116,10 @@ def prune_samples(chain_file_loc,params):
     XS = np.array([XS[:,i,:] for i in idx_walkers]).squeeze()     # just pick out good walkers
 
     XS = XS.reshape(-1,ndim)                                    # now back to original shape (but different order) (walkers*nstep) x 
-#    idx = np.random.choice(Nsamp,10000)          # choose 10000 random indices for corner plots
+    idx = np.random.choice(Nsamp,10000)          # choose 10000 random indices for corner plots
 
         # pick out random samples from clean set
-#    XS = XS[idx,:]                                                  # select 10000 random samples
+    XS = XS[idx,:]                                                  # select 10000 random samples
 
     return XS
 
@@ -216,6 +275,7 @@ class make_plots:
                     filenames = sorted(os.listdir(dataLocations[0]), key=lambda x: int(x.split('.')[0].split('_')[-1]))      
                     if len(filenames) < num_finished_post:
                         sampler_loc = i + str(j+1)
+                        num_finished_post = len(filenames)
 
             dataLocations_try = '%s_%s' % (self.params['pe_dir'],sampler_loc)
             
@@ -242,15 +302,15 @@ class make_plots:
                 dt.append(np.array(h5py.File(filename, 'r')['runtime']))
 
                 post_files.append(filename)
-                if sampler == 'emcee':
-                    emcee_pruned_samples = prune_samples(filename)
+                if sampler == 'emcee1':
+                    emcee_pruned_samples = prune_samples(filename,self.params)
                 data_temp = {}
                 n = 0
-                for q in self.params['inf_pars']:
+                for q_idx,q in enumerate(self.params['inf_pars']):
                      p = q + '_post'
                      par_min = q + '_min'
                      par_max = q + '_max'
-                     if sampler == 'emcee':
+                     if sampler == 'emcee1':
                          data_temp[p] = emcee_pruned_samples[:,q_idx]
                      else:
                          data_temp[p] = h5py.File(filename, 'r')[p][:]
@@ -640,7 +700,7 @@ class make_plots:
 
         # make bilby p-p plots
         samplers = self.params['samplers']
-        CB_color_cycle=['blue','#4daf4a','#ff7f00','#4b0092']
+        CB_color_cycle=['blue','green','purple','orange']
 
         for i in range(len(self.params['samplers'])):
             if samplers[i] == 'vitamin': continue
@@ -681,7 +741,7 @@ class make_plots:
 
         axis.plot([0,1],[0,1],'--k')
         conf_color_wheel = ['#D8D8D8','#A4A4A4','#6E6E6E']
-        confidence = [0.95,0.90,0.68]
+        confidence = [0.9,0.5]
         #x_values = np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0)
         x_values = np.linspace(0, 1, 1001)
         N = int(self.params['r']**2)
@@ -756,6 +816,35 @@ class make_plots:
             hf.create_dataset('kl', data=kl)
             hf.create_dataset('ivec', data=ivec)
         hf.close()
+        return
+
+    def plot_loss(self):
+        """ Regenerate previously made loss plot
+        """
+        matplotlib.rc('text', usetex=True)
+
+        # Load old plot data
+        plotdata = np.loadtxt("inverse_model_dir_%s/loss_data.txt" % self.params['run_label'])
+
+        # Make loss plot
+        plt.figure()
+        xvec = self.params['report_interval']*np.arange(np.array(plotdata).shape[0])
+        plt.semilogx(xvec,np.array(plotdata)[:,0],label=r'$\mathrm{Recon}$',color='blue',alpha=0.5)
+        plt.semilogx(xvec,np.array(plotdata)[:,1],label=r'$\mathrm{KL}$',color='orange',alpha=0.5)
+        plt.semilogx(xvec,np.array(plotdata)[:,2],label=r'$\mathrm{Total}$',color='green',alpha=0.5)
+        plt.semilogx(xvec,np.array(plotdata)[:,3],color='blue',linestyle='dotted')
+        plt.semilogx(xvec,np.array(plotdata)[:,4],color='orange',linestyle='dotted')
+        plt.semilogx(xvec,np.array(plotdata)[:,5],color='green',linestyle='dotted')
+        plt.ylim([-25,15])
+        plt.xlabel(r'$\mathrm{Iteration}$')
+        plt.ylabel(r'$\mathrm{Cost}$')
+        plt.legend()
+        plt.savefig('%s/latest_%s/cost_%s.png' % (self.params['plot_dir'],self.params['run_label'],self.params['run_label']),dpi=360)
+        plt.ylim([np.min(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,0]), np.max(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,1])])
+        plt.savefig('%s/latest_%s/cost_zoom_%s.png' % (self.params['plot_dir'],self.params['run_label'],self.params['run_label']),dpi=360)
+        plt.close('all')
+
+
         return
 
     def gen_kl_plots(self,model,sig_test,par_test,normscales,bounds,snrs_test):
@@ -948,7 +1037,7 @@ class make_plots:
         tmp_idx=len(usesamps)
         print_cnt = 0
         runtime = {}
-        CB_color_cycle = ['#4b0092', '#ff7f00', '#4daf4a',
+        CB_color_cycle = ['orange', 'purple', 'green',
                   'blue', '#a65628', '#984ea3',
                   '#e41a1c', '#dede00', 
                   '#004d40','#d81b60','#1e88e5',
@@ -970,7 +1059,9 @@ class make_plots:
                 os.remove('plotting_data_%s/KL_plot_data.h5' % params['run_label'])
                 hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'w')
         else:
-            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
+            # TODO: uncomment this
+            #hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
+            hf = h5py.File('second_sub_plottind_data/plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
      
         
         # 4 pannel KL approach
@@ -994,6 +1085,7 @@ class make_plots:
                         continue
                     else:
                         sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
+
                     tot_kl = np.array(hf['%s-%s' % (sampler1,sampler2)])
 
                     logbins = np.logspace(-3,2.5,50)
@@ -1005,9 +1097,8 @@ class make_plots:
                         print(np.sort(tot_kl)[-15:][::-1])
                         print(tot_kl.argsort()[:15][:])
                         print(np.sort(tot_kl)[:15][:])
-                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\textrm{%s vs. %s}$' % (samplers[i],samplers[::-1][j]),zorder=2)
-                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
-
+                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,log=True,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label='$\mathrm{%s \ vs. \ %s}$' % (samplers[i],samplers[::-1][j]),zorder=2)
+                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,log=True,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
                     # record non-colored hists
                     elif samplers[i] != 'vitamin' and samplers[::-1][j] != 'vitamin':
                         if samplers[i] == samplers[1:][k] or samplers[::-1][j] == samplers[1:][k]:
@@ -1024,21 +1115,25 @@ class make_plots:
                 tmp_idx-=1
 
             # Plot non-colored histograms
-            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{%s vs. other samplers}$' % samplers[1:][k],zorder=1)
-            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
-        
+            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),log=True,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\mathrm{%s \ vs. \ other \ samplers}$' % samplers[1:][k],zorder=1)
+            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),log=True,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
+
             # plot KL histograms
             if kl_idx_1 == 1:
                 axis_kl[kl_idx_1,kl_idx_2].set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
             if kl_idx_2 == 0:
                 axis_kl[kl_idx_1,kl_idx_2].set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
-            axis_kl[kl_idx_1,kl_idx_2].tick_params(axis="x", labelsize=14)
-            axis_kl[kl_idx_1,kl_idx_2].tick_params(axis="y", labelsize=14)
+            axis_kl[kl_idx_1,kl_idx_2].tick_params(axis="both", labelsize=12, direction='out')
             leg = axis_kl[kl_idx_1,kl_idx_2].legend(loc='upper right', fontsize=4) #'medium')
             for l in leg.legendHandles:
                 l.set_alpha(1.0)
 
+            #axis_kl[kl_idx_1,kl_idx_2].xaxis.set_minor_locator(FixedLocator([0.5, 1.5, 2.5, 3.5, 4.5]))
+            #axis_kl[kl_idx_1,kl_idx_2].xaxis.set_major_locator(ticker.LogLocator(base=10.0, numticks=15))
             axis_kl[kl_idx_1,kl_idx_2].set_xlim(left=8e-2,right=100)
+            ##axis_kl[kl_idx_1,kl_idx_2].set_xticks(AutoMinorLocator(),minor=True)
+            #caxis_kl[kl_idx_1,kl_idx_2].xaxis.set_minor_locator(MultipleLocator(5))
+            #axis_kl[kl_idx_1,kl_idx_2].tick_params(which='minor', length=4, color='r')
             #axis_kl[kl_idx_1,kl_idx_2].set_ylim(top=1.0)
             axis_kl[kl_idx_1,kl_idx_2].set_xscale('log')
             axis_kl[kl_idx_1,kl_idx_2].set_yscale('log')
@@ -1049,13 +1144,14 @@ class make_plots:
 
         # Save figure
         fig_kl.canvas.draw()
-        plt.tight_layout()
+        #plt.minorticks_on()
+        #plt.tight_layout()
         fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig_kl)
         print('Here')
         exit()
         
-
+        
         tot_kl_grey = np.array([])
         fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
         # single plot KL approach 

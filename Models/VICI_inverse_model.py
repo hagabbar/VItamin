@@ -479,7 +479,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
             cost_val, kl_val = session.run([cost_R, KL], feed_dict={bs_ph:y_data_test.shape[0], x_ph:x_data_test, y_ph:y_data_test/y_normscale, idx:i})
             plotdata.append([cost,kl,cost+kl,cost_val,kl_val,cost_val+kl_val])
 
-            
+           
             try:
                 # Make loss plot
                 plt.figure()
@@ -498,6 +498,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 plt.ylim([np.min(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,0]), np.max(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,1])])
                 plt.savefig('%s/latest_%s/cost_zoom_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
                 plt.close('all')
+                
             except:
                 pass
 
@@ -521,6 +522,12 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                         return 5000.0, session, saver, save_dir
                     else:
                         exit()
+                try:
+                    # Save loss plot data
+                    np.savetxt(save_dir.split('/')[0] + '/loss_data.txt', np.array(plotdata))
+                except FileNotFoundError as err:
+                    print(err)
+                    pass
 
         if i % params['save_interval'] == 0 and i > 0:
 

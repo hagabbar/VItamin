@@ -57,8 +57,8 @@ def plot_sky(pts,contour=True,filled=False,ax=None,trueloc=None,cmap='Reds',col=
     if filled:
         base_color = np.array(to_rgb(col))
         opp_color = 1.0 - base_color
-        cs1 = map.contourf(x,y,1.0-p1,levels=[0.0,0.05,0.1,0.32,1.0],colors=[base_color+opp_color,base_color+0.8*opp_color,base_color+0.6*opp_color,base_color])
-    cs2 = map.contour(x,y,p1,levels=[0.68,0.9,0.95],linewidths=2.0,colors=col)
+        cs1 = map.contourf(x,y,1.0-p1,levels=[0.0,0.1,0.5,1.0],colors=[base_color+opp_color,base_color+0.8*opp_color,base_color+0.6*opp_color,base_color])
+    cs2 = map.contour(x,y,p1,levels=[0.5,0.9],linewidths=2.0,colors=col)
     if trueloc is not None:
         xx, yy = map(trueloc[0]*180./np.pi, trueloc[1]*180./np.pi)
         map.plot(xx,yy,marker='+',markersize=20,linewidth=5,color='orange')
