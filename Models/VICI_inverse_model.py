@@ -64,7 +64,6 @@ from Neural_Networks import VICI_VAE_encoder
 from Neural_Networks import VICI_reduction
 from Neural_Networks import batch_manager
 from Models import VICI_inverse_model
-from data import chris_data
 import plots
 import matplotlib
 matplotlib.use('Agg')
