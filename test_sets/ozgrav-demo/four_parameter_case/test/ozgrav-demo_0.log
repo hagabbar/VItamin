@@ -1,0 +1,574 @@
+05:58 INFO    : No prior given, using default BBH priors in /home/hunter.gabbard/CBC/VItamin/vitamin_env/lib/python3.6/site-packages/bilby/gw/prior_files/binary_black_holes.prior.
+05:58 INFO    : Time jittering requested with non-time-marginalised likelihood, ignoring.
+05:58 INFO    : Running for label 'ozgrav-demo_0', output will be saved to 'test_sets/ozgrav-demo/four_parameter_case/test_dynesty1'
+05:58 INFO    : Search parameters:
+05:58 INFO    :   luminosity_distance = Uniform(minimum=1000.0, maximum=3000.0, name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+05:58 INFO    :   dec = Cosine(name='dec', latex_label='$\\mathrm{DEC}$', unit=None, minimum=-1.5707963267948966, maximum=1.5707963267948966, boundary='reflective')
+05:58 INFO    :   ra = Uniform(minimum=0.0, maximum=6.283185307179586, name='ra', latex_label='$\\mathrm{RA}$', unit=None, boundary='periodic')
+05:58 INFO    :   geocent_time = Uniform(minimum=1126259642.65, maximum=1126259642.85, name='geocent_time', latex_label='$t_c$', unit='$s$', boundary=None)
+05:58 INFO    :   mass_ratio = Constraint(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None)
+05:58 INFO    :   mass_1 = 72.56789668995422
+05:58 INFO    :   mass_2 = 39.71582469664414
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   theta_jn = 1.5906024408795638
+05:58 INFO    :   psi = 2.2650935575914484
+05:58 INFO    :   phase = 4.678714133619876
+05:58 INFO    : Single likelihood evaluation took 1.553e-03 s
+05:58 INFO    : Using sampler Dynesty with kwargs {'bound': 'multi', 'sample': 'rwalk', 'verbose': True, 'periodic': None, 'check_point_delta_t': 600, 'nlive': 10, 'first_update': None, 'walks': 40, 'npdim': None, 'rstate': None, 'queue_size': None, 'pool': None, 'use_pool': None, 'live_points': None, 'logl_args': None, 'logl_kwargs': None, 'ptform_args': None, 'ptform_kwargs': None, 'enlarge': None, 'bootstrap': None, 'vol_dec': 0.5, 'vol_check': 2.0, 'facc': 0.5, 'slices': 5, 'update_interval': 6, 'print_func': <bound method Dynesty._print_func of <bilby.core.sampler.dynesty.Dynesty object at 0x7f6b9dff20f0>>, 'dlogz': 0.1, 'maxiter': None, 'maxcall': None, 'logl_max': inf, 'add_live': True, 'print_progress': True, 'save_bounds': False}
+05:58 INFO    : Checkpoint every n_check_point = 400000
+05:58 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_0_resume.pickle
+05:58 INFO    : Sampling time: 0:00:11.144985
+05:58 INFO    : Summary of results:
+nsamples: 186
+log_noise_evidence: -399.635
+log_evidence: -361.838 +/-  1.543
+log_bayes_factor: 37.797 +/-  1.543
+
+05:58 INFO    : Injected signal in H1:
+05:58 INFO    :   optimal SNR = 26.43
+05:58 INFO    :   matched filter SNR = 25.57-0.81j
+05:58 INFO    :   mass_1 = 79.50551810640201
+05:58 INFO    :   mass_2 = 59.72951270801265
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   luminosity_distance = 1326.6488964165335
+05:58 INFO    :   theta_jn = 0.6949299217389239
+05:58 INFO    :   psi = 0.48562466598694365
+05:58 INFO    :   phase = 1.7683855523893872
+05:58 INFO    :   geocent_time = 1126259642.6597044
+05:58 INFO    :   ra = 2.7926842065795494
+05:58 INFO    :   dec = -0.05441090418372447
+05:58 INFO    : Injected signal in L1:
+05:58 INFO    :   optimal SNR = 21.72
+05:58 INFO    :   matched filter SNR = 21.94-0.40j
+05:58 INFO    :   mass_1 = 79.50551810640201
+05:58 INFO    :   mass_2 = 59.72951270801265
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   luminosity_distance = 1326.6488964165335
+05:58 INFO    :   theta_jn = 0.6949299217389239
+05:58 INFO    :   psi = 0.48562466598694365
+05:58 INFO    :   phase = 1.7683855523893872
+05:58 INFO    :   geocent_time = 1126259642.6597044
+05:58 INFO    :   ra = 2.7926842065795494
+05:58 INFO    :   dec = -0.05441090418372447
+05:58 INFO    : Injected signal in V1:
+05:58 INFO    :   optimal SNR = 20.84
+05:58 INFO    :   matched filter SNR = 20.89-0.85j
+05:58 INFO    :   mass_1 = 79.50551810640201
+05:58 INFO    :   mass_2 = 59.72951270801265
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   luminosity_distance = 1326.6488964165335
+05:58 INFO    :   theta_jn = 0.6949299217389239
+05:58 INFO    :   psi = 0.48562466598694365
+05:58 INFO    :   phase = 1.7683855523893872
+05:58 INFO    :   geocent_time = 1126259642.6597044
+05:58 INFO    :   ra = 2.7926842065795494
+05:58 INFO    :   dec = -0.05441090418372447
+05:58 INFO    : No prior given, using default BBH priors in /home/hunter.gabbard/CBC/VItamin/vitamin_env/lib/python3.6/site-packages/bilby/gw/prior_files/binary_black_holes.prior.
+05:58 INFO    : Time jittering requested with non-time-marginalised likelihood, ignoring.
+05:58 INFO    : Running for label 'ozgrav-demo_1', output will be saved to 'test_sets/ozgrav-demo/four_parameter_case/test_dynesty1'
+05:58 INFO    : Search parameters:
+05:58 INFO    :   luminosity_distance = Uniform(minimum=1000.0, maximum=3000.0, name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+05:58 INFO    :   dec = Cosine(name='dec', latex_label='$\\mathrm{DEC}$', unit=None, minimum=-1.5707963267948966, maximum=1.5707963267948966, boundary='reflective')
+05:58 INFO    :   ra = Uniform(minimum=0.0, maximum=6.283185307179586, name='ra', latex_label='$\\mathrm{RA}$', unit=None, boundary='periodic')
+05:58 INFO    :   geocent_time = Uniform(minimum=1126259642.65, maximum=1126259642.85, name='geocent_time', latex_label='$t_c$', unit='$s$', boundary=None)
+05:58 INFO    :   mass_ratio = Constraint(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None)
+05:58 INFO    :   mass_1 = 79.50551810640201
+05:58 INFO    :   mass_2 = 59.72951270801265
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   theta_jn = 0.6949299217389239
+05:58 INFO    :   psi = 0.48562466598694365
+05:58 INFO    :   phase = 1.7683855523893872
+05:58 INFO    : Single likelihood evaluation took 1.565e-03 s
+05:58 INFO    : Using sampler Dynesty with kwargs {'bound': 'multi', 'sample': 'rwalk', 'verbose': True, 'periodic': None, 'check_point_delta_t': 600, 'nlive': 10, 'first_update': None, 'walks': 40, 'npdim': None, 'rstate': None, 'queue_size': None, 'pool': None, 'use_pool': None, 'live_points': None, 'logl_args': None, 'logl_kwargs': None, 'ptform_args': None, 'ptform_kwargs': None, 'enlarge': None, 'bootstrap': None, 'vol_dec': 0.5, 'vol_check': 2.0, 'facc': 0.5, 'slices': 5, 'update_interval': 6, 'print_func': <bound method Dynesty._print_func of <bilby.core.sampler.dynesty.Dynesty object at 0x7f6ac42fa5c0>>, 'dlogz': 0.1, 'maxiter': None, 'maxcall': None, 'logl_max': inf, 'add_live': True, 'print_progress': True, 'save_bounds': False}
+05:58 INFO    : Checkpoint every n_check_point = 400000
+05:58 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_1_resume.pickle
+05:58 INFO    : Sampling time: 0:00:12.586138
+05:58 INFO    : Summary of results:
+nsamples: 235
+log_noise_evidence: -1091.565
+log_evidence: -322.550 +/-  1.806
+log_bayes_factor: 769.015 +/-  1.806
+
+05:58 INFO    : Injected signal in H1:
+05:58 INFO    :   optimal SNR = 20.27
+05:58 INFO    :   matched filter SNR = 22.28+1.37j
+05:58 INFO    :   mass_1 = 70.27245578625877
+05:58 INFO    :   mass_2 = 63.567516772372855
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   luminosity_distance = 1881.734406859609
+05:58 INFO    :   theta_jn = 2.541785661270255
+05:58 INFO    :   psi = 4.763131134495195
+05:58 INFO    :   phase = 1.5647838934663345
+05:58 INFO    :   geocent_time = 1126259642.6585732
+05:58 INFO    :   ra = 1.9671204019777797
+05:58 INFO    :   dec = 1.0643518540400398
+05:58 INFO    : Injected signal in L1:
+05:58 INFO    :   optimal SNR = 19.27
+05:58 INFO    :   matched filter SNR = 17.22-1.02j
+05:58 INFO    :   mass_1 = 70.27245578625877
+05:58 INFO    :   mass_2 = 63.567516772372855
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   luminosity_distance = 1881.734406859609
+05:58 INFO    :   theta_jn = 2.541785661270255
+05:58 INFO    :   psi = 4.763131134495195
+05:58 INFO    :   phase = 1.5647838934663345
+05:58 INFO    :   geocent_time = 1126259642.6585732
+05:58 INFO    :   ra = 1.9671204019777797
+05:58 INFO    :   dec = 1.0643518540400398
+05:58 INFO    : Injected signal in V1:
+05:58 INFO    :   optimal SNR = 19.18
+05:58 INFO    :   matched filter SNR = 17.68+0.33j
+05:58 INFO    :   mass_1 = 70.27245578625877
+05:58 INFO    :   mass_2 = 63.567516772372855
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   luminosity_distance = 1881.734406859609
+05:58 INFO    :   theta_jn = 2.541785661270255
+05:58 INFO    :   psi = 4.763131134495195
+05:58 INFO    :   phase = 1.5647838934663345
+05:58 INFO    :   geocent_time = 1126259642.6585732
+05:58 INFO    :   ra = 1.9671204019777797
+05:58 INFO    :   dec = 1.0643518540400398
+05:58 INFO    : No prior given, using default BBH priors in /home/hunter.gabbard/CBC/VItamin/vitamin_env/lib/python3.6/site-packages/bilby/gw/prior_files/binary_black_holes.prior.
+05:58 INFO    : Time jittering requested with non-time-marginalised likelihood, ignoring.
+05:58 INFO    : Running for label 'ozgrav-demo_2', output will be saved to 'test_sets/ozgrav-demo/four_parameter_case/test_dynesty1'
+05:58 INFO    : Search parameters:
+05:58 INFO    :   luminosity_distance = Uniform(minimum=1000.0, maximum=3000.0, name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+05:58 INFO    :   dec = Cosine(name='dec', latex_label='$\\mathrm{DEC}$', unit=None, minimum=-1.5707963267948966, maximum=1.5707963267948966, boundary='reflective')
+05:58 INFO    :   ra = Uniform(minimum=0.0, maximum=6.283185307179586, name='ra', latex_label='$\\mathrm{RA}$', unit=None, boundary='periodic')
+05:58 INFO    :   geocent_time = Uniform(minimum=1126259642.65, maximum=1126259642.85, name='geocent_time', latex_label='$t_c$', unit='$s$', boundary=None)
+05:58 INFO    :   mass_ratio = Constraint(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None)
+05:58 INFO    :   mass_1 = 70.27245578625877
+05:58 INFO    :   mass_2 = 63.567516772372855
+05:58 INFO    :   a_1 = 0.0
+05:58 INFO    :   a_2 = 0.0
+05:58 INFO    :   tilt_1 = 0.0
+05:58 INFO    :   tilt_2 = 0.0
+05:58 INFO    :   phi_12 = 0.0
+05:58 INFO    :   phi_jl = 0.0
+05:58 INFO    :   theta_jn = 2.541785661270255
+05:58 INFO    :   psi = 4.763131134495195
+05:58 INFO    :   phase = 1.5647838934663345
+05:58 INFO    : Single likelihood evaluation took 1.579e-03 s
+05:58 INFO    : Using sampler Dynesty with kwargs {'bound': 'multi', 'sample': 'rwalk', 'verbose': True, 'periodic': None, 'check_point_delta_t': 600, 'nlive': 10, 'first_update': None, 'walks': 40, 'npdim': None, 'rstate': None, 'queue_size': None, 'pool': None, 'use_pool': None, 'live_points': None, 'logl_args': None, 'logl_kwargs': None, 'ptform_args': None, 'ptform_kwargs': None, 'enlarge': None, 'bootstrap': None, 'vol_dec': 0.5, 'vol_check': 2.0, 'facc': 0.5, 'slices': 5, 'update_interval': 6, 'print_func': <bound method Dynesty._print_func of <bilby.core.sampler.dynesty.Dynesty object at 0x7f6b7c5a9940>>, 'dlogz': 0.1, 'maxiter': None, 'maxcall': None, 'logl_max': inf, 'add_live': True, 'print_progress': True, 'save_bounds': False}
+05:58 INFO    : Checkpoint every n_check_point = 400000
+05:58 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_2_resume.pickle
+05:58 INFO    : Sampling time: 0:00:13.370929
+05:59 INFO    : Summary of results:
+nsamples: 236
+log_noise_evidence: -863.322
+log_evidence: -598.896 +/-  1.778
+log_bayes_factor: 264.426 +/-  1.778
+
+05:59 INFO    : Injected signal in H1:
+05:59 INFO    :   optimal SNR = 18.12
+05:59 INFO    :   matched filter SNR = 19.55+1.93j
+05:59 INFO    :   mass_1 = 67.79305850754977
+05:59 INFO    :   mass_2 = 50.816051265171566
+05:59 INFO    :   a_1 = 0.0
+05:59 INFO    :   a_2 = 0.0
+05:59 INFO    :   tilt_1 = 0.0
+05:59 INFO    :   tilt_2 = 0.0
+05:59 INFO    :   phi_12 = 0.0
+05:59 INFO    :   phi_jl = 0.0
+05:59 INFO    :   luminosity_distance = 1493.2987635492839
+05:59 INFO    :   theta_jn = 1.0609820639238114
+05:59 INFO    :   psi = 5.0240638847036365
+05:59 INFO    :   phase = 4.446014207994238
+05:59 INFO    :   geocent_time = 1126259642.7912061
+05:59 INFO    :   ra = 4.056184759122109
+05:59 INFO    :   dec = -0.1716423401667907
+05:59 INFO    : Injected signal in L1:
+05:59 INFO    :   optimal SNR = 22.75
+05:59 INFO    :   matched filter SNR = 23.68+0.55j
+05:59 INFO    :   mass_1 = 67.79305850754977
+05:59 INFO    :   mass_2 = 50.816051265171566
+05:59 INFO    :   a_1 = 0.0
+05:59 INFO    :   a_2 = 0.0
+05:59 INFO    :   tilt_1 = 0.0
+05:59 INFO    :   tilt_2 = 0.0
+05:59 INFO    :   phi_12 = 0.0
+05:59 INFO    :   phi_jl = 0.0
+05:59 INFO    :   luminosity_distance = 1493.2987635492839
+05:59 INFO    :   theta_jn = 1.0609820639238114
+05:59 INFO    :   psi = 5.0240638847036365
+05:59 INFO    :   phase = 4.446014207994238
+05:59 INFO    :   geocent_time = 1126259642.7912061
+05:59 INFO    :   ra = 4.056184759122109
+05:59 INFO    :   dec = -0.1716423401667907
+05:59 INFO    : Injected signal in V1:
+05:59 INFO    :   optimal SNR = 7.43
+05:59 INFO    :   matched filter SNR = 8.85-0.27j
+05:59 INFO    :   mass_1 = 67.79305850754977
+05:59 INFO    :   mass_2 = 50.816051265171566
+05:59 INFO    :   a_1 = 0.0
+05:59 INFO    :   a_2 = 0.0
+05:59 INFO    :   tilt_1 = 0.0
+05:59 INFO    :   tilt_2 = 0.0
+05:59 INFO    :   phi_12 = 0.0
+05:59 INFO    :   phi_jl = 0.0
+05:59 INFO    :   luminosity_distance = 1493.2987635492839
+05:59 INFO    :   theta_jn = 1.0609820639238114
+05:59 INFO    :   psi = 5.0240638847036365
+05:59 INFO    :   phase = 4.446014207994238
+05:59 INFO    :   geocent_time = 1126259642.7912061
+05:59 INFO    :   ra = 4.056184759122109
+05:59 INFO    :   dec = -0.1716423401667907
+05:59 INFO    : No prior given, using default BBH priors in /home/hunter.gabbard/CBC/VItamin/vitamin_env/lib/python3.6/site-packages/bilby/gw/prior_files/binary_black_holes.prior.
+05:59 INFO    : Time jittering requested with non-time-marginalised likelihood, ignoring.
+05:59 INFO    : Running for label 'ozgrav-demo_3', output will be saved to 'test_sets/ozgrav-demo/four_parameter_case/test_dynesty1'
+05:59 INFO    : Search parameters:
+05:59 INFO    :   luminosity_distance = Uniform(minimum=1000.0, maximum=3000.0, name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+05:59 INFO    :   dec = Cosine(name='dec', latex_label='$\\mathrm{DEC}$', unit=None, minimum=-1.5707963267948966, maximum=1.5707963267948966, boundary='reflective')
+05:59 INFO    :   ra = Uniform(minimum=0.0, maximum=6.283185307179586, name='ra', latex_label='$\\mathrm{RA}$', unit=None, boundary='periodic')
+05:59 INFO    :   geocent_time = Uniform(minimum=1126259642.65, maximum=1126259642.85, name='geocent_time', latex_label='$t_c$', unit='$s$', boundary=None)
+05:59 INFO    :   mass_ratio = Constraint(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None)
+05:59 INFO    :   mass_1 = 67.79305850754977
+05:59 INFO    :   mass_2 = 50.816051265171566
+05:59 INFO    :   a_1 = 0.0
+05:59 INFO    :   a_2 = 0.0
+05:59 INFO    :   tilt_1 = 0.0
+05:59 INFO    :   tilt_2 = 0.0
+05:59 INFO    :   phi_12 = 0.0
+05:59 INFO    :   phi_jl = 0.0
+05:59 INFO    :   theta_jn = 1.0609820639238114
+05:59 INFO    :   psi = 5.0240638847036365
+05:59 INFO    :   phase = 4.446014207994238
+05:59 INFO    : Single likelihood evaluation took 1.566e-03 s
+05:59 INFO    : Using sampler Dynesty with kwargs {'bound': 'multi', 'sample': 'rwalk', 'verbose': True, 'periodic': None, 'check_point_delta_t': 600, 'nlive': 10, 'first_update': None, 'walks': 40, 'npdim': None, 'rstate': None, 'queue_size': None, 'pool': None, 'use_pool': None, 'live_points': None, 'logl_args': None, 'logl_kwargs': None, 'ptform_args': None, 'ptform_kwargs': None, 'enlarge': None, 'bootstrap': None, 'vol_dec': 0.5, 'vol_check': 2.0, 'facc': 0.5, 'slices': 5, 'update_interval': 6, 'print_func': <bound method Dynesty._print_func of <bilby.core.sampler.dynesty.Dynesty object at 0x7f6ac4147518>>, 'dlogz': 0.1, 'maxiter': None, 'maxcall': None, 'logl_max': inf, 'add_live': True, 'print_progress': True, 'save_bounds': False}
+05:59 INFO    : Checkpoint every n_check_point = 400000
+05:59 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_3_resume.pickle
+05:59 INFO    : Sampling time: 0:00:12.471701
+05:59 INFO    : Summary of results:
+nsamples: 233
+log_noise_evidence: -821.096
+log_evidence: -327.514 +/-  1.803
+log_bayes_factor: 493.583 +/-  1.803
+
+09:42 INFO    : No prior given, using default BBH priors in /home/hunter.gabbard/CBC/VItamin/vitamin_env/lib/python3.6/site-packages/bilby/gw/prior_files/binary_black_holes.prior.
+09:42 INFO    : Time jittering requested with non-time-marginalised likelihood, ignoring.
+09:42 INFO    : Running for label 'ozgrav-demo_0', output will be saved to 'test_sets/ozgrav-demo/four_parameter_case/test_dynesty1'
+09:42 INFO    : Search parameters:
+09:42 INFO    :   luminosity_distance = Uniform(minimum=1000.0, maximum=3000.0, name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+09:42 INFO    :   dec = Cosine(name='dec', latex_label='$\\mathrm{DEC}$', unit=None, minimum=-1.5707963267948966, maximum=1.5707963267948966, boundary='reflective')
+09:42 INFO    :   ra = Uniform(minimum=0.0, maximum=6.283185307179586, name='ra', latex_label='$\\mathrm{RA}$', unit=None, boundary='periodic')
+09:42 INFO    :   geocent_time = Uniform(minimum=1126259642.65, maximum=1126259642.85, name='geocent_time', latex_label='$t_c$', unit='$s$', boundary=None)
+09:42 INFO    :   mass_ratio = Constraint(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None)
+09:42 INFO    :   mass_1 = 72.56789668995422
+09:42 INFO    :   mass_2 = 39.71582469664414
+09:42 INFO    :   a_1 = 0.0
+09:42 INFO    :   a_2 = 0.0
+09:42 INFO    :   tilt_1 = 0.0
+09:42 INFO    :   tilt_2 = 0.0
+09:42 INFO    :   phi_12 = 0.0
+09:42 INFO    :   phi_jl = 0.0
+09:42 INFO    :   theta_jn = 1.5906024408795638
+09:42 INFO    :   psi = 2.2650935575914484
+09:42 INFO    :   phase = 4.678714133619876
+09:42 INFO    : Single likelihood evaluation took 1.568e-03 s
+09:42 INFO    : Using sampler Dynesty with kwargs {'bound': 'multi', 'sample': 'rwalk', 'verbose': True, 'periodic': None, 'check_point_delta_t': 600, 'nlive': 100, 'first_update': None, 'walks': 40, 'npdim': None, 'rstate': None, 'queue_size': None, 'pool': None, 'use_pool': None, 'live_points': None, 'logl_args': None, 'logl_kwargs': None, 'ptform_args': None, 'ptform_kwargs': None, 'enlarge': None, 'bootstrap': None, 'vol_dec': 0.5, 'vol_check': 2.0, 'facc': 0.5, 'slices': 5, 'update_interval': 60, 'print_func': <bound method Dynesty._print_func of <bilby.core.sampler.dynesty.Dynesty object at 0x7f66b8159128>>, 'dlogz': 0.1, 'maxiter': None, 'maxcall': None, 'logl_max': inf, 'add_live': True, 'print_progress': True, 'save_bounds': False}
+09:42 INFO    : Checkpoint every n_check_point = 400000
+09:44 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_0_resume.pickle
+09:44 INFO    : Sampling time: 0:01:34.720994
+09:44 INFO    : Summary of results:
+nsamples: 1787
+log_noise_evidence: -399.635
+log_evidence: -361.805 +/-  0.501
+log_bayes_factor: 37.830 +/-  0.501
+
+09:44 INFO    : Injected signal in H1:
+09:44 INFO    :   optimal SNR = 26.43
+09:44 INFO    :   matched filter SNR = 25.57-0.81j
+09:44 INFO    :   mass_1 = 79.50551810640201
+09:44 INFO    :   mass_2 = 59.72951270801265
+09:44 INFO    :   a_1 = 0.0
+09:44 INFO    :   a_2 = 0.0
+09:44 INFO    :   tilt_1 = 0.0
+09:44 INFO    :   tilt_2 = 0.0
+09:44 INFO    :   phi_12 = 0.0
+09:44 INFO    :   phi_jl = 0.0
+09:44 INFO    :   luminosity_distance = 1326.6488964165335
+09:44 INFO    :   theta_jn = 0.6949299217389239
+09:44 INFO    :   psi = 0.48562466598694365
+09:44 INFO    :   phase = 1.7683855523893872
+09:44 INFO    :   geocent_time = 1126259642.6597044
+09:44 INFO    :   ra = 2.7926842065795494
+09:44 INFO    :   dec = -0.05441090418372447
+09:44 INFO    : Injected signal in L1:
+09:44 INFO    :   optimal SNR = 21.72
+09:44 INFO    :   matched filter SNR = 21.94-0.40j
+09:44 INFO    :   mass_1 = 79.50551810640201
+09:44 INFO    :   mass_2 = 59.72951270801265
+09:44 INFO    :   a_1 = 0.0
+09:44 INFO    :   a_2 = 0.0
+09:44 INFO    :   tilt_1 = 0.0
+09:44 INFO    :   tilt_2 = 0.0
+09:44 INFO    :   phi_12 = 0.0
+09:44 INFO    :   phi_jl = 0.0
+09:44 INFO    :   luminosity_distance = 1326.6488964165335
+09:44 INFO    :   theta_jn = 0.6949299217389239
+09:44 INFO    :   psi = 0.48562466598694365
+09:44 INFO    :   phase = 1.7683855523893872
+09:44 INFO    :   geocent_time = 1126259642.6597044
+09:44 INFO    :   ra = 2.7926842065795494
+09:44 INFO    :   dec = -0.05441090418372447
+09:44 INFO    : Injected signal in V1:
+09:44 INFO    :   optimal SNR = 20.84
+09:44 INFO    :   matched filter SNR = 20.89-0.85j
+09:44 INFO    :   mass_1 = 79.50551810640201
+09:44 INFO    :   mass_2 = 59.72951270801265
+09:44 INFO    :   a_1 = 0.0
+09:44 INFO    :   a_2 = 0.0
+09:44 INFO    :   tilt_1 = 0.0
+09:44 INFO    :   tilt_2 = 0.0
+09:44 INFO    :   phi_12 = 0.0
+09:44 INFO    :   phi_jl = 0.0
+09:44 INFO    :   luminosity_distance = 1326.6488964165335
+09:44 INFO    :   theta_jn = 0.6949299217389239
+09:44 INFO    :   psi = 0.48562466598694365
+09:44 INFO    :   phase = 1.7683855523893872
+09:44 INFO    :   geocent_time = 1126259642.6597044
+09:44 INFO    :   ra = 2.7926842065795494
+09:44 INFO    :   dec = -0.05441090418372447
+09:44 INFO    : No prior given, using default BBH priors in /home/hunter.gabbard/CBC/VItamin/vitamin_env/lib/python3.6/site-packages/bilby/gw/prior_files/binary_black_holes.prior.
+09:44 INFO    : Time jittering requested with non-time-marginalised likelihood, ignoring.
+09:44 INFO    : Running for label 'ozgrav-demo_1', output will be saved to 'test_sets/ozgrav-demo/four_parameter_case/test_dynesty1'
+09:44 INFO    : Search parameters:
+09:44 INFO    :   luminosity_distance = Uniform(minimum=1000.0, maximum=3000.0, name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+09:44 INFO    :   dec = Cosine(name='dec', latex_label='$\\mathrm{DEC}$', unit=None, minimum=-1.5707963267948966, maximum=1.5707963267948966, boundary='reflective')
+09:44 INFO    :   ra = Uniform(minimum=0.0, maximum=6.283185307179586, name='ra', latex_label='$\\mathrm{RA}$', unit=None, boundary='periodic')
+09:44 INFO    :   geocent_time = Uniform(minimum=1126259642.65, maximum=1126259642.85, name='geocent_time', latex_label='$t_c$', unit='$s$', boundary=None)
+09:44 INFO    :   mass_ratio = Constraint(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None)
+09:44 INFO    :   mass_1 = 79.50551810640201
+09:44 INFO    :   mass_2 = 59.72951270801265
+09:44 INFO    :   a_1 = 0.0
+09:44 INFO    :   a_2 = 0.0
+09:44 INFO    :   tilt_1 = 0.0
+09:44 INFO    :   tilt_2 = 0.0
+09:44 INFO    :   phi_12 = 0.0
+09:44 INFO    :   phi_jl = 0.0
+09:44 INFO    :   theta_jn = 0.6949299217389239
+09:44 INFO    :   psi = 0.48562466598694365
+09:44 INFO    :   phase = 1.7683855523893872
+09:44 INFO    : Single likelihood evaluation took 1.542e-03 s
+09:44 INFO    : Using sampler Dynesty with kwargs {'bound': 'multi', 'sample': 'rwalk', 'verbose': True, 'periodic': None, 'check_point_delta_t': 600, 'nlive': 100, 'first_update': None, 'walks': 40, 'npdim': None, 'rstate': None, 'queue_size': None, 'pool': None, 'use_pool': None, 'live_points': None, 'logl_args': None, 'logl_kwargs': None, 'ptform_args': None, 'ptform_kwargs': None, 'enlarge': None, 'bootstrap': None, 'vol_dec': 0.5, 'vol_check': 2.0, 'facc': 0.5, 'slices': 5, 'update_interval': 60, 'print_func': <bound method Dynesty._print_func of <bilby.core.sampler.dynesty.Dynesty object at 0x7f66904f0588>>, 'dlogz': 0.1, 'maxiter': None, 'maxcall': None, 'logl_max': inf, 'add_live': True, 'print_progress': True, 'save_bounds': False}
+09:44 INFO    : Checkpoint every n_check_point = 400000
+09:46 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_1_resume.pickle
+09:46 INFO    : Sampling time: 0:02:17.668707
+09:46 INFO    : Summary of results:
+nsamples: 2330
+log_noise_evidence: -1091.565
+log_evidence: -323.273 +/-  0.602
+log_bayes_factor: 768.292 +/-  0.602
+
+09:47 INFO    : Injected signal in H1:
+09:47 INFO    :   optimal SNR = 20.27
+09:47 INFO    :   matched filter SNR = 22.28+1.37j
+09:47 INFO    :   mass_1 = 70.27245578625877
+09:47 INFO    :   mass_2 = 63.567516772372855
+09:47 INFO    :   a_1 = 0.0
+09:47 INFO    :   a_2 = 0.0
+09:47 INFO    :   tilt_1 = 0.0
+09:47 INFO    :   tilt_2 = 0.0
+09:47 INFO    :   phi_12 = 0.0
+09:47 INFO    :   phi_jl = 0.0
+09:47 INFO    :   luminosity_distance = 1881.734406859609
+09:47 INFO    :   theta_jn = 2.541785661270255
+09:47 INFO    :   psi = 4.763131134495195
+09:47 INFO    :   phase = 1.5647838934663345
+09:47 INFO    :   geocent_time = 1126259642.6585732
+09:47 INFO    :   ra = 1.9671204019777797
+09:47 INFO    :   dec = 1.0643518540400398
+09:47 INFO    : Injected signal in L1:
+09:47 INFO    :   optimal SNR = 19.27
+09:47 INFO    :   matched filter SNR = 17.22-1.02j
+09:47 INFO    :   mass_1 = 70.27245578625877
+09:47 INFO    :   mass_2 = 63.567516772372855
+09:47 INFO    :   a_1 = 0.0
+09:47 INFO    :   a_2 = 0.0
+09:47 INFO    :   tilt_1 = 0.0
+09:47 INFO    :   tilt_2 = 0.0
+09:47 INFO    :   phi_12 = 0.0
+09:47 INFO    :   phi_jl = 0.0
+09:47 INFO    :   luminosity_distance = 1881.734406859609
+09:47 INFO    :   theta_jn = 2.541785661270255
+09:47 INFO    :   psi = 4.763131134495195
+09:47 INFO    :   phase = 1.5647838934663345
+09:47 INFO    :   geocent_time = 1126259642.6585732
+09:47 INFO    :   ra = 1.9671204019777797
+09:47 INFO    :   dec = 1.0643518540400398
+09:47 INFO    : Injected signal in V1:
+09:47 INFO    :   optimal SNR = 19.18
+09:47 INFO    :   matched filter SNR = 17.68+0.33j
+09:47 INFO    :   mass_1 = 70.27245578625877
+09:47 INFO    :   mass_2 = 63.567516772372855
+09:47 INFO    :   a_1 = 0.0
+09:47 INFO    :   a_2 = 0.0
+09:47 INFO    :   tilt_1 = 0.0
+09:47 INFO    :   tilt_2 = 0.0
+09:47 INFO    :   phi_12 = 0.0
+09:47 INFO    :   phi_jl = 0.0
+09:47 INFO    :   luminosity_distance = 1881.734406859609
+09:47 INFO    :   theta_jn = 2.541785661270255
+09:47 INFO    :   psi = 4.763131134495195
+09:47 INFO    :   phase = 1.5647838934663345
+09:47 INFO    :   geocent_time = 1126259642.6585732
+09:47 INFO    :   ra = 1.9671204019777797
+09:47 INFO    :   dec = 1.0643518540400398
+09:47 INFO    : No prior given, using default BBH priors in /home/hunter.gabbard/CBC/VItamin/vitamin_env/lib/python3.6/site-packages/bilby/gw/prior_files/binary_black_holes.prior.
+09:47 INFO    : Time jittering requested with non-time-marginalised likelihood, ignoring.
+09:47 INFO    : Running for label 'ozgrav-demo_2', output will be saved to 'test_sets/ozgrav-demo/four_parameter_case/test_dynesty1'
+09:47 INFO    : Search parameters:
+09:47 INFO    :   luminosity_distance = Uniform(minimum=1000.0, maximum=3000.0, name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+09:47 INFO    :   dec = Cosine(name='dec', latex_label='$\\mathrm{DEC}$', unit=None, minimum=-1.5707963267948966, maximum=1.5707963267948966, boundary='reflective')
+09:47 INFO    :   ra = Uniform(minimum=0.0, maximum=6.283185307179586, name='ra', latex_label='$\\mathrm{RA}$', unit=None, boundary='periodic')
+09:47 INFO    :   geocent_time = Uniform(minimum=1126259642.65, maximum=1126259642.85, name='geocent_time', latex_label='$t_c$', unit='$s$', boundary=None)
+09:47 INFO    :   mass_ratio = Constraint(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None)
+09:47 INFO    :   mass_1 = 70.27245578625877
+09:47 INFO    :   mass_2 = 63.567516772372855
+09:47 INFO    :   a_1 = 0.0
+09:47 INFO    :   a_2 = 0.0
+09:47 INFO    :   tilt_1 = 0.0
+09:47 INFO    :   tilt_2 = 0.0
+09:47 INFO    :   phi_12 = 0.0
+09:47 INFO    :   phi_jl = 0.0
+09:47 INFO    :   theta_jn = 2.541785661270255
+09:47 INFO    :   psi = 4.763131134495195
+09:47 INFO    :   phase = 1.5647838934663345
+09:47 INFO    : Single likelihood evaluation took 1.586e-03 s
+09:47 INFO    : Using sampler Dynesty with kwargs {'bound': 'multi', 'sample': 'rwalk', 'verbose': True, 'periodic': None, 'check_point_delta_t': 600, 'nlive': 100, 'first_update': None, 'walks': 40, 'npdim': None, 'rstate': None, 'queue_size': None, 'pool': None, 'use_pool': None, 'live_points': None, 'logl_args': None, 'logl_kwargs': None, 'ptform_args': None, 'ptform_kwargs': None, 'enlarge': None, 'bootstrap': None, 'vol_dec': 0.5, 'vol_check': 2.0, 'facc': 0.5, 'slices': 5, 'update_interval': 60, 'print_func': <bound method Dynesty._print_func of <bilby.core.sampler.dynesty.Dynesty object at 0x7f668840c668>>, 'dlogz': 0.1, 'maxiter': None, 'maxcall': None, 'logl_max': inf, 'add_live': True, 'print_progress': True, 'save_bounds': False}
+09:47 INFO    : Checkpoint every n_check_point = 400000
+09:49 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_2_resume.pickle
+09:49 INFO    : Sampling time: 0:02:19.476953
+09:49 INFO    : Summary of results:
+nsamples: 2412
+log_noise_evidence: -863.322
+log_evidence: -335.203 +/-  0.615
+log_bayes_factor: 528.119 +/-  0.615
+
+09:49 INFO    : Injected signal in H1:
+09:49 INFO    :   optimal SNR = 18.12
+09:49 INFO    :   matched filter SNR = 19.55+1.93j
+09:49 INFO    :   mass_1 = 67.79305850754977
+09:49 INFO    :   mass_2 = 50.816051265171566
+09:49 INFO    :   a_1 = 0.0
+09:49 INFO    :   a_2 = 0.0
+09:49 INFO    :   tilt_1 = 0.0
+09:49 INFO    :   tilt_2 = 0.0
+09:49 INFO    :   phi_12 = 0.0
+09:49 INFO    :   phi_jl = 0.0
+09:49 INFO    :   luminosity_distance = 1493.2987635492839
+09:49 INFO    :   theta_jn = 1.0609820639238114
+09:49 INFO    :   psi = 5.0240638847036365
+09:49 INFO    :   phase = 4.446014207994238
+09:49 INFO    :   geocent_time = 1126259642.7912061
+09:49 INFO    :   ra = 4.056184759122109
+09:49 INFO    :   dec = -0.1716423401667907
+09:49 INFO    : Injected signal in L1:
+09:49 INFO    :   optimal SNR = 22.75
+09:49 INFO    :   matched filter SNR = 23.68+0.55j
+09:49 INFO    :   mass_1 = 67.79305850754977
+09:49 INFO    :   mass_2 = 50.816051265171566
+09:49 INFO    :   a_1 = 0.0
+09:49 INFO    :   a_2 = 0.0
+09:49 INFO    :   tilt_1 = 0.0
+09:49 INFO    :   tilt_2 = 0.0
+09:49 INFO    :   phi_12 = 0.0
+09:49 INFO    :   phi_jl = 0.0
+09:49 INFO    :   luminosity_distance = 1493.2987635492839
+09:49 INFO    :   theta_jn = 1.0609820639238114
+09:49 INFO    :   psi = 5.0240638847036365
+09:49 INFO    :   phase = 4.446014207994238
+09:49 INFO    :   geocent_time = 1126259642.7912061
+09:49 INFO    :   ra = 4.056184759122109
+09:49 INFO    :   dec = -0.1716423401667907
+09:49 INFO    : Injected signal in V1:
+09:49 INFO    :   optimal SNR = 7.43
+09:49 INFO    :   matched filter SNR = 8.85-0.27j
+09:49 INFO    :   mass_1 = 67.79305850754977
+09:49 INFO    :   mass_2 = 50.816051265171566
+09:49 INFO    :   a_1 = 0.0
+09:49 INFO    :   a_2 = 0.0
+09:49 INFO    :   tilt_1 = 0.0
+09:49 INFO    :   tilt_2 = 0.0
+09:49 INFO    :   phi_12 = 0.0
+09:49 INFO    :   phi_jl = 0.0
+09:49 INFO    :   luminosity_distance = 1493.2987635492839
+09:49 INFO    :   theta_jn = 1.0609820639238114
+09:49 INFO    :   psi = 5.0240638847036365
+09:49 INFO    :   phase = 4.446014207994238
+09:49 INFO    :   geocent_time = 1126259642.7912061
+09:49 INFO    :   ra = 4.056184759122109
+09:49 INFO    :   dec = -0.1716423401667907
+09:49 INFO    : No prior given, using default BBH priors in /home/hunter.gabbard/CBC/VItamin/vitamin_env/lib/python3.6/site-packages/bilby/gw/prior_files/binary_black_holes.prior.
+09:49 INFO    : Time jittering requested with non-time-marginalised likelihood, ignoring.
+09:49 INFO    : Running for label 'ozgrav-demo_3', output will be saved to 'test_sets/ozgrav-demo/four_parameter_case/test_dynesty1'
+09:49 INFO    : Search parameters:
+09:49 INFO    :   luminosity_distance = Uniform(minimum=1000.0, maximum=3000.0, name='luminosity_distance', latex_label='$d_L$', unit='Mpc', boundary=None)
+09:49 INFO    :   dec = Cosine(name='dec', latex_label='$\\mathrm{DEC}$', unit=None, minimum=-1.5707963267948966, maximum=1.5707963267948966, boundary='reflective')
+09:49 INFO    :   ra = Uniform(minimum=0.0, maximum=6.283185307179586, name='ra', latex_label='$\\mathrm{RA}$', unit=None, boundary='periodic')
+09:49 INFO    :   geocent_time = Uniform(minimum=1126259642.65, maximum=1126259642.85, name='geocent_time', latex_label='$t_c$', unit='$s$', boundary=None)
+09:49 INFO    :   mass_ratio = Constraint(minimum=0.125, maximum=1, name='mass_ratio', latex_label='$q$', unit=None)
+09:49 INFO    :   mass_1 = 67.79305850754977
+09:49 INFO    :   mass_2 = 50.816051265171566
+09:49 INFO    :   a_1 = 0.0
+09:49 INFO    :   a_2 = 0.0
+09:49 INFO    :   tilt_1 = 0.0
+09:49 INFO    :   tilt_2 = 0.0
+09:49 INFO    :   phi_12 = 0.0
+09:49 INFO    :   phi_jl = 0.0
+09:49 INFO    :   theta_jn = 1.0609820639238114
+09:49 INFO    :   psi = 5.0240638847036365
+09:49 INFO    :   phase = 4.446014207994238
+09:49 INFO    : Single likelihood evaluation took 1.748e-03 s
+09:49 INFO    : Using sampler Dynesty with kwargs {'bound': 'multi', 'sample': 'rwalk', 'verbose': True, 'periodic': None, 'check_point_delta_t': 600, 'nlive': 100, 'first_update': None, 'walks': 40, 'npdim': None, 'rstate': None, 'queue_size': None, 'pool': None, 'use_pool': None, 'live_points': None, 'logl_args': None, 'logl_kwargs': None, 'ptform_args': None, 'ptform_kwargs': None, 'enlarge': None, 'bootstrap': None, 'vol_dec': 0.5, 'vol_check': 2.0, 'facc': 0.5, 'slices': 5, 'update_interval': 60, 'print_func': <bound method Dynesty._print_func of <bilby.core.sampler.dynesty.Dynesty object at 0x7f66607ed0b8>>, 'dlogz': 0.1, 'maxiter': None, 'maxcall': None, 'logl_max': inf, 'add_live': True, 'print_progress': True, 'save_bounds': False}
+09:49 INFO    : Checkpoint every n_check_point = 300000
+09:51 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_3_resume.pickle
+09:51 INFO    : Sampling time: 0:02:03.224381
+09:51 INFO    : Summary of results:
+nsamples: 2135
+log_noise_evidence: -821.096
+log_evidence: -326.461 +/-  0.569
+log_bayes_factor: 494.635 +/-  0.569
+
+09:53 WARNING : Run terminated with signal 2
+09:53 INFO    : Writing checkpoint file test_sets/ozgrav-demo/four_parameter_case/test_dynesty1/ozgrav-demo_3_resume.pickle
