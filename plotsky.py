@@ -28,10 +28,6 @@ def plot_sky(pts,contour=True,filled=False,ax=None,trueloc=None,cmap='Reds',col=
     locs = np.column_stack((lons.flatten(),lats.flatten()))
     prob = skypost(locs).reshape(nlats,nlons)
     p1 = greedy(prob)
- 
-    # find max prob density location
-    #bestidx = np.argmax(prob.flatten())
-    #bestloc = [lons.flatten()[bestidx],lats.flatten()[bestidx]]
 
     # compute mean location of samples
     nx = np.cos(pts[:,1])*np.cos(pts[:,0])
@@ -42,7 +38,6 @@ def plot_sky(pts,contour=True,filled=False,ax=None,trueloc=None,cmap='Reds',col=
 
     if ax is None:
         map = Basemap(projection='ortho',lon_0=-bestloc[0]*180/np.pi,lat_0=bestloc[1]*180/np.pi,resolution=None,celestial=True)
-        #map = Basemap(projection='moll',lon_0=0,resolution=None,celestial=True)
         map.drawmapboundary(fill_color='white')
         # draw lat/lon grid lines every 30 degrees.
         map.drawmeridians(np.arange(0,360,30))

@@ -240,7 +240,7 @@ class make_plots:
             for cnt in range(Npp):
 
                 # generate Vitamin samples
-                if self.params['reduce'] == True or self.params['n_filters_r1'] != None:
+                if self.params['n_filters_r1'] != None:
                     y = sig_test[cnt,:].reshape(1,sig_test.shape[1],sig_test.shape[2])
                 else:
                     y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
@@ -576,11 +576,37 @@ class make_plots:
                 for j in range(tmp_idx):
                     # Load appropriate test sets
                     if samplers[i] == samplers[::-1][j]:
+                        print_cnt+=1
+                        sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
+                        # currently not doing KL of approaches with themselves, so skip here
                         continue
                     else:
                         sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
+                   
+                        if self.params['load_plot_data'] == False:
+                            set1,time1 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1,vitamin_pred_made=vi_pred_made)
+                            set2,time2 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2,vitamin_pred_made=vi_pred_made)
 
-                    tot_kl = np.array(hf['%s-%s' % (sampler1,sampler2)])
+                            # check if vitamin test posteriors were generated for the first time
+                            if sampler1 == 'vitamin1' and vi_pred_made == None:
+                                vi_pred_made = [set1,time1]
+                            elif sampler2 == 'vitamin1' and vi_pred_made == None:
+                                vi_pred_made = [set2,time2]
+
+                    if self.params['load_plot_data'] == True:
+                        tot_kl = np.array(hf['%s-%s' % (sampler1,sampler2)])
+                    else:
+                        # Iterate over test cases
+                        tot_kl = []  # total KL over all infered parameters
+
+                        for r in range(self.params['r']**2):
+                            tot_kl.append(compute_kl(set1[r],set2[r],[sampler1,sampler2]))
+                            print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
+                        tot_kl = np.array(tot_kl)
+
+                    if self.params['load_plot_data'] == False:
+                        # Save results to h5py file
+                        hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
 
                     logbins = np.logspace(-3,2.5,50)
                     logbins_indi = np.logspace(-3,3,50)
@@ -634,5 +660,6 @@ class make_plots:
         fig_kl.canvas.draw()
         fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig_kl)
+        hf.close()
  
         return

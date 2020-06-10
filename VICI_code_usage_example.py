@@ -945,7 +945,7 @@ if args.test:
 
     # reshape y data into channels last format for convolutional approach
     y_data_test_copy = np.zeros((y_data_test.shape[0],params['ndata'],len(fixed_vals['det'])))
-    if params['reduce'] == True or params['n_filters_r1'] != None:
+    if params['n_filters_r1'] != None:
         for i in range(y_data_test.shape[0]):
             for j in range(len(fixed_vals['det'])):
                 idx_range = np.linspace(int(j*params['ndata']),int((j+1)*params['ndata'])-1,num=params['ndata'],dtype=int)
@@ -970,7 +970,7 @@ if args.test:
             break
 
         # Generate ML posteriors using pre-trained model
-        if params['reduce'] == True or params['n_filters_r1'] != None: # for convolutional approach
+        if params['n_filters_r1'] != None: # for convolutional approach
              VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, np.expand_dims(y_data_test[i],axis=0), np.shape(x_data_test)[1],
                                                          y_normscale,
                                                          "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
@@ -1055,7 +1055,7 @@ if args.test:
         # plot waveform in upper-right hand corner
         ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[i,:params['ndata']],color='cyan',zorder=50)
         snr = round(snrs_test[i,0],2)
-        if params['reduce'] == True or params['n_filters_r1'] != None:
+        if params['n_filters_r1'] != None:
             if params['by_channel'] == False:
                  ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,0,:params['ndata']],color='darkblue')
             else:

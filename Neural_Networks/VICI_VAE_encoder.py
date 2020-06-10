@@ -1,6 +1,5 @@
 import collections
 
-#import tensorflow as tf
 import tensorflow.compat.v1 as tf
 tf.disable_v2_behavior()
 import numpy as np
@@ -68,9 +67,6 @@ class VariationalAutoencoder(object):
                         conv_post = self.nonlinearity(conv_pre)
                         if self.batch_norm == True:
                             conv_batchNorm = tf.nn.batch_normalization(conv_post,tf.Variable(tf.zeros([conv_post.shape[1],conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),tf.Variable(tf.ones([conv_post.shape[1],conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),None,None,0.000001)
-                            #conv_dropout = tf.layers.dropout(conv_batchNorm,rate=self.drate)
-                        #else:
-                            #conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
                         conv_pool = tf.nn.max_pool(conv_batchNorm,ksize=[1, self.maxpool[i], self.maxpool[i], 1],strides=[1, self.pool_strides[i], self.pool_strides[i], 1],padding='SAME')
 
                     fc = tf.concat([x,tf.reshape(conv_pool, [-1, int(conv_pool.shape[1]*conv_pool.shape[2]*conv_pool.shape[3])])],axis=1)
