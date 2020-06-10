@@ -127,7 +127,7 @@ def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
     y_data_train = y_data_train.reshape(y_data_train.shape[0]*y_data_train.shape[1],y_data_train.shape[2]*y_data_train.shape[3])
 
     # reshape y data into channels last format for convolutional approach
-    if params['reduce'] == True or params['n_filters_r1'] != None:
+    if params['n_filters_r1'] != None:
         y_data_train_copy = np.zeros((y_data_train.shape[0],params['ndata'],len(fixed_vals['det'])))
 
         for i in range(y_data_train.shape[0]):
@@ -146,7 +146,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     xsh = np.shape(x_data)
    
     ysh = np.shape(y_data)[1]
-    n_convsteps = params['n_convsteps']
     z_dimension = params['z_dimension']
     bs = params['batch_size']
     n_weights_r1 = params['n_weights_r1']
@@ -175,15 +174,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     pool_strides_r2 = params['pool_strides_r2']
     pool_strides_q = params['pool_strides_q']
     batch_norm = params['batch_norm']
-    red = params['reduce']
-    if n_convsteps != None:
-        ysh_conv_r1 = int(ysh*n_filters_r1/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
-        ysh_conv_r2 = int(ysh*n_filters_r2/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
-        ysh_conv_q = int(ysh*n_filters_q/2**n_convsteps) if red==True else int(ysh/2**n_convsteps)
-    else:
-        ysh_conv_r1 = int(ysh_r1)
-        ysh_conv_r2 = int(ysh_r2)
-        ysh_conv_q = int(ysh_q)
+    ysh_conv_r1 = int(ysh)
+    ysh_conv_r2 = int(ysh)
+    ysh_conv_q = int(ysh)
     drate = params['drate']
     ramp_start = params['ramp_start']
     ramp_end = params['ramp_end']
@@ -202,7 +195,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # PLACE HOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
         x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph") # params placeholder
-        if params['reduce'] == True or n_conv_r1 != None:
+        if n_conv_r1 != None:
            if params['by_channel'] == True:
                y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh,len(fixed_vals['det'])], name="y_ph")    # data placeholder
            else:
@@ -274,18 +267,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         square_diff_between_mu_and_x = tf.square(r2_xzy_mean_nowrap - tf.boolean_mask(x_ph,nowrap_mask,axis=1))         # (mu - x)^2
 
         inside_exp_x = -0.5 * tf.divide(square_diff_between_mu_and_x,SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)) # -0.5*(mu - x)^2 / sig^2
-        if params['weighted_pars'] != None:
-            inside_exp_x_new=[]
-            for k_idx,k in enumerate(params['inf_pars']):
-                if k == params['weighted_pars']:
-                    inside_exp_x_new = tf.math.multiply(inside_exp_x[:,k_idx],tf.Variable(params['weighted_pars_factor'],dtype=tf.float32))
-                else:
-                    inside_exp_x_new = inside_exp_x[:,k_idx]
-                if k_idx == 0:
-                    inside_exp_x_new_tensor = tf.expand_dims(inside_exp_x_new,1)
-                else:
-                    inside_exp_x_new_tensor = tf.concat([inside_exp_x_new_tensor,tf.expand_dims(inside_exp_x_new,1)],axis=1)
-            inside_exp_x = inside_exp_x_new_tensor
         reconstr_loss_x = tf.reduce_sum(normalising_factor_x + inside_exp_x,axis=1,keepdims=True)                       # sum_dim(-0.5*log(sig^2) - 0.5*log(2*pi) - 0.5*(mu - x)^2 / sig^2)
 
         # COST FROM RECONSTRUCTION - Von Mises parts
@@ -309,10 +290,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         log_r1_q = bimix_gauss.log_prob(q_zxy_samp)   # evaluate the log prob of r1 at the q samples
         KL = tf.reduce_mean(log_q_q - log_r1_q)      # average over batch
 
-        if params['l1_loss'] == False:
-            l1_loss_weight = 0
         # THE VICI COST FUNCTION
-        COST = cost_R + params['KL_coef']*ramp*KL + l1_loss_weight 
+        COST = cost_R + ramp*KL
 
         # VARIABLES LISTS
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
@@ -350,7 +329,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
         # Make noise realizations and add to training data
         next_x_data = x_data[next_indices,:]
-        if params['reduce'] == True or n_conv_r1 != None:
+        if n_conv_r1 != None:
             next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']),len(fixed_vals['det'])))
         else:
             next_y_data = y_data[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],int(params['ndata']*len(fixed_vals['det']))))
@@ -448,255 +427,12 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
         if i % params['plot_interval'] == 0 and i>0:
 
-            # use the testing data for some plots
-            for j in range(params['r']*params['r']):
-
-                """
-                # only make these plots for fully-connected network
-                if params['reduce'] == True or params['n_conv'] != None:
-                    # make spcific data for plots that contains a training data sample with lots of different noise  
-                    x_data_zplot = np.tile(x_data_test[j,:],(params['n_samples'],1))
-                    y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1,1))
-                    y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],params['ndata'],len(fixed_vals['det'])))  
-                else:
-                    # make spcific data for plots that contains a training data sample with lots of different noise
-                    x_data_zplot = np.tile(x_data_test[j,:],(params['n_samples'],1))
-                    y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1))
-                    y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],(params['ndata']*len(fixed_vals['det']))))
-                y_data_zplot /= y_normscale  # required for fast convergence                
-                """
-                # run a training pass and extract parameters (do it multiple times for ease of reading)
-                # get q(z) data
-#                q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-          
-                # get r1(z) data
-#                r1_z_locs, r1_z_scales, r1_samp, r1_z_weights_plot_data = session.run([r1_loc,r1_scale,r1_zy_samp,r1_weight], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-                
-                # get r2(x) data
-#                r2_loc, r2_scale = session.run([r2_xzy_mean, r2_xzy_scale], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-
-                """ 
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(q_z_plot_data, #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/qz_mean_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/qz_mean_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))           
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(q_z_log_sig_sq_data, #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/qz_log_sig_sq_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/qz_log_sig_sq_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    col = ['blue','red','green']
-                    ran = [[np.min(r1_z_locs[:,:,c]),np.max(r1_z_locs[:,:,c])] for c in range(params['z_dimension'])]
-                    # Make coraer plot of latent space samples from the 1 distribution
-                    figure = corner.corner(r1_z_locs[:,0,:], #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],color=col[0],range=ran)
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    for c in range(1,params['n_modes']):
-                        corner.corner(r1_z_locs[:,c,:],fig=figure,color=col[c],range=ran)
-                    plt.savefig('%s/r1z_mean_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r1z_mean_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    col = ['blue','red','green']
-                    ran = [[np.min(r1_z_scales[:,:,c]),np.max(r1_z_scales[:,:,c])] for c in range(params['z_dimension'])]
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(r1_z_scales[:,0,:], #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],color=col[0],range=ran)
-                       #range=[[0,1]]*np.shape(x_data_test)[1],
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    for c in range(1,params['n_modes']):
-                        corner.corner(r1_z_scales[:,c,:],fig=figure,color=col[c],range=ran)
-                    plt.savefig('%s/r1z_log_sig_sq_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r1z_log_sig_sq_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(q_samp, #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/qz_samp_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/qz_samp_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(r1_samp, #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/r1z_samp_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r1z_samp_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(r2_loc, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
-                       #range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                       truths=x_data_zplot[j,:])
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/r2x_mean_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r2x_mean_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j)) 
-                    plt.close()
-                except:
-                    pass
- 
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(r2_scale, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/r2x_log_sig_sq_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r2x_log_sig_sq_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
- 
-                #try:
-                #    # Make corner plot of latent space samples from the q distribution
-                #    figure = corner.corner(r2_mean_testpath, #labels=params['inf_pars'],
-                #       quantiles=[0.16, 0.5, 0.84],
-                #       range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                #       truths=x_data_zplot[j,:])
-                #       #show_titles=True, title_kwargs={"fontsize": 12})
-                #    plt.savefig('%s/r2x_mean_testpath_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                #    plt.savefig('%s/latest_%s/r2x_mean_testpath_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                #    plt.close()
-                #except:
-                #    pass
-
-                #try:
-                #    # Make corner plot of latent space samples from the q distribution
-                #    figure = corner.corner(r2_log_sig_sq_testpath, #labels=params['inf_pars'],
-                #       quantiles=[0.16, 0.5, 0.84])
-                #       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                #       #truths=x_data_test[j,:],
-                #       #show_titles=True, title_kwargs={"fontsize": 12})
-                #    plt.savefig('%s/r2x_log_sig_sq_testpath_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                #    plt.savefig('%s/latest_%s/r2x_log_sig_sq_testpath_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                #    plt.close()
-                #except:
-                #    pass
-
-                #try:
-                #    # Make corner plot of latent space samples from the q distribution
-                #    figure = corner.corner(r2_samp_testpath, #labels=params['inf_pars'],
-                #       quantiles=[0.16, 0.5, 0.84],
-                #       range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                #       truths=x_data_zplot[j,:])
-                #       #show_titles=True, title_kwargs={"fontsize": 12})
-                #    plt.savefig('%s/r2x_samp_testpath_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                #    plt.savefig('%s/latest_%s/r2x_samp_testpath_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                #    plt.close()
-                #except:
-                #    pass
-
-                # plot the AB histogram
-                density_flag = False
-                plt.figure()
-                for c in range(params['n_modes']):
-                    plt.hist(r1_z_weights_plot_data[:,c],25,alpha=0.5,density=density_flag)
-                plt.xlabel('iteration')
-                plt.ylabel('KL')
-                #plt.legend()
-                plt.savefig('%s/mixweights_%s_train%d_%d_linear.png' % (params['plot_dir'],params['run_label'],j,i))
-                plt.savefig('%s/latest_%s/mixweights_%s_train%d_linear.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                plt.close()
-                """
-                
-
             n_mode_weight_copy = 100 # must be a multiple of 50
             # just run the network on the test data
             for j in range(params['r']*params['r']):
 
-                """ 
-                # Make single waveform w/multiple noise real mode weight histogram
-                mode_weights_all = []
-                for n in range(0,n_mode_weight_copy,50):
-                    y_data_mode_test = np.tile(y_data_test_noisefree[j],(50,1)) + np.random.normal(0,1,size=(50,int(params['ndata']*len(fixed_vals['det']))))
-
-                    if params['reduce'] == True or params['n_conv'] != None:
-                            _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([50,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
-                                                         y_normscale,
-                                                         "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
-                    else:
-                        _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([1,-1]), np.shape(x_data_test)[1],
-                                                 y_normscale,
-                                                 "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
-                    print('Generated mode weights for noise realization %d/%d' % (n+50,n_mode_weight_copy))
-                    mode_weights_all.append([mode_weights])
-
-                mode_weights_all = np.array(mode_weights_all)
-                mode_weights_all = mode_weights_all.reshape((mode_weights_all.shape[0]*mode_weights_all.shape[2],mode_weights_all.shape[3]))
-
-                # plot the weights mult noise histogram
-                try:
-                    density_flag = False
-                    plt.figure()
-                    for c in range(params['n_modes']):
-                        plt.hist(mode_weights_all[:,c],25,alpha=0.5,density=density_flag)
-                    plt.xlabel('iteration')
-                    plt.ylabel('KL')
-                    #plt.legend()
-                    plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_linear_%d.png' % (params['plot_dir'],params['run_label'],i,j))
-                    plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_linear_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close('all')
-                except:
-                    pass
-
-                # plot the weights mult noise histogram
-                try:
-                    plt.figure()
-                    for c in range(params['n_modes']):
-                        plt.hist(mode_weights_all[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
-                    plt.xlabel('Mixture weight')
-                    plt.ylabel('p(w)')
-                    plt.legend()
-                    plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_log.png' % (params['plot_dir'],params['run_label'],i))
-                    plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                    plt.close('all')
-                except:
-                    pass
-                print('Made multiple noise real mode plots')
-                """
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                if params['reduce'] == True or params['n_filters_r1'] != None:
+                if params['n_filters_r1'] != None:
                     XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
                                                  y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
@@ -706,11 +442,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
                
-                # Generate final results plots
-#                plotter = plots.make_plots(params,posterior_truth_test,np.expand_dims(XS, axis=0),np.expand_dims(truth_test[j],axis=0))
-
-                # Make corner plots
-#                plotter.make_corner_plot(y_data_test_noisefree[j,:params['ndata']],y_data_test[j,:params['ndata']],bounds,j,i,sampler='dynesty1')
                 # Get corner parnames to use in plotting labels
                 parnames = []
                 for k_idx,k in enumerate(params['rand_pars']):
@@ -728,131 +459,16 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 figure = corner.corner(posterior_truth_test[j], **defaults_kwargs,labels=parnames,
                        color='tab:blue',truths=x_data_test[j,:],
                        show_titles=True)
-                # compute weights, otherwise the 1d histograms will be different scales, could remove this
-                #weights = np.ones(len(XS)) * (len(posterior_truth_test[j]) / len(XS))
                 corner.corner(XS,**defaults_kwargs,labels=parnames,
                        color='tab:red',
                        fill_contours=True,
-                       show_titles=True, fig=figure)#, weights=weights)
+                       show_titles=True, fig=figure)
 
-                """
-                left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
-                ax2 = figure.add_axes([left, bottom, width, height])
-
-                # plot waveform in upper-right hand corner
-                ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[j,:params['ndata']],color='cyan',zorder=50)  
-                #snr = 'No SNR info'
-                snr = snrs_test[j,0]
-                if params['reduce'] == True or params['n_conv'] != None:
-                    ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[j,:params['ndata'],0],color='darkblue',label=str(snr))
-                else:
-                    ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[j,:params['ndata']],color='darkblue',label=str(snr))
-                ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
-                ax2.yaxis.set_visible(False)
-                ax2.tick_params(axis="x", labelsize=11)
-                ax2.tick_params(axis="y", labelsize=11)
-                ax2.set_ylim([-6,6])
-                ax2.grid(False)
-                ax2.margins(x=0,y=0)
-                ax2.legend()
-                """
 
                 plt.savefig('%s/corner_plot_%s_%d-%d.png' % (params['plot_dir'],params['run_label'],i,j))
                 plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                 plt.close('all')
                 print('Made corner plot %d' % j)
-
-
-                """
-                try:
-                    
-                    # Make Chris corner plot of VItamin posterior samples
-                    figure = corner.corner(XS, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
-                       range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       truths=x_data_test[j,:],
-                       show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/loc_output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/loc_output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
- 
-                try:
-                    # Make corner plot of VItamin posterior scale params
-                    figure = corner.corner(scale, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
-                       #range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                       #truths=x_data_test[j,:],
-                       show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/scale_output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/scale_output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                    
-                except Exception as e:
-                    print(e)
-                    exit()
-                    exit()
-                    exi(t)
-                    pass 
-                """
-
-            """
-            # Make loss plot
-            try:
-                plt.figure()
-                xvec = params['report_interval']*np.arange(np.array(plotdata).shape[0])
-                plt.semilogx(xvec,np.array(plotdata)[:,0],label='recon')
-                plt.semilogx(xvec,np.array(plotdata)[:,1],label='KL')
-                plt.semilogx(xvec,np.array(plotdata)[:,2],label='total')
-                plt.semilogx(xvec,np.array(plotdata)[:,3],label='recon_val')
-                plt.semilogx(xvec,np.array(plotdata)[:,4],label='KL_val')
-                plt.semilogx(xvec,np.array(plotdata)[:,5],label='total_val')
-                #plt.ylim([-15,12])
-                plt.xlabel('iteration')
-                plt.ylabel('cost')
-                plt.legend()
-                plt.savefig('%s/latest_%s/cost_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                plt.ylim([np.min(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,0]), np.max(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,1])])
-                plt.savefig('%s/latest_%s/cost_zoom_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                plt.close('all')
-            except:
-                pass            
-            """
-
-            """        
-            # plot the weights batch histogram
-            try:
-                density_flag = False
-                plt.figure()
-                for c in range(params['n_modes']):
-                    plt.hist(AB_batch[:,c],25,alpha=0.5,density=density_flag)
-                plt.xlabel('iteration')
-                plt.ylabel('KL')
-                #plt.legend()
-                plt.savefig('%s/mixweights_%s_batch_%d_linear.png' % (params['plot_dir'],params['run_label'],i))
-                plt.savefig('%s/latest_%s/mixweights_%s_batch_linear.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                plt.close()
-            except:
-                pass
-
-            # plot the weights batch histogram
-
-            try:
-                plt.figure()
-                for c in range(params['n_modes']):
-                    plt.hist(AB_batch[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
-                plt.xlabel('Mixture weight')
-                plt.ylabel('p(w)')
-                plt.legend()
-                plt.savefig('%s/mixweights_%s_batch_%d_log.png' % (params['plot_dir'],params['run_label'],i))
-                plt.savefig('%s/latest_%s/mixweights_%s_batch_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                plt.close()
-            except:
-                pass
-            """
-            
-
     return            
 
 def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
@@ -884,17 +500,10 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     filter_size_r1 = params['filter_size_r1']
     filter_size_r2 = params['filter_size_r2']
     filter_size_q = params['filter_size_q']
-    n_convsteps = params['n_convsteps']
     batch_norm = params['batch_norm']
-    red = params['reduce']
-    if n_convsteps != None:
-        ysh_conv_r1 = int(ysh1*n_filters_r1/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
-        ysh_conv_r2 = int(ysh1*n_filters_r2/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
-        ysh_conv_q = int(ysh1*n_filters_q/2**n_convsteps) if red==True else int(ysh1/2**n_convsteps)
-    else:
-        ysh_conv_r1 = int(ysh1)
-        ysh_conv_r2 = int(ysh1)
-        ysh_conv_q = int(ysh1)
+    ysh_conv_r1 = ysh1
+    ysh_conv_r2 = ysh1
+    ysh_conv_q = ysh1
     drate = params['drate']
     maxpool_r1 = params['maxpool_r1']
     maxpool_r2 = params['maxpool_r2']
@@ -905,7 +514,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     pool_strides_r1 = params['pool_strides_r1']
     pool_strides_r2 = params['pool_strides_r2']
     pool_strides_q = params['pool_strides_q']
-    if params['reduce'] == True or n_filters_r1 != None:
+    if n_filters_r1 != None:
         if params['by_channel'] == True:
             num_det = np.shape(y_data_test)[2]
         else:
@@ -925,7 +534,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
         # PLACEHOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
-        if params['reduce'] == True or n_filters_r1 != None:
+        if n_filters_r1 != None:
             if params['by_channel'] == True:
                 y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1, num_det], name="y_ph")
             else:
@@ -1006,7 +615,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     # ESTIMATE TEST SET RECONSTRUCTION PER-PIXEL APPROXIMATE MARGINAL LIKELIHOOD and draw from q(x|y)
     ns = params['n_samples'] # number of samples to save per reconstruction
 
-    if params['reduce'] == True or n_filters_r1 != None:
+    if n_filters_r1 != None:
         y_data_test_exp = np.tile(y_data_test,(ns,1,1))/y_normscale
     else:
         y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale

@@ -92,117 +92,156 @@ config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True
 session = tf.compat.v1.Session(config=config)
 
-# Number of neurons in fully-connected layers
-n_fc = 2048
-
-# Defining the list of parameter that need to be fed into the models
+# Function for getting list of parameters that need to be fed into the models
 def get_params():
 
-    ndata = 256                    # length of input to NN == fs * num_detectors
+    ##########################
+    # User-tunable variables
+    ##########################
+    ndata = 256                                                                               # sampling frequency
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase',
-                 'theta_jn','psi','ra','dec'] # parameters to randomize
+                 'theta_jn','psi','ra','dec']                                                 # parameters to randomize
+    inf_pars=['luminosity_distance','geocent_time','ra','dec'],  # parameters to infer
+    batch_size = 64                     # Number training samples shown to neural network per iteration
+    weight_init = 'xavier',             #[xavier,VarianceScaling,Orthogonal] # Network model weight initialization    
+    n_modes=7,                          # number of modes in Gaussian mixture model (ideal 7, but may go higher/lower)
+    initial_training_rate=1e-4,         # initial training rate for ADAM optimiser inference model (inverse reconstruction)
+    batch_norm=True,                    # if true, do batch normalization in all layers of neural network
+
+    # FYI, each item in lists below correspond to each layer in networks (i.e. first item first layer)
+    # pool size and pool stride should be same number in each layer
+    n_filters_r1 = [33, 33, 33],    # number of convolutional filters to use in r1 network
+    n_filters_r2 = [33, 33, 33],    # number of convolutional filters to use in r2 network
+    n_filters_q = [33, 33, 33],     # number of convolutional filters to use in q network
+    filter_size_r1 = [7,7,7],         # size of convolutional fitlers in r1 network
+    filter_size_r2 = [7,7,7],         # size of convolutional filters in r2 network
+    filter_size_q = [7,7,7],          # size of convolutional filters in q network
+    drate = 0.5,                        # dropout rate to use in fully-connected layers
+    maxpool_r1 = [1,2,1],             # size of maxpooling to use in r1 network
+    conv_strides_r1 = [1,1,1],        # size of convolutional stride to use in r1 network
+    pool_strides_r1 = [1,2,1],        # size of max pool stride to use in r1 network
+    maxpool_r2 = [1,2,1],             # size of max pooling to use in r2 network
+    conv_strides_r2 = [1,1,1],        # size of convolutional stride in r2 network
+    pool_strides_r2 = [1,2,1],        # size of max pool stride in r2 network
+    maxpool_q = [1,2,1],              # size of max pooling to use in q network
+    conv_strides_q = [1,1,1],         # size of convolutional stride to use in q network
+    pool_strides_q = [1,2,1],         # size of max pool stride to use in q network
+    n_fc = 512                         # Number of neurons in fully-connected layers
+    z_dimension=8,                    # number of latent space dimensions of model 
+    n_weights_r1 = [n_fc,n_fc],    # number fully-connected layers of encoders and decoders in the r1 model (inverse reconstruction)
+    n_weights_r2 = [n_fc,n_fc],    # number fully-connected layers of encoders and decoders in the r2 model (inverse reconstruction)
+    n_weights_q = [n_fc,n_fc],     # number fully-connected layers of encoders and decoders q model
+    ##########################
+    # User-tunable variables
+    ##########################
+
+    # optional tunable parameters
     run_label = 'ozgrav-demo_%ddet_%dpar_%dHz_run177' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
     bilby_results_label = 'ozgrav-demo' # label given to bilby results directory
     r = 2                               # number (to the power of 2) of test samples to use for testing
     pe_test_num = 256                   # total number of test samples available to use in directory
-    tot_dataset_size = int(1e3)         # total number of training samples available to use
-
+    tot_dataset_size = int(1e4)         # total number of training samples available to use
     tset_split = int(1e3)               # number of training samples in each training data file
-    save_interval = int(5e4)            # number of iterations to save model and plot validation results corner plots
+    save_interval = int(5e3)            # number of iterations to save model and plot validation results corner plots
     ref_geocent_time=1126259642.5       # reference gps time (not advised to change this)
     load_chunk_size = 1e4               # Number of training samples to load in at a time.
-    batch_size = 64                     # Number training samples shown to neural network per iteration
-    params = dict(
-        make_corner_plots = True,        # if True, make corner plots
-        make_kl_plot = True,           # If True, go through kl plotting function
-        make_pp_plot = True,            # If True, go through pp plotting function
-        make_loss_plot = False,          # If True, generate loss plot from previous plot data
-        Make_sky_plot=False,             # If True, generate sky plots on corner plots
-        gpu_num=gpu_num,                # gpu number run is running on
-        resume_training=False,          # if True, resume training of a model from saved checkpoint
-        ndata = ndata,                  # sampling frequency * duration
-        run_label=run_label,            # label for run
-        bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
-        tot_dataset_size = tot_dataset_size, # total number of training samples available to use
-        tset_split = tset_split,             # number of training samples in each training data file (should be in label of filename)
-        plot_dir="/home/hunter.gabbard/public_html/CBC/ozgrav_demo/gw_results/%s" % run_label,  # directory to save results plots
-        hyperparam_optim = False,          # optimize hyperparameters for model during training using gaussian process minimization
-        hyperparam_optim_stop = int(1.5e6), # stopping iteration of hyperparameter optimizer per call (ideally 1.5 million) 
-        hyperparam_n_call = 30,           # number of hyperparameter optimization calls (ideally 30)
-        load_by_chunks = True,            # if True, load training samples by a predefined chunk size rather than all at once
-        load_chunk_size = load_chunk_size, # Number of training samples to load in at a time.
-        load_iteration = int((load_chunk_size * 25)/batch_size), # How often to load another chunk of training samples
-        weight_init = 'xavier',#[xavier,VarianceScaling,Orthogonal] # Network model weight initialization
-        ramp = True,                  # if true, apply linear ramp to KL loss
-        KL_coef = 1e0,                # coefficient to place in front of KL loss (ideal is 1)
-        gen_indi_KLs=False,
+    samplers=['vitamin','dynesty'],     # Bayesian samplers to use when comparing ML results (vitamin is ML approach) dynesty,ptemcee,cpnest,emcee
 
-        print_values=True,            # optionally print loss values every report interval
-        n_samples = 10000,             # number of posterior samples to save per reconstruction upon inference (default 3000) 
-        num_iterations=int(1e7)+1,    # total number of iterations before ending training of model
-        initial_training_rate=1e-4,   # initial training rate for ADAM optimiser inference model (inverse reconstruction)
-        batch_size=batch_size,        # Number training samples shown to neural network per iteration
-        batch_norm=True,              # if true, do batch normalization in all layers of neural network
-        l1_loss = False,              # apply l1 regularization on mode weights in Gaussian mixture model part of neural network
-        report_interval=500,          # interval at which to save objective function values and optionally print info during training
-        n_modes=7,                    # number of modes in Gaussian mixture model (ideal 7, but may go higher)
-        n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
-        reduce = False,               # If true, apply data size reduction network (not advised to use)
-        by_channel = True,            # if True, do convolutions as seperate 1-D channels, if False, stack training samples as 2-D images (n_detectors,(duration*sampling_frequency))
-        
+    # Directory variables
+    plot_dir="/home/hunter.gabbard/public_html/CBC/ozgrav_demo/gw_results/%s" % run_label,  # output directory to save results plots
+    train_set_dir='training_sets_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
+    test_set_dir='test_sets/%s/four_parameter_case/test_waveforms' % bilby_results_label, # lovation of test set directory waveforms
+    pe_dir='test_sets/%s/four_parameter_case/test' % bilby_results_label,                 # location of test set directory Bayesian PE samples
+
+    # Define dictionary to store values used in rest of code 
+    params = dict(
+        make_corner_plots = True,                # if True, make corner plots
+        make_kl_plot = True,                     # If True, go through kl plotting function
+        make_pp_plot = True,                     # If True, go through pp plotting function
+        make_loss_plot = False,                  # If True, generate loss plot from previous plot data
+        Make_sky_plot=False,                     # If True, generate sky plots on corner plots
+        hyperparam_optim = False,                # optimize hyperparameters for model during training using gaussian process minimization
+        resume_training=False,                   # if True, resume training of a model from saved checkpoint
+        load_by_chunks = True,                   # if True, load training samples by a predefined chunk size rather than all at once
+        ramp = True,                             # if true, apply linear ramp to KL loss
+        print_values=True,                       # optionally print loss values every report interval
+        by_channel = True,                       # if True, do convolutions as seperate 1-D channels, if False, stack training samples as 2-D images (n_detectors,(duration*sampling_frequency))
+        load_plot_data=False,                    # Plotting data which has already been generated
+        doPE = True,                             # if True then do bilby PE when generating new testing samples (not advised to change this)
+        gpu_num=gpu_num,                         # gpu number run is running on
+        ndata = ndata,                           # sampling frequency * duration
+        run_label=run_label,                     # label for run
+        bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
+        tot_dataset_size = tot_dataset_size,     # total number of training samples available to use
+        tset_split = tset_split,                 # number of training samples in each training data file (should be in label of filename)
+        plot_dir=plot_dir,
+        # Gaussian Process automated hyperparameter tunning variables
+        hyperparam_optim_stop = int(1.5e6),      # stopping iteration of hyperparameter optimizer per call (ideally 1.5 million) 
+        hyperparam_n_call = 30,                  # number of hyperparameter optimization calls (ideally 30)
+        load_chunk_size = load_chunk_size,       # Number of training samples to load in at a time.
+        load_iteration = int((load_chunk_size * 25)/batch_size), # How often to load another chunk of training samples
+        weight_init = weight_init[0],               #[xavier,VarianceScaling,Orthogonal] # Network model weight initialization
+        n_samples = 1000,                       # number of posterior samples to save per reconstruction upon inference (default 3000) 
+        num_iterations=int(1e7)+1,               # total number of iterations before ending training of model
+        initial_training_rate=initial_training_rate[0],   # initial training rate for ADAM optimiser inference model (inverse reconstruction)
+        batch_size=batch_size,                   # Number training samples shown to neural network per iteration
+        batch_norm=batch_norm,                   # if true, do batch normalization in all layers of neural network
+        report_interval=500,                     # interval at which to save objective function values and optionally print info during training
+        n_modes=n_modes[0],                         # number of modes in Gaussian mixture model (ideal 7, but may go higher)
         # FYI, each item in lists below correspond to each layer in networks (i.e. first item first layer)
         # pool size and pool stride should be same number in each layer
-        n_filters_r1 = [33, 33, 33, 33], # number of convolutional filters to use in r1 network
-        n_filters_r2 = [33, 33, 33, 33],  # number of convolutional filters to use in r2 network
-        n_filters_q = [33, 33, 33, 33],   # number of convolutional filters to use in q network
-        filter_size_r1 = [7,7,7,7],      # size of convolutional fitlers in r1 network
-        filter_size_r2 = [7,7,7,7],      # size of convolutional filters in r2 network
-        filter_size_q = [7,7,7,7],       # size of convolutional filters in q network
-        drate = 0.5,                     # dropout rate to use in fully-connected layers
-        maxpool_r1 = [1,2,1,1],          # size of maxpooling to use in r1 network
-        conv_strides_r1 = [1,1,1,1],      # size of convolutional stride to use in r1 network
-        pool_strides_r1 = [1,2,1,1],      # size of max pool stride to use in r1 network
-        maxpool_r2 = [1,2,1,1],          # size of max pooling to use in r2 network
-        conv_strides_r2 = [1,1,1,1],     # size of convolutional stride in r2 network
-        pool_strides_r2 = [1,2,1,1],     # size of max pool stride in r2 network
-        maxpool_q = [1,2,1,1],           # size of max pooling to use in q network
-        conv_strides_q = [1,1,1,1],      # size of convolutional stride to use in q network
-        pool_strides_q = [1,2,1,1],      # size of max pool stride to use in q network
-        ramp_start = 1e4,                # starting iteration of KL divergence ramp (if using)
-        ramp_end = 1e5,                  # ending iteration of KL divergence ramp (if using)
-        save_interval=save_interval,           # interval at which to save inference model weights
-        plot_interval=save_interval,           # interval over which validation results plotting is done
-        z_dimension=100,                    # number of latent space dimensions of model 
-        n_weights_r1 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the r1 model (inverse reconstruction)
-        n_weights_r2 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the r2 model (inverse reconstruction)
-        n_weights_q = [n_fc,n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the q model (inverse reconstruction)
-        duration = 1.0,                             # length of training/validation/test sample time series in seconds (haven't tried using at any other value than 1s)
-        r = r,                                      # the grid dimension for the output tests (i.e. r**2 == total number of testing samples used)
-        rand_pars=rand_pars,              # which source parameters to randomize
+        n_filters_r1 = n_filters_r1[0],             # number of convolutional filters to use in r1 network
+        n_filters_r2 = n_filters_r2[0],             # number of convolutional filters to use in r2 network
+        n_filters_q = n_filters_q[0],               # number of convolutional filters to use in q network
+        filter_size_r1 = filter_size_r1[0],         # size of convolutional fitlers in r1 network
+        filter_size_r2 = filter_size_r2[0],         # size of convolutional filters in r2 network
+        filter_size_q = filter_size_q[0],           # size of convolutional filters in q network
+        drate = drate[0],                           # dropout rate to use in fully-connected layers
+        maxpool_r1 = maxpool_r1[0],                 # size of maxpooling to use in r1 network
+        conv_strides_r1 = conv_strides_r1[0],       # size of convolutional stride to use in r1 network
+        pool_strides_r1 = pool_strides_r1[0],       # size of max pool stride to use in r1 network
+        maxpool_r2 = maxpool_r2[0],                 # size of max pooling to use in r2 network
+        conv_strides_r2 = conv_strides_r2[0],       # size of convolutional stride in r2 network
+        pool_strides_r2 = pool_strides_r2[0],       # size of max pool stride in r2 network
+        maxpool_q = maxpool_q[0],                   # size of max pooling to use in q network
+        conv_strides_q = conv_strides_q[0],         # size of convolutional stride to use in q network
+        pool_strides_q = pool_strides_q[0],         # size of max pool stride to use in q network
+        ramp_start = 1e4,                        # starting iteration of KL divergence ramp (if using)
+        ramp_end = 1e5,                          # ending iteration of KL divergence ramp (if using)
+        save_interval=save_interval,             # interval at which to save inference model weights
+        plot_interval=save_interval,             # interval over which validation results plotting is done
+        z_dimension=z_dimension[0],                 # number of latent space dimensions of model 
+        n_weights_r1 = n_weights_r1[0],             # number of dimensions of the intermediate layers of encoders and decoders in the r1 model (inverse reconstruction)
+        n_weights_r2 = n_weights_r2[0],             # number of dimensions of the intermediate layers of encoders and decoders in the r2 model (inverse reconstruction)
+        n_weights_q = n_weights_q[0],               # number of dimensions of the intermediate layers of encoders and decoders in the q model (inverse reconstruction)
+        duration = 1.0,                          # length of training/validation/test sample time series in seconds (haven't tried using at any other value than 1s)
+        r = r,                                   # the grid dimension for the output tests (i.e. r**2 == total number of testing samples used)
+        rand_pars=rand_pars,                     # which source parameters to randomize
         corner_parnames = ['m_{1}\,(\mathrm{M}_{\odot})','m_{2}\,(\mathrm{M}_{\odot})','d_{\mathrm{L}}\,(\mathrm{Mpc})','t_{0}\,(\mathrm{seconds})','{\phi}','\Theta_{jn}\,(\mathrm{rad})','{\psi}',r'{\alpha}\,(\mathrm{rad})','{\delta}\,(\mathrm{rad})'], # latex source parameter labels for plotting
         cornercorner_parnames = ['$m_{1}\,(\mathrm{M}_{\odot})$','$m_{2}\,(\mathrm{M}_{\odot})$','$d_{\mathrm{L}}\,(\mathrm{Mpc})$','$t_{0}\,(\mathrm{seconds})$','${\phi}$','$\Theta_{jn}\,(\mathrm{rad})$','${\psi}$',r'${\alpha}\,(\mathrm{rad})$','${\delta}\,(\mathrm{rad})$'], # latex source parameter labels for plotting
-        ref_geocent_time=ref_geocent_time,            # reference gps time
-        training_data_seed=43,                        # tensorflow training random seed number
-        testing_data_seed=44,                         # tensorflow testing random seed number
-        wrap_pars=['phase','psi','ra'],               # Parameters to apply Von Mises wrapping on (not advised to change) 
-        weighted_pars=None,#['ra','dec','geocent_time'],                     # set to None if not using, parameters to weight during training
-        weighted_pars_factor=1,                       # Factor by which to weight parameters if `weighted_pars` is not None.
-        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
-        train_set_dir='training_sets_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
-        test_set_dir='test_sets/%s/test_waveforms' % bilby_results_label, # lovation of test set directory waveforms
-        pe_dir='test_sets/%s/test' % bilby_results_label, # location of test set directory Bayesian PE samples
+        ref_geocent_time=ref_geocent_time,       # reference gps time
+        training_data_seed=43,                   # tensorflow training random seed number
+        testing_data_seed=44,                    # tensorflow testing random seed number
+        wrap_pars=['phase','psi','ra'],          # Parameters to apply Von Mises wrapping on (not advised to change) 
+        inf_pars=inf_pars,                       # parameters to infer
+        train_set_dir=train_set_dir,
+        test_set_dir=test_set_dir,
+        pe_dir=pe_dir,
         # attempt_to_fix_astropy_bug is default directory
-        KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
-        load_plot_data=False,                                                  # Plotting data which has already been generated
-        samplers=['vitamin','dynesty'],          # samplers to use when plotting (vitamin is ML approach) dynesty,ptemcee,cpnest,emcee
-
-        doPE = True,                          # if True then do bilby PE when generating new testing samples (not advised to change this)
+        KL_cycles = 1,                           # number of cycles to repeat for the KL approximation
+        samplers=samplers,                       # samplers to use when plotting (vitamin is ML approach) dynesty,ptemcee,cpnest,emcee
     )
     return params
 
 
 # Save training/test parameters of run
 params=get_params()
+params['plot_dir']=params['plot_dir'][0]
+params['train_set_dir']=params['train_set_dir'][0]
+params['test_set_dir']=params['test_set_dir'][0]
+params['pe_dir']=params['pe_dir'][0]
+params['inf_pars']=params['inf_pars'][0]
+params['samplers']=params['samplers'][0]
 if args.train:
     f = open("params_%s.txt" % params['run_label'],"w")
     f.write( str(params) )
@@ -585,9 +624,8 @@ if args.gen_test:
     os.system('mkdir -p %s' % params['test_set_dir'])
 
     # Make testing samples
-    signal_test_noisy, signal_test_noisefree, signal_test_pars = [], [], [] 
     for i in range(params['r']*params['r']):
-        temp_noisy, temp_noisefree, temp_pars = run(sampling_frequency=params['ndata']/params['duration'],
+        temp_noisy, temp_noisefree, temp_pars, temp_snr = run(sampling_frequency=params['ndata']/params['duration'],
                                                       duration=params['duration'],
                                                       N_gen=1,
                                                       ref_geocent_time=params['ref_geocent_time'],
@@ -595,31 +633,34 @@ if args.gen_test:
                                                       fixed_vals=fixed_vals,
                                                       rand_pars=params['rand_pars'],
                                                       inf_pars=params['inf_pars'],
-                                                      label=params['run_label'] + '_' + str(i),
+                                                      label=params['bilby_results_label'] + '_' + str(i),
                                                       out_dir=params['pe_dir'],
+                                                      samplers=params['samplers'],
                                                       training=False,
                                                       seed=params['testing_data_seed']+i,
                                                       do_pe=params['doPE'])
-        signal_test_noisy.append(temp_noisy)
-        signal_test_noisefree.append(temp_noisefree)
-        signal_test_pars.append([temp_pars])
+        signal_test_noisy = temp_noisy
+        signal_test_noisefree = temp_noisefree
+        signal_test_pars = temp_pars
+        signal_test_snr = temp_snr
 
-    print("Generated: %s/data_%s.h5py ..." % (params['test_set_dir'],params['run_label']))
+        print("Generated: %s/data_%s.h5py ..." % (params['test_set_dir'],params['run_label']))
 
-    # Save generated testing samples in h5py format
-    hf = h5py.File('%s/data_%d.h5py' % (params['test_set_dir'],params['r']*params['r']),'w')
-    for k, v in params.items():
-        try:
+        # Save generated testing samples in h5py format
+        hf = h5py.File('%s/data_%d.h5py' % (params['test_set_dir'],i),'w')
+        for k, v in params.items():
+            try:
+                hf.create_dataset(k,data=v)
+            except:
+                pass
+        hf.create_dataset('x_data', data=signal_test_pars)
+        for k, v in bounds.items():
             hf.create_dataset(k,data=v)
-        except:
-            pass
-    hf.create_dataset('x_data', data=signal_test_pars)
-    for k, v in bounds.items():
-        hf.create_dataset(k,data=v)
-    hf.create_dataset('y_data_noisefree', data=signal_test_noisefree)
-    hf.create_dataset('y_data_noisy', data=signal_test_noisy)
-    hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
-    hf.close()
+        hf.create_dataset('y_data_noisefree', data=signal_test_noisefree)
+        hf.create_dataset('y_data_noisy', data=signal_test_noisy)
+        hf.create_dataset('rand_pars', data=np.string_(params['rand_pars']))
+        hf.create_dataset('snrs', data=signal_test_snr)
+        hf.close()
 
 ####################################
 # Train neural network
@@ -728,7 +769,7 @@ if args.train:
     x_data_test = x_data_test[i_idx_use,:]
 
     # reshape y data into channels last format for convolutional approach (if requested)
-    if params['reduce'] == True or params['n_filters_r1'] != None:
+    if params['n_filters_r1'] != None:
         y_data_test_copy = np.zeros((y_data_test.shape[0],params['ndata'],len(fixed_vals['det'])))
         y_data_test_noisefree_copy = np.zeros((y_data_test_noisefree.shape[0],params['ndata'],len(fixed_vals['det'])))
         y_data_train_copy = np.zeros((y_data_train.shape[0],params['ndata'],len(fixed_vals['det'])))
@@ -746,7 +787,7 @@ if args.train:
                 y_data_train_copy[i,:,j] = y_data_train[i,idx_range]
         y_data_train = y_data_train_copy
 
-    # run hyperparameter optimization
+    # run hyperparameter optimization if wanted
     if params['hyperparam_optim'] == True:
 
         # Run optimization
@@ -765,7 +806,7 @@ if args.train:
         plt.savefig('%s/latest_%s/hyperpar_convergence.png' % (params['plot_dir'],params['run_label']))
         print('Did a hyperparameter search') 
 
-    # train using user defined params
+    # otherwise, train model from user-defined hyperparameter setup
     else:
         VICI_inverse_model.train(params, x_data_train, y_data_train,
                                  x_data_test, y_data_test, y_data_test_noisefree,
@@ -778,9 +819,7 @@ if args.train:
 if args.test:
 
     # Define time series normalization scale to be using
-    y_normscale = 36.438613192970415 # for 1 million
-    if params['load_by_chunks'] == True:
-        y_normscale = 36.43879218007172
+    y_normscale = 36.438613192970415
 
     # load the testing data time series and source parameter truths
     x_data_test, y_data_test_noisefree, y_data_test,_,snrs_test = load_data(params['test_set_dir'],params['inf_pars'],load_condor=True)
@@ -802,7 +841,7 @@ if args.test:
     # Identify directory with lowest number of total finished posteriors
     num_finished_post = int(1e8)
     for i in params['samplers']:
-        if i == 'vitamin':# or i == 'emcee':
+        if i == 'vitamin':
             continue
         for j in range(1):
             input_dir = '%s_%s%d/' % (params['pe_dir'],i,j+1)
@@ -1018,11 +1057,11 @@ if args.test:
         snr = round(snrs_test[i,0],2)
         if params['reduce'] == True or params['n_filters_r1'] != None:
             if params['by_channel'] == False:
-                 ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,0,:params['ndata']],color='darkblue')#,label='SNR: '+str(snr))
+                 ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,0,:params['ndata']],color='darkblue')
             else:
-                ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],0],color='darkblue')#,label='SNR: '+str(snr))
+                ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata'],0],color='darkblue')
         else:
-            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata']],color='darkblue')#,label='SNR: '+str(snr))
+            ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[i,:params['ndata']],color='darkblue')
         ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=16)
         ax2.yaxis.set_visible(False)
         ax2.tick_params(axis="x", labelsize=12)
