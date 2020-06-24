@@ -1063,7 +1063,7 @@ class make_plots:
             #hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
             hf = h5py.File('second_sub_plottind_data/plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
      
-        
+        """
         # 4 pannel KL approach
         fig_kl, axis_kl = plt.subplots(2,2,figsize=(6,6),sharey=True,sharex=True)
         for k in range(len(usesamps)-1):
@@ -1093,19 +1093,19 @@ class make_plots:
 
                     # plot colored hist
                     if samplers[i] == 'vitamin' and samplers[::-1][j] == samplers[1:][k]: 
-                        print(tot_kl.argsort()[-15:][::-1])
-                        print(np.sort(tot_kl)[-15:][::-1])
-                        print(tot_kl.argsort()[:15][:])
-                        print(np.sort(tot_kl)[:15][:])
-                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,log=True,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label='$\mathrm{%s \ vs. \ %s}$' % (samplers[i],samplers[::-1][j]),zorder=2)
-                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,log=True,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
+#                        print(tot_kl.argsort()[-15:][::-1])
+#                        print(np.sort(tot_kl)[-15:][::-1])
+#                        print(tot_kl.argsort()[:15][:])
+#                        print(np.sort(tot_kl)[:15][:])
+                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\mathrm{%s \ vs. \ %s}$' % (samplers[i],samplers[::-1][j]),zorder=2)
+                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
                     # record non-colored hists
                     elif samplers[i] != 'vitamin' and samplers[::-1][j] != 'vitamin':
                         if samplers[i] == samplers[1:][k] or samplers[::-1][j] == samplers[1:][k]:
-                            print(tot_kl.argsort()[-15:][::-1])
-                            print(np.sort(tot_kl)[-15:][::-1])
-                            print(tot_kl.argsort()[:15][:])
-                            print(np.sort(tot_kl)[:15][:])
+#                            print(tot_kl.argsort()[-15:][::-1])
+#                            print(np.sort(tot_kl)[-15:][::-1])
+#                            print(tot_kl.argsort()[:15][:])
+#                            print(np.sort(tot_kl)[:15][:])
 
                             tot_kl_grey = np.append(tot_kl_grey,tot_kl)
 
@@ -1115,27 +1115,31 @@ class make_plots:
                 tmp_idx-=1
 
             # Plot non-colored histograms
-            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),log=True,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\mathrm{%s \ vs. \ other \ samplers}$' % samplers[1:][k],zorder=1)
-            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),log=True,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
+            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\mathrm{%s \ vs. \ other \ samplers}$' % samplers[1:][k],zorder=1)
+            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
 
             # plot KL histograms
             if kl_idx_1 == 1:
                 axis_kl[kl_idx_1,kl_idx_2].set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
             if kl_idx_2 == 0:
                 axis_kl[kl_idx_1,kl_idx_2].set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
-            axis_kl[kl_idx_1,kl_idx_2].tick_params(axis="both", labelsize=12, direction='out')
-            leg = axis_kl[kl_idx_1,kl_idx_2].legend(loc='upper right', fontsize=4) #'medium')
+           # axis_kl[kl_idx_1,kl_idx_2].tick_params(axis="both", labelsize=12, direction='out')
+            leg = axis_kl[kl_idx_1,kl_idx_2].legend(loc='upper left',  fontsize=4) #'medium')
             for l in leg.legendHandles:
                 l.set_alpha(1.0)
 
             #axis_kl[kl_idx_1,kl_idx_2].xaxis.set_minor_locator(FixedLocator([0.5, 1.5, 2.5, 3.5, 4.5]))
             #axis_kl[kl_idx_1,kl_idx_2].xaxis.set_major_locator(ticker.LogLocator(base=10.0, numticks=15))
-            axis_kl[kl_idx_1,kl_idx_2].set_xlim(left=8e-2,right=100)
+            axis_kl[kl_idx_1,kl_idx_2].set_xlim(left=1e-2,right=100)
             ##axis_kl[kl_idx_1,kl_idx_2].set_xticks(AutoMinorLocator(),minor=True)
             #caxis_kl[kl_idx_1,kl_idx_2].xaxis.set_minor_locator(MultipleLocator(5))
             #axis_kl[kl_idx_1,kl_idx_2].tick_params(which='minor', length=4, color='r')
             #axis_kl[kl_idx_1,kl_idx_2].set_ylim(top=1.0)
             axis_kl[kl_idx_1,kl_idx_2].set_xscale('log')
+            locmin = matplotlib.ticker.LogLocator(base=10.0, subs=(0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9),numticks=25)
+            axis_kl[kl_idx_1,kl_idx_2].xaxis.set_minor_locator(locmin)
+            locmaj = matplotlib.ticker.LogLocator(base=10, numticks=25)
+            axis_kl[kl_idx_1,kl_idx_2].xaxis.set_major_locator(locmaj)
             axis_kl[kl_idx_1,kl_idx_2].set_yscale('log')
             axis_kl[kl_idx_1,kl_idx_2].grid(False)
             print()
@@ -1148,9 +1152,9 @@ class make_plots:
         #plt.tight_layout()
         fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig_kl)
-        print('Here')
-        exit()
-        
+        hf.close()
+        return
+        """ 
         
         tot_kl_grey = np.array([])
         fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))

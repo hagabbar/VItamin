@@ -61,7 +61,7 @@ def plot_sky(pts,contour=True,filled=False,ax=None,trueloc=None,cmap='Reds',col=
     cs2 = map.contour(x,y,p1,levels=[0.5,0.9],linewidths=2.0,colors=col)
     if trueloc is not None:
         xx, yy = map(trueloc[0]*180./np.pi, trueloc[1]*180./np.pi)
-        map.plot(xx,yy,marker='+',markersize=20,linewidth=5,color='orange')
+        map.plot(xx,yy,marker='+',markersize=20,linewidth=5,color='black')
     return map
 
 

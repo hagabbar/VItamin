@@ -91,7 +91,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-gpu_num = str(0)                                            # first GPU used by default
+gpu_num = str(1)                                            # first GPU used by default
 os.environ["CUDA_VISIBLE_DEVICES"]=gpu_num
 
 # Let GPU consumption grow as needed
@@ -108,7 +108,7 @@ def get_params():
     ndata = 256                    # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase',
                  'theta_jn','psi','ra','dec'] # parameters to randomize
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run177' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run182' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
     bilby_results_label = 'all_4_samplers' # label given to bilby results directory
     r = 2                               # number (to the power of 2) of test samples to use for testing
     pe_test_num = 256                   # total number of test samples available to use in directory
@@ -117,17 +117,17 @@ def get_params():
     tset_split = int(1e3)               # number of training samples in each training data file
     save_interval = int(5e4)            # number of iterations to save model and plot validation results corner plots
     ref_geocent_time=1126259642.5       # reference gps time (not advised to change this)
-    load_chunk_size = 1e4               # Number of training samples to load in at a time.
-    batch_size = 64                     # Number training samples shown to neural network per iteration
+    load_chunk_size = 1e6               # Number of training samples to load in at a time.
+    batch_size = 128                     # Number training samples shown to neural network per iteration
     params = dict(
         make_corner_plots = True,        # if True, make corner plots
-        make_kl_plot = True,           # If True, go through kl plotting function
+        make_kl_plot = False,           # If True, go through kl plotting function
         make_indi_kl=False,             # If True, generate individual KL plots
-        make_pp_plot = True,            # If True, go through pp plotting function
+        make_pp_plot = False,            # If True, go through pp plotting function
         make_loss_plot = False,          # If True, generate loss plot from previous plot data
         Make_sky_plot=False,             # If True, generate sky plots on corner plots
         gpu_num=gpu_num,                # gpu number run is running on
-        resume_training=False,          # if True, resume training of a model from saved checkpoint
+        resume_training=True,          # if True, resume training of a model from saved checkpoint
         ndata = ndata,                  # sampling frequency * duration
         run_label=run_label,            # label for run
         bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
@@ -141,7 +141,7 @@ def get_params():
         load_chunk_size = load_chunk_size, # Number of training samples to load in at a time.
         load_iteration = int((load_chunk_size * 25)/batch_size), # How often to load another chunk of training samples
         weight_init = 'xavier',#[xavier,VarianceScaling,Orthogonal] # Network model weight initialization
-        ramp = True,                  # if true, apply linear ramp to KL loss
+        ramp = False,                  # if true, apply linear ramp to KL loss
         KL_coef = 1e0,                # coefficient to place in front of KL loss (ideal is 1)
         gen_indi_KLs=False,
 
@@ -153,7 +153,7 @@ def get_params():
         batch_norm=True,              # if true, do batch normalization in all layers of neural network
         l1_loss = False,              # apply l1 regularization on mode weights in Gaussian mixture model part of neural network
         report_interval=500,          # interval at which to save objective function values and optionally print info during training
-        n_modes=7,                    # number of modes in Gaussian mixture model (ideal 7, but may go higher)
+        n_modes=9,#9,#7,                    # number of modes in Gaussian mixture model (ideal 7, but may go higher)
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,               # If true, apply data size reduction network (not advised to use)
         by_channel = True,            # if True, do convolutions as seperate 1-D channels, if False, stack training samples as 2-D images (n_detectors,(duration*sampling_frequency))
@@ -163,24 +163,24 @@ def get_params():
         n_filters_r1 = [33, 33, 33, 33], # number of convolutional filters to use in r1 network
         n_filters_r2 = [33, 33, 33, 33],  # number of convolutional filters to use in r2 network
         n_filters_q = [33, 33, 33, 33],   # number of convolutional filters to use in q network
-        filter_size_r1 = [7,7,7,7],      # size of convolutional fitlers in r1 network
-        filter_size_r2 = [7,7,7,7],      # size of convolutional filters in r2 network
-        filter_size_q = [7,7,7,7],       # size of convolutional filters in q network
+        filter_size_r1 = [3,3,3,3],#[5, 8, 11, 10],#[3,3,3,3],      # size of convolutional fitlers in r1 network
+        filter_size_r2 = [3,3,3,3],#[5, 8, 11, 10],#[3,3,3,3],      # size of convolutional filters in r2 network
+        filter_size_q =  [3,3,3,3],#[5, 8, 11, 10],#[3,3,3,3],       # size of convolutional filters in q network
         drate = 0.5,                     # dropout rate to use in fully-connected layers
-        maxpool_r1 = [1,2,1,1],          # size of maxpooling to use in r1 network
+        maxpool_r1 = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],          # size of maxpooling to use in r1 network
         conv_strides_r1 = [1,1,1,1],      # size of convolutional stride to use in r1 network
-        pool_strides_r1 = [1,2,1,1],      # size of max pool stride to use in r1 network
-        maxpool_r2 = [1,2,1,1],          # size of max pooling to use in r2 network
+        pool_strides_r1 = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],      # size of max pool stride to use in r1 network
+        maxpool_r2 = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],          # size of max pooling to use in r2 network
         conv_strides_r2 = [1,1,1,1],     # size of convolutional stride in r2 network
-        pool_strides_r2 = [1,2,1,1],     # size of max pool stride in r2 network
-        maxpool_q = [1,2,1,1],           # size of max pooling to use in q network
+        pool_strides_r2 = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],     # size of max pool stride in r2 network
+        maxpool_q = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],           # size of max pooling to use in q network
         conv_strides_q = [1,1,1,1],      # size of convolutional stride to use in q network
-        pool_strides_q = [1,2,1,1],      # size of max pool stride to use in q network
+        pool_strides_q = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],      # size of max pool stride to use in q network
         ramp_start = 1e4,                # starting iteration of KL divergence ramp (if using)
         ramp_end = 1e5,                  # ending iteration of KL divergence ramp (if using)
         save_interval=save_interval,           # interval at which to save inference model weights
         plot_interval=save_interval,           # interval over which validation results plotting is done
-        z_dimension=100,                    # number of latent space dimensions of model 
+        z_dimension=10,#100,#57,                    # number of latent space dimensions of model 
         n_weights_r1 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the r1 model (inverse reconstruction)
         n_weights_r2 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the r2 model (inverse reconstruction)
         n_weights_q = [n_fc,n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the q model (inverse reconstruction)
@@ -193,6 +193,10 @@ def get_params():
         training_data_seed=43,                        # tensorflow training random seed number
         testing_data_seed=44,                         # tensorflow testing random seed number
         wrap_pars=['phase','psi','ra'],               # Parameters to apply Von Mises wrapping on (not advised to change) 
+        boost_pars=['ra','dec'],
+        gauss_pars=['luminosity_distance','geocent_time','theta_jn'],        # parameters that require a truncated gaussian 
+        vonmise_pars=['phase','psi'],                                        # parameters that get wrapped on the 1D parameter 
+        sky_pars=['ra','dec'],                                               # sky parameters
         weighted_pars=None,#['ra','dec','geocent_time'],                     # set to None if not using, parameters to weight during training
         weighted_pars_factor=1,                       # Factor by which to weight parameters if `weighted_pars` is not None.
         inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
@@ -202,7 +206,7 @@ def get_params():
         # attempt_to_fix_astropy_bug is default directory
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
         load_plot_data=False,                                                  # Plotting data which has already been generated
-        samplers=['vitamin','dynesty'],          # samplers to use when plotting (vitamin is ML approach) dynesty,ptemcee,cpnest,emcee
+        samplers=['vitamin','dynesty','ptemcee'],#,'cpnest','emcee'],          # samplers to use when plotting (vitamin is ML approach) dynesty,ptemcee,cpnest,emcee
 
         doPE = True,                          # if True then do bilby PE when generating new testing samples (not advised to change this)
     )
@@ -960,6 +964,11 @@ if args.test:
     # Iterate over total number of testing samples
     for i in range(params['r']*params['r']):
 
+#        if i == 6 or i == 47 or i == 64 or i == 73 or i == 74 or i == 137 or i == 140 or i == 154 or i == 158 : # 154
+#            pass
+#        else:
+#            continue
+
         # If True, continue through and make corner plots
         if params['make_corner_plots'] == False:
             break
@@ -982,8 +991,8 @@ if args.test:
         defaults_kwargs = dict(
                     bins=bins, smooth=0.9, label_kwargs=dict(fontsize=16),
                     title_kwargs=dict(fontsize=16), show_titles=False,
-                    truth_color='tab:orange', quantiles=None,#[0.16, 0.84],
-                    levels=(0.50,0.90), density=True, # 0.69,0.90,0.95
+                    truth_color='black', quantiles=None,#[0.16, 0.84],
+                    levels=(0.50,0.90), density=True, stacked=True, # 0.69,0.90,0.95
                     plot_density=False, plot_datapoints=True, #weights=weights,
                     max_n_ticks=3)
 
@@ -1020,7 +1029,7 @@ if args.test:
 #            bilby_pred = bilby_pred[:,[0,1,2,4,5,6]]  
 
             # compute weights, otherwise the 1d histograms will be different scales, could remove this
-#            weights = np.ones(len(VI_pred)) * (len(samp_posteriors[samp+'1'][i]) / len(VI_pred))
+            weights = np.ones(len(VI_pred)) * (len(samp_posteriors[samp+'1'][i]) / len(VI_pred))
             if samp_idx == 0:
                 figure = corner.corner(bilby_pred,**defaults_kwargs,labels=parnames,
                                color=color_cycle[samp_idx],

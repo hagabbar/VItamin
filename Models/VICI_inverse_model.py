@@ -71,7 +71,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 tfd = tfp.distributions
-SMALL_CONSTANT = 1e-10 # necessary to prevent the division by zero in many operations 
+SMALL_CONSTANT = 1e-6 # necessary to prevent the division by zero in many operations 
 
 # NORMALISE DATASET FUNCTION
 def tf_normalise_dataset(xp):
@@ -514,7 +514,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 print()
 
                 # terminate training if vanishing gradient
-                if np.isnan(kl+cost) == True or np.isnan(kl_val+cost_val) == True:
+                if np.isnan(kl+cost) == True or np.isnan(kl_val+cost_val) == True or kl+cost > int(1e5):
                     print('Network is returning NaN values')
                     print('Terminating network training')
                     if params['hyperparam_optim'] == True:
