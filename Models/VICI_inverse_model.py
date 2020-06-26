@@ -306,30 +306,20 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # PLACE HOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
         x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph") # params placeholder
-        if params['reduce'] == True or n_conv_r1 != None:
-           if params['by_channel'] == True:
-               y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh,len(fixed_vals['det'])], name="y_ph")    # data placeholder
-           else:
-               y_ph = tf.placeholder(dtype=tf.float32, shape=[None,len(fixed_vals['det']),ysh], name="y_ph")
-        else:
-            y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh], name="y_ph")    # data placeholder
+        y_ph = tf.placeholder(dtype=tf.float32, shape=[None, params['ndata'], num_det], name="y_ph")
         ramp = tf.placeholder(dtype=tf.float32)    # the ramp to slowly increase the KL contribution
 
         # LOAD VICI NEURAL NETWORKS
-        r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh, filter_size_r1, n_filters_r1, n_convsteps)
-        r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', vonmise_mask, gauss_mask, m1_mask, m2_mask, sky_mask, 
-                                                     n_input1=z_dimension, n_input2=ysh_conv_r2, n_output=xsh[1], 
-                                                     n_weights=n_weights_r2, n_hlayers=n_hlayers_r2, 
-                                                     drate=drate, n_filters=n_filters_r2, filter_size=filter_size_r2,
-                                                     maxpool=maxpool_r2, n_conv=n_conv_r2, conv_strides=conv_strides_r2, pool_strides=pool_strides_r2, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init'])
-        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv_r1, n_output=z_dimension, 
-                                                     n_weights=n_weights_r1, n_modes=n_modes, 
-                                                     n_hlayers=n_hlayers_r1, drate=drate, n_filters=n_filters_r1, 
-                                                     filter_size=filter_size_r1,maxpool=maxpool_r1, n_conv=n_conv_r1, conv_strides=conv_strides_r1, pool_strides=pool_strides_r1, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init'])
-        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=ysh_conv_q, 
-                                                        n_output=z_dimension, n_weights=n_weights_q, 
-                                                        n_hlayers=n_hlayers_q, drate=drate, n_filters=n_filters_q, 
-                                                        filter_size=filter_size_q,maxpool=maxpool_q, n_conv=n_conv_q, conv_strides=conv_strides_q, pool_strides=pool_strides_q, num_det=num_det, batch_norm=batch_norm, by_channel=params['by_channel'], weight_init=params['weight_init']) # used to sample from q(z|x,y)?
+        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=params['ndata'], n_output=z_dimension, n_channels=num_det, n_weights=n_weights_r1,   # generates params for r1(z|y)
+                                                    n_modes=n_modes, drate=drate, n_filters=n_filters_r1, 
+                                                    filter_size=filter_size_r1, maxpool=maxpool_r1)
+        r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', vonmise_mask, gauss_mask, m1_mask, m2_mask, sky_mask, n_input1=z_dimension, 
+                                                     n_input2=params['ndata'], n_output=xsh[1], n_channels=num_det, n_weights=n_weights_r2, 
+                                                     drate=drate, n_filters=n_filters_r2, 
+                                                     filter_size=filter_size_r2, maxpool=maxpool_r2)
+        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh[1], n_input2=params['ndata'], n_output=z_dimension, 
+                                                     n_channels=num_det, n_weights=n_weights_q, drate=drate, 
+                                                     n_filters=n_filters_q, filter_size=filter_size_q, maxpool=maxpool_q) 
         tf.set_random_seed(np.random.randint(0,10))
 
         # reduce the dimensionality of y using convolutional neural network
@@ -343,7 +333,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 #            ramp = 1.0
  
         # reduce the y data size
-        y_conv = r2_conv.dimensionanily_reduction(y_ph)
+        y_conv = y_ph
 
         # GET r1(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
@@ -497,16 +487,13 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     # START OPTIMISATION OF OELBO
     indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
     plotdata = []
-    if params['by_channel'] == False:
-        y_data_test_new = []
-        for sig in y_data_test:
-            y_data_test_new.append(sig.T)
-        y_data_test = np.array(y_data_test_new)
-        del y_data_test_new
-
 
     load_chunk_it = 1
     for i in range(params['num_iterations']):
+
+        # skip all iterations prior to 50000
+#        if i < 50000:
+#            continue
 
         next_indices = indices_generator.next_indices()
 
@@ -529,9 +516,9 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 next_y_data_new.append(sig.T)
             next_y_data = np.array(next_y_data_new)
             del next_y_data_new
-       
+      
         # restore session if wanted
-        if params['resume_training'] == True and i == 0 :
+        if params['resume_training'] == True and i == 0:
             print(save_dir)
             saver.restore(session, save_dir)
 
@@ -1115,41 +1102,27 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     session = tf.Session(graph=graph)
     with graph.as_default():
         tf.set_random_seed(np.random.randint(0,10))
+        SMALL_CONSTANT = 1e-12
 
         # PLACEHOLDERS
         bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph")                       # batch size placeholder
-        if params['reduce'] == True or n_filters_r1 != None:
-            if params['by_channel'] == True:
-                y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1, num_det], name="y_ph")
-            else:
-                y_ph = tf.placeholder(dtype=tf.float32, shape=[None, num_det, ysh1], name="y_ph")
-        else:
-            y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="y_ph")
-
+        y_ph = tf.placeholder(dtype=tf.float32, shape=[None, params['ndata'], num_det], name="y_ph")
 
         # LOAD VICI NEURAL NETWORKS
-        r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh1, filter_size_r1, n_filters_r1, n_convsteps)
+        #r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh1, filter_size, n_filters, n_convsteps)
         r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', vonmise_mask, gauss_mask, m1_mask, m2_mask, sky_mask, n_input1=z_dimension, 
-                                                     n_input2=ysh_conv_r2, n_output=xsh1, n_weights=n_weights_r2, 
-                                                     n_hlayers=n_hlayers_r2, drate=drate, n_filters=n_filters_r2, 
-                                                     filter_size=filter_size_r2, maxpool=maxpool_r2, n_conv=n_conv_r2, 
-                                                     conv_strides=conv_strides_r2, pool_strides=pool_strides_r2,num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])
-        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=ysh_conv_r1, n_output=z_dimension, n_weights=n_weights_r1,   # generates params for r1(z|y)
-                                                    n_modes=n_modes, n_hlayers=n_hlayers_r1, drate=drate, n_filters=n_filters_r1, 
-                                                    filter_size=filter_size_r1, maxpool=maxpool_r1, n_conv=n_conv_r1, 
-                                                    conv_strides=conv_strides_r1, pool_strides=pool_strides_r1, num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])
-        #r1_zy_loc = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
-        #r1_zy_scale = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1, n_modes, n_hlayers)
-        #r1_zy_weight = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, 1, n_weights_r1, n_modes, n_hlayers)
-        #r1_zy_a = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
-        #r1_zy_b = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
-        #r1_zy_c = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights_r1)
-        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=ysh_conv_q, n_output=z_dimension, 
-                                                        n_weights=n_weights_q, n_hlayers=n_hlayers_q, drate=drate, 
-                                                        n_filters=n_filters_q, filter_size=filter_size_q, maxpool=maxpool_q, n_conv=n_conv_q,conv_strides=conv_strides_q, pool_strides=pool_strides_q,num_det=num_det,batch_norm=batch_norm,by_channel=params['by_channel'], weight_init=params['weight_init'])  
+                                                     n_input2=params['ndata'], n_output=xsh1, n_channels=num_det, n_weights=n_weights_r2, 
+                                                     drate=drate, n_filters=n_filters_r2, 
+                                                     filter_size=filter_size_r2, maxpool=maxpool_r2)
+        r1_zy = VICI_encoder.VariationalAutoencoder('VICI_encoder', n_input=params['ndata'], n_output=z_dimension, n_channels=num_det, n_weights=n_weights_r1,   # generates params for r1(z|y)
+                                                    n_modes=n_modes, drate=drate, n_filters=n_filters_r1, 
+                                                    filter_size=filter_size_r1, maxpool=maxpool_r1)
+        q_zxy = VICI_VAE_encoder.VariationalAutoencoder('VICI_VAE_encoder', n_input1=xsh1, n_input2=params['ndata'], n_output=z_dimension, 
+                                                     n_channels=num_det, n_weights=n_weights_q, drate=drate, 
+                                                     n_filters=n_filters_q, filter_size=filter_size_q, maxpool=maxpool_q)
 
         # reduce the y data size
-        y_conv = r2_conv.dimensionanily_reduction(y_ph)
+        y_conv = y_ph
 
         # GET r1(z|y)
         r1_loc, r1_scale, r1_weight = r1_zy._calc_z_mean_and_sigma(y_conv)

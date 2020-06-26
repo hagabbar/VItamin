@@ -110,15 +110,15 @@ def get_params():
                  'theta_jn','psi','ra','dec'] # parameters to randomize
     run_label = 'multi-modal_%ddet_%dpar_%dHz_run186' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
     bilby_results_label = 'all_4_samplers' # label given to bilby results directory
-    r = 2                               # number (to the power of 2) of test samples to use for testing
+    r = 5                               # number (to the power of 2) of test samples to use for testing
     pe_test_num = 256                   # total number of test samples available to use in directory
     tot_dataset_size = int(1e7)         # total number of training samples available to use
 
     tset_split = int(1e3)               # number of training samples in each training data file
     save_interval = int(5e4)            # number of iterations to save model and plot validation results corner plots
     ref_geocent_time=1126259642.5       # reference gps time (not advised to change this)
-    load_chunk_size = 1e4               # Number of training samples to load in at a time.
-    batch_size = 256                     # Number training samples shown to neural network per iteration
+    load_chunk_size = 2e5               # Number of training samples to load in at a time.
+    batch_size = 512                     # Number training samples shown to neural network per iteration
     params = dict(
         make_corner_plots = True,        # if True, make corner plots
         make_kl_plot = False,           # If True, go through kl plotting function
@@ -141,7 +141,7 @@ def get_params():
         load_chunk_size = load_chunk_size, # Number of training samples to load in at a time.
         load_iteration = int((load_chunk_size * 25)/batch_size), # How often to load another chunk of training samples
         weight_init = 'xavier',#[xavier,VarianceScaling,Orthogonal] # Network model weight initialization
-        ramp = False,                  # if true, apply linear ramp to KL loss
+        ramp = True,                  # if true, apply linear ramp to KL loss
         KL_coef = 1e0,                # coefficient to place in front of KL loss (ideal is 1)
         gen_indi_KLs=False,
 
@@ -153,7 +153,7 @@ def get_params():
         batch_norm=True,              # if true, do batch normalization in all layers of neural network
         l1_loss = False,              # apply l1 regularization on mode weights in Gaussian mixture model part of neural network
         report_interval=500,          # interval at which to save objective function values and optionally print info during training
-        n_modes=9,#9,#7,                    # number of modes in Gaussian mixture model (ideal 7, but may go higher)
+        n_modes=16,#9,#7,                    # number of modes in Gaussian mixture model (ideal 7, but may go higher)
         n_convsteps = 0,              # Set to zero if not wanted. the number of convolutional steps used to prepare the y data (size changes by factor of  n_filter/(2**n_redsteps) )
         reduce = False,               # If true, apply data size reduction network (not advised to use)
         by_channel = True,            # if True, do convolutions as seperate 1-D channels, if False, stack training samples as 2-D images (n_detectors,(duration*sampling_frequency))
@@ -974,11 +974,11 @@ if args.test:
 
         # Generate ML posteriors using pre-trained model
         if params['reduce'] == True or params['n_filters_r1'] != None: # for convolutional approach
-             VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, np.expand_dims(y_data_test[i],axis=0), np.shape(x_data_test)[1],
+             VI_pred, dt, _  = VICI_inverse_model.run(params, np.expand_dims(y_data_test[i],axis=0), np.shape(x_data_test)[1],
                                                          y_normscale,
                                                          "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
         else:                                                          # for fully-connected approach
-            VI_pred, _, _, dt,_  = VICI_inverse_model.run(params, y_data_test[i].reshape([1,-1]), np.shape(x_data_test)[1],
+            VI_pred, dt, _  = VICI_inverse_model.run(params, y_data_test[i].reshape([1,-1]), np.shape(x_data_test)[1],
                                                          y_normscale,
                                                          "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
 

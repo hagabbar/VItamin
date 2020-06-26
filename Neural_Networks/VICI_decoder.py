@@ -13,29 +13,20 @@ from Neural_Networks import vae_utils
 
 class VariationalAutoencoder(object):
 
-    def __init__(self, name, wrap_mask, nowrap_mask, m1_mask, m2_mask, sky_mask, n_input1=4, n_input2=256, n_output=3, n_weights=2048, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, conv_strides=1, pool_strides=1, num_det=1, batch_norm=False,by_channel=False, weight_init='xavier'):
+    def __init__(self, name, wrap_mask, nowrap_mask, m1_mask, m2_mask, sky_mask, n_input1=4, n_input2=256, n_output=3, n_channels=3, n_weights=2048, drate=0.2, n_filters=8, filter_size=8, maxpool=4):
         
         self.n_input1 = n_input1                    # actually the output size
         self.n_input2 = n_input2                    # actually the output size
-        self.n_output = n_output                  # the input data size
-        self.n_weights = n_weights                # the number of weights were layer
-        self.n_hlayers = n_hlayers
-        self.n_conv = n_conv
-        self.n_filters = n_filters
-        self.filter_size = filter_size
-        self.maxpool = maxpool
-        self.conv_strides = conv_strides
-        self.pool_strides = pool_strides
-        self.name = name                          # the name of the network
-        self.drate = drate                        # dropout rate
-        self.num_det = num_det
-        self.batch_norm = batch_norm
-        self.by_channel = by_channel
-        self.weight_init = weight_init 
-
-        network_weights = self._create_weights()
-        self.weights = network_weights
-
+        self.n_output = n_output                    # the input data size
+        self.n_channels = n_channels                # the number of channels/detectors
+        self.n_weights = n_weights                  # the number of weights were layer
+        self.n_hlayers = len(n_weights)             # the number of fully connected layers
+        self.n_conv = len(n_filters)                # the number of convolutional layers
+        self.n_filters = n_filters                  # the number of filters in each conv layer
+        self.filter_size = filter_size              # the filter sizes in each conv layer
+        self.maxpool = maxpool                      # the max pooling sizes in each conv layer
+        self.name = name                            # the name of the network
+        self.drate = drate                          # dropout rate
         self.wrap_mask = wrap_mask                  # mask identifying wrapped indices
         self.nowrap_mask = nowrap_mask              # mask identifying non-wrapped indices
         self.m1_mask = m1_mask                      # the mask identifying the m1 parameter
@@ -53,43 +44,26 @@ class VariationalAutoencoder(object):
         self.nonlinear_scale_sky = tf.nn.relu       # activation for sky params
         self.nonlinearity = tf.nn.relu              # activation between hidden layers
 
+        network_weights = self._create_weights()
+        self.weights = network_weights
+
     def calc_reconstruction(self, z, y):
         with tf.name_scope("VICI_decoder"):
 
             # Reshape input to a 3D tensor - single channel
             if self.n_conv is not None:
-                if self.by_channel == True:
-    #                conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], 1])
-                    conv_pool = tf.reshape(y, shape=[-1, 1, self.n_input2, self.num_det])
-                    for i in range(self.n_conv):            
-                        weight_name = 'w_conv_' + str(i)
-                        bias_name = 'b_conv_' + str(i)
-                        conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_decoder'][weight_name],strides=[1,1,self.conv_strides[i],1],padding='SAME'),self.weights['VICI_decoder'][bias_name])
-                        conv_post = self.nonlinearity(conv_pre)
-                        if self.batch_norm == True:
-                            conv_batchNorm = tf.nn.batch_normalization(conv_post,tf.Variable(tf.zeros([1,conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),tf.Variable(tf.ones([1,conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),None,None,0.000001)
-                            conv_dropout = tf.layers.dropout(conv_batchNorm,rate=self.drate)
-                        else:
-                            conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
-                        conv_pool = tf.nn.max_pool(conv_dropout,ksize=[1, 1, self.maxpool[i], 1],strides=[1, 1, self.pool_strides[i], 1],padding='SAME')
+                conv_pool = tf.reshape(y, shape=[-1, self.n_input2, 1, self.n_channels])
+                for i in range(self.n_conv):            
+                    weight_name = 'w_conv_' + str(i)
+                    bias_name = 'b_conv_' + str(i)
+                    bnorm_name = 'bn_conv_' + str(i)
+                    conv_pre1 = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_decoder'][weight_name + '1'],strides=1,padding='SAME'),self.weights['VICI_decoder'][bias_name + '1'])
+                    conv_post = self.nonlinearity(conv_pre1)
+                    conv_batchnorm = tf.nn.batch_normalization(conv_post,tf.Variable(tf.zeros([1,1,self.n_filters[i]], dtype=tf.float32)),tf.Variable(tf.ones([1,1,self.n_filters[i]], dtype=tf.float32)),None,None,1e-6,name=bnorm_name)
+                    conv_pool = tf.nn.max_pool2d(conv_batchnorm,ksize=[self.maxpool[i],1],strides=[self.maxpool[i],1],padding='SAME')
 
-                    fc = tf.concat([z,tf.reshape(conv_pool, [-1, int(conv_pool.shape[2]*conv_pool.shape[3])])],axis=1)            
-                if self.by_channel == False:
-    #                conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], 1])
-                    conv_pool = tf.reshape(y, shape=[-1, y.shape[1], y.shape[2], 1])
-                    for i in range(self.n_conv):
-                        weight_name = 'w_conv_' + str(i)
-                        bias_name = 'b_conv_' + str(i)
-                        conv_pre = tf.add(tf.nn.conv2d(conv_pool, self.weights['VICI_decoder'][weight_name],strides=[1,self.conv_strides[i],self.conv_strides[i],1],padding='SAME'),self.weights['VICI_decoder'][bias_name])
-                        conv_post = self.nonlinearity(conv_pre)
-                        if self.batch_norm == True:
-                            conv_batchNorm = tf.nn.batch_normalization(conv_post,tf.Variable(tf.zeros([conv_post.shape[1],conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),tf.Variable(tf.ones([conv_post.shape[1],conv_post.shape[2],conv_post.shape[3]], dtype=tf.float32)),None,None,0.000001)
-                            #conv_dropout = tf.layers.dropout(conv_batchNorm,rate=self.drate)
-                        #else:
-                            #conv_dropout = tf.layers.dropout(conv_post,rate=self.drate)
-                        conv_pool = tf.nn.max_pool(conv_batchNorm,ksize=[1, self.maxpool[i], self.maxpool[i], 1],strides=[1, self.pool_strides[i], self.pool_strides[i], 1],padding='SAME')
+                fc = tf.concat([z,tf.reshape(conv_pool, [-1, int(self.n_input2*self.n_filters[-1]/(np.prod(self.maxpool)))])],axis=1)            
 
-                    fc = tf.concat([z,tf.reshape(conv_pool, [-1, int(conv_pool.shape[1]*conv_pool.shape[2]*conv_pool.shape[3])])],axis=1)
             else:
                 fc = tf.concat([z,y],axis=1)
 
@@ -104,6 +78,7 @@ class VariationalAutoencoder(object):
                 hidden_dropout = tf.layers.dropout(hidden_batchnorm,rate=self.drate)
             loc_all = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_decoder']['w_loc']), self.weights['VICI_decoder']['b_loc'])
             scale_all = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_decoder']['w_scale']), self.weights['VICI_decoder']['b_scale'])
+
             # split up the output into non-wrapped and wrapped params and apply appropriate activation
             loc_nowrap = self.nonlinear_loc_nowrap(tf.boolean_mask(loc_all,self.nowrap_mask + [False],axis=1))   # add an extra null element to the mask
             scale_nowrap = self.nonlinear_scale_nowrap(tf.boolean_mask(scale_all,self.nowrap_mask[:-1],axis=1))  # ignore last element because scale_all is 1 shorter
@@ -115,7 +90,7 @@ class VariationalAutoencoder(object):
             scale_wrap = -1.0*self.nonlinear_scale_wrap(tf.boolean_mask(scale_all,self.wrap_mask[:-1],axis=1))  # ignore last element because scale_all is 1 shorter
             loc_sky = self.nonlinear_loc_sky(tf.boolean_mask(loc_all,self.sky_mask + [True],axis=1))        # add an extra element to the mask for the 3rd sky parameter
             scale_sky = -1.0*self.nonlinear_scale_sky(tf.boolean_mask(scale_all,self.sky_mask[:-1],axis=1))    # ignore last element because scale_all is 1 shorter
-            return loc_nowrap, scale_nowrap, loc_wrap, scale_wrap, loc_m1, scale_m1, loc_m2, scale_m2, loc_sky, scale_sky
+            return loc_nowrap, scale_nowrap, loc_wrap, scale_wrap, loc_m1, scale_m1, loc_m2, scale_m2, loc_sky, scale_sky   
 
     def _create_weights(self):
         all_weights = collections.OrderedDict()
@@ -125,46 +100,19 @@ class VariationalAutoencoder(object):
             all_weights['VICI_decoder'] = collections.OrderedDict()
             
             if self.n_conv is not None:
-                dummy = 1
+                dummy = self.n_channels
                 for i in range(self.n_conv):
                     weight_name = 'w_conv_' + str(i)
                     bias_name = 'b_conv_' + str(i)
-                    # orthogonal init
-                    if self.weight_init == 'Orthogonal':
-                        shape_init = (self.filter_size[i],dummy*self.n_filters[i])
-                        initializer = tf.keras.initializers.Orthogonal()
-                        all_weights['VICI_decoder'][weight_name] = tf.Variable(tf.reshape(initializer(shape=shape_init),[self.filter_size[i], 1, dummy, self.n_filters[i]]), dtype=tf.float32)
-                    # Variance scaling
-                    if self.weight_init == 'VarianceScaling':
-                        shape_init = (self.filter_size[i],dummy*self.n_filters[i])
-                        initializer = tf.keras.initializers.VarianceScaling()
-                        all_weights['VICI_decoder'][weight_name] = tf.Variable(tf.reshape(initializer(shape=shape_init),[self.filter_size[i], 1, dummy, self.n_filters[i]]), dtype=tf.float32)
-                    # xavier initilization
-                    if self.weight_init == 'xavier':
-                        all_weights['VICI_decoder'][weight_name] = tf.Variable(tf.reshape(vae_utils.xavier_init(self.filter_size[i], dummy*self.n_filters[i]),[self.filter_size[i], 1, dummy, self.n_filters[i]]), dtype=tf.float32)
-                    all_weights['VICI_decoder'][bias_name] = tf.Variable(tf.zeros([self.n_filters[i]], dtype=tf.float32))
-                    tf.summary.histogram(weight_name, all_weights['VICI_decoder'][weight_name])
-                    tf.summary.histogram(bias_name, all_weights['VICI_decoder'][bias_name])
+                    all_weights['VICI_decoder'][weight_name + '1'] = tf.Variable(tf.reshape(vae_utils.xavier_init(self.filter_size[i], dummy*self.n_filters[i]),[self.filter_size[i], 1, dummy, self.n_filters[i]]), dtype=tf.float32)
+                    all_weights['VICI_decoder'][bias_name + '1'] = tf.Variable(tf.zeros([self.n_filters[i]], dtype=tf.float32))
+                    tf.summary.histogram(weight_name + '1', all_weights['VICI_decoder'][weight_name + '1'])
+                    tf.summary.histogram(bias_name + '1', all_weights['VICI_decoder'][bias_name + '1'])
                     dummy = self.n_filters[i]
 
-#                total_pool_stride_sum = 0
-#                for j in range(len(self.maxpool)):
-#                    if self.maxpool[j] != 1 and self.pool_strides[j] != 1:
-#                        total_pool_stride_sum += 1
-#                    else:
-#                        if self.maxpool[j] != 1:
-#                            total_pool_stride_sum += 1
-#                        if self.pool_strides[j] != 1:
-#                            total_pool_stride_sum += 1
-#                    if self.conv_strides[j] != 1:
-#                        total_pool_stride_sum += 1
-                if self.by_channel == True:
-#                    fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[i]/(2**total_pool_stride_sum))
-                    fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[-1]/(np.prod(self.maxpool)))
-                else:
-                    fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[i]/(2**total_pool_stride_sum)*2)
+                fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[-1]/(np.prod(self.maxpool)))
             else:
-                fc_input_size = self.n_input1 + self.n_input2
+                fc_input_size = self.n_input1 + self.n_input2*self.n_channels
 
             for i in range(self.n_hlayers):
                 weight_name = 'w_hidden_' + str(i)
@@ -183,5 +131,6 @@ class VariationalAutoencoder(object):
             tf.summary.histogram('w_scale', all_weights['VICI_decoder']['w_scale'])
             tf.summary.histogram('b_scale', all_weights['VICI_decoder']['b_scale'])
             
-            all_weights['prior_param'] = collections.OrderedDict() 
+            all_weights['prior_param'] = collections.OrderedDict()
+        
         return all_weights
