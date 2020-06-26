@@ -71,7 +71,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 tfd = tfp.distributions
-SMALL_CONSTANT = 1e-6 # necessary to prevent the division by zero in many operations 
+SMALL_CONSTANT = 1e-12 # necessary to prevent the division by zero in many operations 
+GAUSS_RANGE = 10.0     # Actual range of truncated gaussian when the ramp is 0
 
 # NORMALISE DATASET FUNCTION
 def tf_normalise_dataset(xp):
@@ -208,6 +209,30 @@ def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
 
     return x_data, y_data_train
 
+def get_param_index(all_pars,pars):
+
+    # identify the indices of wrapped and non-wrapped parameters - clunky code
+    mask = []
+    idx = []
+    
+    # loop over inference params
+    for i,p in enumerate(all_pars):
+
+        # loop over wrapped params 
+        flag = False
+        for q in pars:
+            if p==q:
+                flag = True    # if inf params is a wrapped param set flag
+        
+        # record the true/false value for this inference param
+        if flag==True:
+            mask.append(True)
+            idx.append(i)
+        elif flag==False:
+            mask.append(False)
+     
+    return mask, idx, np.sum(mask)
+
 def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefree, y_normscale, save_dir, truth_test, bounds, fixed_vals, posterior_truth_test,snrs_test=None):    
 
     # if True, do multi-modal
@@ -264,10 +289,15 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     num_det = len(fixed_vals['det'])
 
 
-    # identify the indices of wrapped and non-wrapped parameters - clunky code
-    wrap_mask, nowrap_mask, idx_mask = get_wrap_index(params)
-    wrap_len = np.sum(wrap_mask)
-    nowrap_len = np.sum(nowrap_mask)
+    # identify the indices of different sets of physical parameters
+    vonmise_mask, vonmise_idx_mask, vonmise_len = get_param_index(params['inf_pars'],params['vonmise_pars'])
+    gauss_mask, gauss_idx_mask, gauss_len = get_param_index(params['inf_pars'],params['gauss_pars'])
+    sky_mask, sky_idx_mask, sky_len = get_param_index(params['inf_pars'],params['sky_pars'])
+    ra_mask, ra_idx_mask, ra_len = get_param_index(params['inf_pars'],['ra'])
+    dec_mask, dec_idx_mask, dec_len = get_param_index(params['inf_pars'],['dec'])
+    m1_mask, m1_idx_mask, m1_len = get_param_index(params['inf_pars'],['mass_1'])
+    m2_mask, m2_idx_mask, m2_len = get_param_index(params['inf_pars'],['mass_2'])
+    idx_mask = np.argsort(gauss_idx_mask + vonmise_idx_mask + m1_idx_mask + m2_idx_mask + sky_idx_mask) # + dist_idx_mask)
 
     graph = tf.Graph()
     session = tf.Session(graph=graph)
@@ -283,11 +313,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                y_ph = tf.placeholder(dtype=tf.float32, shape=[None,len(fixed_vals['det']),ysh], name="y_ph")
         else:
             y_ph = tf.placeholder(dtype=tf.float32, shape=[None,ysh], name="y_ph")    # data placeholder
-        idx = tf.placeholder(tf.int32)
+        ramp = tf.placeholder(dtype=tf.float32)    # the ramp to slowly increase the KL contribution
 
         # LOAD VICI NEURAL NETWORKS
         r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh, filter_size_r1, n_filters_r1, n_convsteps)
-        r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', wrap_mask, nowrap_mask, 
+        r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', vonmise_mask, gauss_mask, m1_mask, m2_mask, sky_mask, 
                                                      n_input1=z_dimension, n_input2=ysh_conv_r2, n_output=xsh[1], 
                                                      n_weights=n_weights_r2, n_hlayers=n_hlayers_r2, 
                                                      drate=drate, n_filters=n_filters_r2, filter_size=filter_size_r2,
@@ -306,13 +336,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 #        y_ph = conv_dr.dimensionanily_reduction(y_ph)
 
           
-        #ramp = tf.math.minimum(1.0,(tf.dtypes.cast(idx,dtype=tf.float32)/1.0e5)**(3.0))         
-        #ramp = 1.0 - 1.0/tf.sqrt(1.0 + (tf.dtypes.cast(idx,dtype=tf.float32)/1000.0))
-        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_end)-tf.log(ramp_start))
-        ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
+#        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_end)-tf.log(ramp_start))
+#        ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
         
-        if params['ramp'] == False:
-            ramp = 1.0
+#        if params['ramp'] == False:
+#            ramp = 1.0
  
         # reduce the y data size
         y_conv = r2_conv.dimensionanily_reduction(y_ph)
@@ -320,28 +348,19 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # GET r1(z|y)
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
         r1_loc, r1_scale, r1_weight = r1_zy._calc_z_mean_and_sigma(y_conv)
-        r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_scale))
+        temp_var_r1 = SMALL_CONSTANT + tf.exp(r1_scale)
+#        r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_scale))
         # get l1 loss term
-        l1_loss_weight = ramp*1e-3*tf.reduce_sum(tf.math.abs(r1_weight),1)
-        r1_weight = ramp*tf.squeeze(r1_weight)
-        #r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa = r1_zy_a._calc_z_mean_and_sigma(y_ph)        
-        #r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
-        #r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
-        #r1_zy_log_weights = tf.concat([r1_zy_wa,r1_zy_wb,r1_zy_wc],axis=1)
-        #r1_zy_locs = tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c],axis=1)
-        #r1_zy_scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)), tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c))],axis=1)
-        #r1_zy_log_weights = tf_normalise_sum_dataset(r1_zy_log_weights)
+#        l1_loss_weight = ramp*1e-3*tf.reduce_sum(tf.math.abs(r1_weight),1)
+#        r1_weight = ramp*tf.squeeze(r1_weight)
 
         
         # define the r1(z|y) mixture model
         bimix_gauss = tfd.MixtureSameFamily(
-                          mixture_distribution=tfd.Categorical(logits=ramp*r1_weight),
-                          #mixture_distribution=tfd.Categorical(logits=r1_zy_log_weights),
+                          mixture_distribution=tfd.Categorical(logits=r1_weight),
                           components_distribution=tfd.MultivariateNormalDiag(
-                          #loc=r1_zy_locs,
-                          #scale_diag=r1_zy_scales))
                           loc=r1_loc,
-                          scale_diag=r1_scale))
+                          scale_diag=tf.sqrt(temp_var_r1)))
 
 
         # DRAW FROM r1(z|y) - given the Gaussian parameters generate z samples
@@ -349,67 +368,117 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         
         # GET q(z|x,y)
         q_zxy_mean, q_zxy_log_sig_sq = q_zxy._calc_z_mean_and_sigma(x_ph,y_conv)
-        #q_zxy_mean, q_zxy_log_sig_sq = q_zxy._calc_z_mean_and_sigma(x_ph)
 
         # DRAW FROM q(z|x,y)
-        q_zxy_samp = q_zxy._sample_from_gaussian_dist(bs_ph, z_dimension, q_zxy_mean, tf.log(SMALL_CONSTANT + tf.exp(q_zxy_log_sig_sq)))
-        
+#        q_zxy_samp = q_zxy._sample_from_gaussian_dist(bs_ph, z_dimension, q_zxy_mean, tf.log(SMALL_CONSTANT + tf.exp(q_zxy_log_sig_sq)))
+        temp_var_q = SMALL_CONSTANT + tf.exp(q_zxy_log_sig_sq)
+        mvn_q = tfp.distributions.MultivariateNormalDiag(
+                          loc=q_zxy_mean,
+                          scale_diag=tf.sqrt(temp_var_q))
+        q_zxy_samp = mvn_q.sample()  
+       
         # GET r2(x|z,y)
-        reconstruction_xzy = r2_xzy.calc_reconstruction(q_zxy_samp,y_conv)
-        r2_xzy_mean_nowrap = reconstruction_xzy[0]
-        r2_xzy_log_sig_sq_nowrap = reconstruction_xzy[1]
-        if np.sum(wrap_mask)>0:
-            r2_xzy_mean_wrap = reconstruction_xzy[2]
-            r2_xzy_log_sig_sq_wrap = reconstruction_xzy[3]
+#        reconstruction_xzy = r2_xzy.calc_reconstruction(q_zxy_samp,y_conv)
+#        r2_xzy_mean_nowrap = reconstruction_xzy[0]
+#        r2_xzy_log_sig_sq_nowrap = reconstruction_xzy[1]
+#        if np.sum(wrap_mask)>0:
+#            r2_xzy_mean_wrap = reconstruction_xzy[2]
+#            r2_xzy_log_sig_sq_wrap = reconstruction_xzy[3]
+        eps = tf.random.normal([bs_ph, params['ndata'], num_det], 0, 1., dtype=tf.float32)
+        y_ph_ramp = tf.add(tf.multiply(ramp,y_conv), tf.multiply((1.0-ramp), eps))
+        reconstruction_xzy = r2_xzy.calc_reconstruction(q_zxy_samp,y_ph_ramp)
 
-        # COST FROM RECONSTRUCTION - Gaussian parts
-        normalising_factor_x = -0.5*tf.log(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)) - 0.5*np.log(2.0*np.pi)   # -0.5*log(sig^2) - 0.5*log(2*pi)
-        square_diff_between_mu_and_x = tf.square(r2_xzy_mean_nowrap - tf.boolean_mask(x_ph,nowrap_mask,axis=1))         # (mu - x)^2
+        # ugly but required for now - unpack the r2 output params
+        r2_xzy_mean_gauss = reconstruction_xzy[0]           # truncated gaussian mean
+        r2_xzy_log_sig_sq_gauss = reconstruction_xzy[1]     # truncated gaussian log var
+        r2_xzy_mean_vonmise = reconstruction_xzy[2]         # vonmises means
+        r2_xzy_log_sig_sq_vonmise = reconstruction_xzy[3]   # vonmises log var
+        r2_xzy_mean_m1 = reconstruction_xzy[4]              # m1 mean
+        r2_xzy_log_sig_sq_m1 = reconstruction_xzy[5]        # m1 var
+        r2_xzy_mean_m2 = reconstruction_xzy[6]              # m2 mean (m2 will be conditional on m1)
+        r2_xzy_log_sig_sq_m2 = reconstruction_xzy[7]        # m2 log var (m2 will be conditional on m1)
+        r2_xzy_mean_sky = reconstruction_xzy[8]             # sky mean unit vector (3D)
+        r2_xzy_log_sig_sq_sky = reconstruction_xzy[9]       # sky log var (1D)
 
-        inside_exp_x = -0.5 * tf.divide(square_diff_between_mu_and_x,SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)) # -0.5*(mu - x)^2 / sig^2
-        if params['weighted_pars'] != None:
-            inside_exp_x_new=[]
-            for k_idx,k in enumerate(params['inf_pars']):
-                if k == params['weighted_pars']:
-                    inside_exp_x_new = tf.math.multiply(inside_exp_x[:,k_idx],tf.Variable(params['weighted_pars_factor'],dtype=tf.float32))
-                else:
-                    inside_exp_x_new = inside_exp_x[:,k_idx]
-                if k_idx == 0:
-                    inside_exp_x_new_tensor = tf.expand_dims(inside_exp_x_new,1)
-                else:
-                    inside_exp_x_new_tensor = tf.concat([inside_exp_x_new_tensor,tf.expand_dims(inside_exp_x_new,1)],axis=1)
-            inside_exp_x = inside_exp_x_new_tensor
-        reconstr_loss_x = tf.reduce_sum(normalising_factor_x + inside_exp_x,axis=1,keepdims=True)                       # sum_dim(-0.5*log(sig^2) - 0.5*log(2*pi) - 0.5*(mu - x)^2 / sig^2)
+        # COST FROM RECONSTRUCTION - the masses
+        # this sets up a joint distribution on m1 and m2 with m2 being conditional on m1
+        # the ramp eveolves the truncation boundaries from far away to 0->1 for m1 and 0->m1 for m2
+        if m1_len>0 and m2_len>0:
+            temp_var_r2_m1 = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_m1)     # the safe r2 variance
+            temp_var_r2_m2 = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_m2)
+            joint = tfd.JointDistributionSequential([    # shrink the truncation with the ramp
+                       tfd.Independent(tfd.TruncatedNormal(r2_xzy_mean_m1,tf.sqrt(temp_var_r2_m1),-GAUSS_RANGE*(1.0-ramp),GAUSS_RANGE*(1.0-ramp) + 1.0),reinterpreted_batch_ndims=0),  # m1
+                lambda b0: tfd.Independent(tfd.TruncatedNormal(r2_xzy_mean_m2,tf.sqrt(temp_var_r2_m2),-GAUSS_RANGE*(1.0-ramp),GAUSS_RANGE*(1.0-ramp) + ramp*b0),reinterpreted_batch_ndims=0)],    # m2
+            )
+            reconstr_loss_masses = joint.log_prob((tf.boolean_mask(x_ph,m1_mask,axis=1),tf.boolean_mask(x_ph,m2_mask,axis=1)))
 
-        # COST FROM RECONSTRUCTION - Von Mises parts
-        if np.sum(wrap_mask)>0:
-            #kappa = tf.math.reciprocal(SMALL_CONSTANT + r2_xzy_log_sig_sq_wrap)
-            #reconstr_loss_vm_num = tf.multiply(kappa,tf.math.cos(2.0*np.pi*(r2_xzy_mean_wrap - tf.boolean_mask(x_ph,wrap_mask,axis=1))))
-            #reconstr_loss_vm_denum = -np.log(2.0*np.pi) - tf.log(tf.math.bessel_i0(kappa))
-            #reconstr_loss_vm = tf.reduce_sum(reconstr_loss_vm_num + reconstr_loss_vm_denum,axis=1)
-            con = tf.reshape(tf.math.reciprocal(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap)),[-1,wrap_len])   # modelling wrapped scale output as log variance
-            von_mises = tfp.distributions.VonMises(loc=2.0*np.pi*(tf.reshape(r2_xzy_mean_wrap,[-1,wrap_len])-0.5), concentration=con)   # define p_vm(2*pi*mu,con=1/sig^2)
-            reconstr_loss_vm = tf.reduce_sum(von_mises.log_prob(2.0*np.pi*(tf.reshape(tf.boolean_mask(x_ph,wrap_mask,axis=1),[-1,wrap_len]) - 0.5)),axis=1)   # 2pi is the von mises input range
-            cost_R = -1.0*tf.reduce_mean(reconstr_loss_x + reconstr_loss_vm) # average over batch
-            r2_xzy_mean = tf.gather(tf.concat([r2_xzy_mean_nowrap,r2_xzy_mean_wrap],axis=1),tf.constant(idx_mask),axis=1)
-            r2_xzy_scale = tf.gather(tf.concat([r2_xzy_log_sig_sq_nowrap,r2_xzy_log_sig_sq_wrap],axis=1),tf.constant(idx_mask),axis=1) 
+        # COST FROM RECONSTRUCTION - Truncated Gaussian parts
+        # this sets up a loop over uncorreltaed truncated Gaussians 
+        # the ramp evolves the boundaries from far away to 0->1 
+        if gauss_len>0:
+            temp_var_r2_gauss = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_gauss)
+            gauss_x = tf.boolean_mask(x_ph,gauss_mask,axis=1)
+            @tf.function
+            def truncnorm(i,lp):    # we set up a function that adds the log-likelihoods and also increments the counter
+                loc = tf.slice(r2_xzy_mean_gauss,[0,i],[-1,1])
+                std = tf.sqrt(tf.slice(temp_var_r2_gauss,[0,i],[-1,1]))
+                pos = tf.slice(gauss_x,[0,i],[-1,1])  
+                tn = tfd.TruncatedNormal(loc,std,-GAUSS_RANGE*(1.0-ramp),GAUSS_RANGE*(1.0-ramp) + 1.0)   # shrink the truncation with the ramp
+                return [i+1, lp + tn.log_prob(pos)]
+            # we do the loop until we've hit all the truncated gaussian parameters - i starts at 0 and the logprob starts at 0 
+            _,reconstr_loss_gauss = tf.while_loop(lambda i,reconstr_loss_gauss: i<gauss_len, truncnorm, [0,tf.zeros([bs_ph],dtype=tf.dtypes.float32)])
+
+        # COST FROM RECONSTRUCTION - Von Mises parts for single parameters that wrap over 2pi
+        if vonmise_len>0:
+            temp_var_r2_vonmise = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_vonmise)
+            con = tf.reshape(tf.math.reciprocal(temp_var_r2_vonmise),[-1,vonmise_len])   # modelling wrapped scale output as log variance - convert to concentration
+            von_mises = tfp.distributions.VonMises(
+                          loc=2.0*np.pi*(tf.reshape(r2_xzy_mean_vonmise,[-1,vonmise_len])-0.5),   # remap 0>1 mean onto -pi->pi range
+                          concentration=con)
+            reconstr_loss_vonmise = von_mises.log_prob(2.0*np.pi*(tf.reshape(tf.boolean_mask(x_ph,vonmise_mask,axis=1),[-1,vonmise_len]) - 0.5))   # 2pi is the von mises input range
+
+            # computing Gaussian likelihood for von mises parameters to be faded away with the ramp
+            gauss_vonmises = tfp.distributions.MultivariateNormalDiag(
+                         loc=r2_xzy_mean_vonmise,
+                         scale_diag=tf.sqrt(temp_var_r2_vonmise))
+            reconstr_loss_gauss_vonmise = gauss_vonmises.log_prob(tf.boolean_mask(x_ph,vonmise_mask,axis=1))        
+            reconstr_loss_vonmise = ramp*reconstr_loss_vonmise + (1.0-ramp)*reconstr_loss_gauss_vonmise    # start with a Gaussian model and fade in the true vonmises
         else:
-            cost_R = -1.0*tf.reduce_mean(reconstr_loss_x)    
-            r2_xzy_mean = r2_xzy_mean_nowrap
-            r2_xzy_scale = r2_xzy_log_sig_sq_nowrap
+            reconstr_loss_vonmise = 0.0
 
-        # compute montecarlo KL - first compute the analytic self entropy of q 
-        normalising_factor_kl = -0.5*tf.log(SMALL_CONSTANT + tf.exp(q_zxy_log_sig_sq)) - 0.5*np.log(2.0*np.pi)   # -0.5*log(sig^2) - 0.5*log(2*pi)
-        square_diff_between_qz_and_q = tf.square(q_zxy_mean - q_zxy_samp)                                        # (mu - x)^2
-        inside_exp_q = -0.5 * tf.divide(square_diff_between_qz_and_q,SMALL_CONSTANT + tf.exp(q_zxy_log_sig_sq))  # -0.5*(mu - x)^2 / sig^2
-        log_q_q = tf.reduce_sum(normalising_factor_kl + inside_exp_q,axis=1,keepdims=True)                       # sum_dim(-0.5*log(sig^2) - 0.5*log(2*pi) - 0.5*(mu - x)^2 / sig^2)
+        # COST FROM RECONSTRUCTION - Von Mises Fisher (sky) parts
+        if sky_len>0:
+            temp_var_r2_sky = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_sky)
+            con = tf.reshape(tf.math.reciprocal(temp_var_r2_sky),[bs_ph])   # modelling wrapped scale output as log variance - only 1 concentration parameter for all sky
+            loc_xyz = tf.math.l2_normalize(tf.reshape(r2_xzy_mean_sky,[-1,3]),axis=1)    # take the 3 output mean params from r2 and normalse so they are a unit vector
+            von_mises_fisher = tfp.distributions.VonMisesFisher(
+                          mean_direction=loc_xyz,
+                          concentration=con)
+            ra_sky = 2.0*np.pi*tf.reshape(tf.boolean_mask(x_ph,ra_mask,axis=1),[-1,1])       # convert the scaled 0->1 true RA value back to radians
+            dec_sky = np.pi*(tf.reshape(tf.boolean_mask(x_ph,dec_mask,axis=1),[-1,1]) - 0.5) # convert the scaled 0>1 true dec value back to radians
+            xyz_unit = tf.reshape(tf.concat([tf.cos(ra_sky)*tf.cos(dec_sky),tf.sin(ra_sky)*tf.cos(dec_sky),tf.sin(dec_sky)],axis=1),[-1,3])   # construct the true parameter unit vector
+            reconstr_loss_sky = von_mises_fisher.log_prob(tf.math.l2_normalize(xyz_unit,axis=1))   # normalise it for safety (should already be normalised) and compute the logprob
+
+            # computing Gaussian likelihood for von mises Fisher (sky) parameters to be faded away with the ramp
+            mean_ra = tf.math.floormod(tf.atan2(tf.slice(loc_xyz,[0,1],[-1,1]),tf.slice(loc_xyz,[0,0],[-1,1])),2.0*np.pi)/(2.0*np.pi)    # convert the unit vector to scaled 0->1 RA 
+            mean_dec = (tf.asin(tf.slice(loc_xyz,[0,2],[-1,1])) + 0.5*np.pi)/np.pi        # convert the unit vector to scaled 0->1 dec
+            mean_sky = tf.reshape(tf.concat([mean_ra,mean_dec],axis=1),[bs_ph,2])        # package up the scaled RA and dec 
+            gauss_sky = tfp.distributions.MultivariateNormalDiag(
+                         loc=mean_sky,
+                         scale_diag=tf.concat([tf.sqrt(temp_var_r2_sky),tf.sqrt(temp_var_r2_sky)],axis=1))   # use the same 1D concentration parameter for both RA and dec dimensions
+            reconstr_loss_gauss_sky = gauss_sky.log_prob(tf.boolean_mask(x_ph,sky_mask,axis=1))     # compute the logprob at the true sky location
+            reconstr_loss_sky = ramp*reconstr_loss_sky + (1.0-ramp)*reconstr_loss_gauss_sky   # start with a Gaussian model and fade in the true vonmises Fisher
+
+        cost_R = -1.0*tf.reduce_mean(reconstr_loss_gauss + reconstr_loss_vonmise + reconstr_loss_masses + reconstr_loss_sky)
+        r2_xzy_mean = tf.gather(tf.concat([r2_xzy_mean_gauss,r2_xzy_mean_vonmise,r2_xzy_mean_m1,r2_xzy_mean_m2,r2_xzy_mean_sky],axis=1),tf.constant(idx_mask),axis=1)      # put the elements back in order
+        r2_xzy_scale = tf.gather(tf.concat([r2_xzy_log_sig_sq_gauss,r2_xzy_log_sig_sq_vonmise,r2_xzy_log_sig_sq_m1,r2_xzy_log_sig_sq_m2,r2_xzy_log_sig_sq_sky],axis=1),tf.constant(idx_mask),axis=1)   # put the elements back in order
+        
+        log_q_q = mvn_q.log_prob(q_zxy_samp)
         log_r1_q = bimix_gauss.log_prob(q_zxy_samp)   # evaluate the log prob of r1 at the q samples
         KL = tf.reduce_mean(log_q_q - log_r1_q)      # average over batch
 
-        if params['l1_loss'] == False:
-            l1_loss_weight = 0
         # THE VICI COST FUNCTION
-        COST = cost_R + params['KL_coef']*ramp*KL + l1_loss_weight 
+        COST = cost_R + ramp*KL #+ L1_weight_reg)
 
         # VARIABLES LISTS
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
@@ -465,18 +534,31 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         if params['resume_training'] == True and i == 0 :
             print(save_dir)
             saver.restore(session, save_dir)
+
+        # compute the ramp value
+        rmp = 0.0
+        if params['ramp'] == True:
+            if i>ramp_start:
+                rmp = (np.log10(float(i)) - np.log10(ramp_start))/(np.log10(ramp_end) - np.log10(ramp_start))
+            if i>ramp_end:
+                rmp = 1.0  
+        else:
+            rmp = 1.0              
+
+        # train the network    
+        session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, ramp:rmp}) 
  
         # train to minimise the cost function
-        session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
+#        session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
 
         # if we are in a report iteration extract cost function values
         if i % params['report_interval'] == 0 and i > 0:
 
             # get training loss
-            cost, kl, AB_batch = session.run([cost_R, KL, r1_weight], feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
+            cost, kl, AB_batch = session.run([cost_R, KL, r1_weight], feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, ramp:rmp})
 
             # get validation loss on test set
-            cost_val, kl_val = session.run([cost_R, KL], feed_dict={bs_ph:y_data_test.shape[0], x_ph:x_data_test, y_ph:y_data_test/y_normscale, idx:i})
+            cost_val, kl_val = session.run([cost_R, KL], feed_dict={bs_ph:y_data_test.shape[0], x_ph:x_data_test, y_ph:y_data_test/y_normscale, ramp:rmp})
             plotdata.append([cost,kl,cost+kl,cost_val,kl_val,cost_val+kl_val])
 
            
@@ -801,11 +883,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                 """
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
                 if params['reduce'] == True or params['n_filters_r1'] != None:
-                    XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
+                    XS, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
                                                  y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 else:
-                    XS, loc, scale, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
+                    XS, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,-1]), np.shape(x_data_test)[1],
                                                  y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
@@ -1016,11 +1098,18 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
             num_det = ysh0
     else:
         num_det = None
+    # identify the indices of different sets of physical parameters
+    vonmise_mask, vonmise_idx_mask, vonmise_len = get_param_index(params['inf_pars'],params['vonmise_pars'])
+    gauss_mask, gauss_idx_mask, gauss_len = get_param_index(params['inf_pars'],params['gauss_pars'])
+    sky_mask, sky_idx_mask, sky_len = get_param_index(params['inf_pars'],params['sky_pars'])
+    ra_mask, ra_idx_mask, ra_len = get_param_index(params['inf_pars'],['ra'])
+    dec_mask, dec_idx_mask, dec_len = get_param_index(params['inf_pars'],['dec'])
+    #dist_mask, dist_idx_mask, dist_len = get_wrap_index(params['inf_pars'],'luminosity_distance')
+    m1_mask, m1_idx_mask, m1_len = get_param_index(params['inf_pars'],['mass_1'])
+    m2_mask, m2_idx_mask, m2_len = get_param_index(params['inf_pars'],['mass_2'])
+    idx_mask = np.argsort(gauss_idx_mask + vonmise_idx_mask + m1_idx_mask + m2_idx_mask + sky_idx_mask) # + dist_idx_mask)
+    masses_len = m1_len + m2_len
 
-    # identify the indices of wrapped and non-wrapped parameters - clunky code
-    wrap_mask, nowrap_mask, idx_mask = get_wrap_index(params)
-    wrap_len = np.sum(wrap_mask)
-    nowrap_len = np.sum(nowrap_mask)
    
     graph = tf.Graph()
     session = tf.Session(graph=graph)
@@ -1040,7 +1129,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
         # LOAD VICI NEURAL NETWORKS
         r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh1, filter_size_r1, n_filters_r1, n_convsteps)
-        r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', wrap_mask, nowrap_mask, n_input1=z_dimension, 
+        r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', vonmise_mask, gauss_mask, m1_mask, m2_mask, sky_mask, n_input1=z_dimension, 
                                                      n_input2=ysh_conv_r2, n_output=xsh1, n_weights=n_weights_r2, 
                                                      n_hlayers=n_hlayers_r2, drate=drate, n_filters=n_filters_r2, 
                                                      filter_size=filter_size_r2, maxpool=maxpool_r2, n_conv=n_conv_r2, 
@@ -1064,18 +1153,7 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
         # GET r1(z|y)
         r1_loc, r1_scale, r1_weight = r1_zy._calc_z_mean_and_sigma(y_conv)
-        r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_scale))
-        r1_weight = tf.squeeze(r1_weight)
-        #r1_zy_mean_a, r1_zy_log_sig_sq_a, r1_zy_wa = r1_zy_a._calc_z_mean_and_sigma(y_ph)
-        #r1_zy_mean_b, r1_zy_log_sig_sq_b, r1_zy_wb = r1_zy_b._calc_z_mean_and_sigma(y_ph)
-        #r1_zy_mean_c, r1_zy_log_sig_sq_c, r1_zy_wc = r1_zy_c._calc_z_mean_and_sigma(y_ph)
-        #r1_zy_weights = tf.concat([r1_zy_wa, r1_zy_wb, r1_zy_wc],1)
-        #r1_zy_locs = tf.stack([r1_zy_mean_a,r1_zy_mean_b,r1_zy_mean_c],axis=1)
-        #r1_zy_scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_c))],axis=1)
-        #r1_zy_weights = tf_normalise_sum_dataset(r1_zy_weights)
-
-        #means = tf.stack([r1_zy_mean_a,r1_zy_mean_b],axis=1)
-        #scales = tf.stack([tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_a)),tf.sqrt(SMALL_CONSTANT + tf.exp(r1_zy_log_sig_sq_b))],axis=1)
+        temp_var_r1 = SMALL_CONSTANT + tf.exp(r1_scale)
 
 
         # define the r1(z|y) mixture model
@@ -1083,38 +1161,74 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
                           mixture_distribution=tfd.Categorical(logits=r1_weight),
                           components_distribution=tfd.MultivariateNormalDiag(
                           loc=r1_loc,
-                          scale_diag=r1_scale))
+                          scale_diag=tf.sqrt(temp_var_r1)))
 
 
         # DRAW FROM r1(z|y)
         r1_zy_samp = bimix_gauss.sample()
 
-        # GET r2(x|z,y) from r(z|y) samples
-        reconstruction_xzy = r2_xzy.calc_reconstruction(r1_zy_samp,y_conv)
-        r2_xzy_mean_nowrap = reconstruction_xzy[0]
-        r2_xzy_log_sig_sq_nowrap = reconstruction_xzy[1]
-        if np.sum(wrap_mask)>0:
-            r2_xzy_mean_wrap = reconstruction_xzy[2]
-            r2_xzy_log_sig_sq_wrap = reconstruction_xzy[3]
 
-        # draw from r2(x|z,y)
-        r2_xzy_samp_gauss = q_zxy._sample_from_gaussian_dist(tf.shape(y_conv)[0], nowrap_len, r2_xzy_mean_nowrap, tf.log(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_nowrap)))
-        if np.sum(wrap_mask)>0:
-            con = tf.reshape(tf.math.reciprocal(SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap)),[-1,wrap_len])   # modelling wrapped scale output as log variance
-            #var = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_wrap)     # modelling wrapped scale output as a variance
-            von_mises = tfp.distributions.VonMises(loc=2.0*np.pi*(r2_xzy_mean_wrap-0.5), concentration=con)
-            r2_xzy_samp_vm = von_mises.sample()/(2.0*np.pi) + 0.5   # shift and scale from -pi-pi to 0-1
-            r2_xzy_samp = tf.concat([tf.reshape(r2_xzy_samp_gauss,[-1,nowrap_len]),tf.reshape(r2_xzy_samp_vm,[-1,wrap_len])],1)
-            r2_xzy_samp = tf.gather(r2_xzy_samp,tf.constant(idx_mask),axis=1)
-            r2_xzy_loc = tf.concat([tf.reshape(r2_xzy_mean_nowrap,[-1,nowrap_len]),tf.reshape(r2_xzy_mean_wrap,[-1,wrap_len])],1)
-            r2_xzy_loc = tf.gather(r2_xzy_loc,tf.constant(idx_mask),axis=1)
-            r2_xzy_scale = tf.concat([tf.reshape(r2_xzy_log_sig_sq_nowrap,[-1,nowrap_len]),tf.reshape(r2_xzy_log_sig_sq_wrap,[-1,wrap_len])],1)
-            r2_xzy_scale = tf.gather(r2_xzy_scale,tf.constant(idx_mask),axis=1)
-        else:
-            r2_xzy_loc = r2_xzy_mean_nowrap
-            r2_xzy_scale = r2_xzy_log_sig_sq_nowrap
-            r2_xzy_samp = r2_xzy_samp_gauss
+        # GET r2(x|z,y) from r1(z|y) samples
+        reconstruction_xzy = r2_xzy.calc_reconstruction(r1_zy_samp,y_ph)
 
+        # ugly but needed for now
+        # extract the means and variances of the physical parameter distributions
+        r2_xzy_mean_gauss = reconstruction_xzy[0]
+        r2_xzy_log_sig_sq_gauss = reconstruction_xzy[1]
+        r2_xzy_mean_vonmise = reconstruction_xzy[2]
+        r2_xzy_log_sig_sq_vonmise = reconstruction_xzy[3]
+        r2_xzy_mean_m1 = reconstruction_xzy[4]
+        r2_xzy_log_sig_sq_m1 = reconstruction_xzy[5]
+        r2_xzy_mean_m2 = reconstruction_xzy[6]
+        r2_xzy_log_sig_sq_m2 = reconstruction_xzy[7]
+        r2_xzy_mean_sky = reconstruction_xzy[8]
+        r2_xzy_log_sig_sq_sky = reconstruction_xzy[9]
+
+        # draw from r2(x|z,y) - the masses
+        temp_var_r2_m1 = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_m1)     # the m1 variance
+        temp_var_r2_m2 = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_m2)     # the m2 variance
+        joint = tfd.JointDistributionSequential([
+                       tfd.Independent(tfd.TruncatedNormal(r2_xzy_mean_m1,tf.sqrt(temp_var_r2_m1),0,1,validate_args=True,allow_nan_stats=True),reinterpreted_batch_ndims=0),  # m1
+            lambda b0: tfd.Independent(tfd.TruncatedNormal(r2_xzy_mean_m2,tf.sqrt(temp_var_r2_m2),0,b0,validate_args=True,allow_nan_stats=True),reinterpreted_batch_ndims=0)],    # m2
+            validate_args=True)
+        r2_xzy_samp_masses = tf.transpose(tf.reshape(joint.sample(),[2,-1]))  # sample from the m1.m2 space
+
+        # draw from r2(x|z,y) - the truncated gaussian 
+        temp_var_r2_gauss = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_gauss)
+        @tf.function    # make this s a tensorflow function
+        def truncnorm(idx,output):    # we set up a function that adds the log-likelihoods and also increments the counter
+            loc = tf.slice(r2_xzy_mean_gauss,[0,idx],[-1,1])            # take each specific parameter mean using slice
+            std = tf.sqrt(tf.slice(temp_var_r2_gauss,[0,idx],[-1,1]))   # take each specific parameter std using slice
+            tn = tfd.TruncatedNormal(loc,std,0.0,1.0)                   # define the truncated Gaussian distribution
+            return [idx+1, tf.concat([output,tf.reshape(tn.sample(),[bs_ph,1])],axis=1)] # return the updated index and new samples concattenated to the input 
+        # we do the loop until we've hit all the truncated gaussian parameters - i starts at 0 and the samples starts with a set of zeros that we cut out later
+        idx = tf.constant(0)              # initialise counter
+        nsamp = params['n_samples']       # define the number of samples (MUST be a normal int NOT tensor so can't use bs_ph)
+        output = tf.zeros([nsamp,1],dtype=tf.float32)    # initialise the output (we cut this first set of zeros out later
+        condition = lambda i,output: i<gauss_len         # define the while loop stopping condition
+        _,r2_xzy_samp_gauss = tf.while_loop(condition, truncnorm, loop_vars=[idx,output],shape_invariants=[idx.get_shape(), tf.TensorShape([nsamp,None])])
+        r2_xzy_samp_gauss = tf.slice(tf.reshape(r2_xzy_samp_gauss,[-1,gauss_len+1]),[0,1],[-1,-1])   # cut out the actual samples - delete the initial vector of zeros
+
+        # draw from r2(x|z,y) - the vonmises part
+        temp_var_r2_vonmise = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_vonmise)
+        con = tf.reshape(tf.math.reciprocal(temp_var_r2_vonmise),[-1,vonmise_len])   # modelling wrapped scale output as log variance
+        von_mises = tfp.distributions.VonMises(loc=2.0*np.pi*(r2_xzy_mean_vonmise-0.5), concentration=con)
+        r2_xzy_samp_vonmise = tf.reshape(von_mises.sample()/(2.0*np.pi) + 0.5,[-1,vonmise_len])   # sample from the von mises distribution and shift and scale from -pi-pi to 0-1
+        
+        # draw from r2(x|z,y) - the von mises Fisher 
+        temp_var_r2_sky = SMALL_CONSTANT + tf.exp(r2_xzy_log_sig_sq_sky)
+        con = tf.reshape(tf.math.reciprocal(temp_var_r2_sky),[bs_ph])   # modelling wrapped scale output as log variance - only 1 concentration parameter for all sky
+        von_mises_fisher = tfp.distributions.VonMisesFisher(
+                          mean_direction=tf.math.l2_normalize(tf.reshape(r2_xzy_mean_sky,[bs_ph,3]),axis=1),
+                          concentration=con)   # define p_vm(2*pi*mu,con=1/sig^2)
+        xyz = tf.reshape(von_mises_fisher.sample(),[bs_ph,3])          # sample the distribution
+        samp_ra = tf.math.floormod(tf.atan2(tf.slice(xyz,[0,1],[-1,1]),tf.slice(xyz,[0,0],[-1,1])),2.0*np.pi)/(2.0*np.pi)   # convert to the rescaled 0->1 RA from the unit vector
+        samp_dec = (tf.asin(tf.slice(xyz,[0,2],[-1,1])) + 0.5*np.pi)/np.pi                       # convert to the rescaled 0->1 dec from the unit vector
+        r2_xzy_samp_sky = tf.reshape(tf.concat([samp_ra,samp_dec],axis=1),[bs_ph,2])             # group the sky samples
+
+        # combine the samples
+        r2_xzy_samp = tf.concat([r2_xzy_samp_gauss,r2_xzy_samp_vonmise,r2_xzy_samp_masses,r2_xzy_samp_sky],axis=1)
+        r2_xzy_samp = tf.gather(r2_xzy_samp,tf.constant(idx_mask),axis=1)
 
         # VARIABLES LISTS
         var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
@@ -1128,16 +1242,13 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     # ESTIMATE TEST SET RECONSTRUCTION PER-PIXEL APPROXIMATE MARGINAL LIKELIHOOD and draw from q(x|y)
     ns = params['n_samples'] # number of samples to save per reconstruction
 
-    if params['reduce'] == True or n_filters_r1 != None:
-        y_data_test_exp = np.tile(y_data_test,(ns,1,1))/y_normscale
-    else:
-        y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale
+    y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale
+    y_data_test_exp = y_data_test_exp.reshape(-1,params['ndata'],num_det)
     run_startt = time.time()
-    #XS = session.run(r2_xzy_samp,feed_dict={y_ph:y_data_test_exp})
-    xs, loc, scale, mode_weights = session.run([r2_xzy_samp,r2_xzy_loc,r2_xzy_scale,r1_weight],feed_dict={y_ph:y_data_test_exp})
-    run_endt = time.time()
+    xs, mode_weights = session.run([r2_xzy_samp,r1_weight],feed_dict={bs_ph:ns,y_ph:y_data_test_exp})
+    run_endt = time.time()        
 
-    return xs, loc, scale, (run_endt - run_startt), mode_weights
+    return xs, (run_endt - run_startt), mode_weights
 
 def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_files,normscales,y_data_train_noisefree,y_normscale):    
 

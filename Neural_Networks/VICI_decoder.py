@@ -13,7 +13,7 @@ from Neural_Networks import vae_utils
 
 class VariationalAutoencoder(object):
 
-    def __init__(self, name, wrap_mask, nowrap_mask, n_input1=4, n_input2=256, n_output=3, n_weights=2048, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, conv_strides=1, pool_strides=1, num_det=1, batch_norm=False,by_channel=False, weight_init='xavier'):
+    def __init__(self, name, wrap_mask, nowrap_mask, m1_mask, m2_mask, sky_mask, n_input1=4, n_input2=256, n_output=3, n_weights=2048, n_hlayers=2, drate=0.2, n_filters=8, filter_size=8, maxpool=4, n_conv=2, conv_strides=1, pool_strides=1, num_det=1, batch_norm=False,by_channel=False, weight_init='xavier'):
         
         self.n_input1 = n_input1                    # actually the output size
         self.n_input2 = n_input2                    # actually the output size
@@ -28,8 +28,6 @@ class VariationalAutoencoder(object):
         self.pool_strides = pool_strides
         self.name = name                          # the name of the network
         self.drate = drate                        # dropout rate
-        self.wrap_mask = wrap_mask                # mask identifying wrapped indices
-        self.nowrap_mask = nowrap_mask            # mask identifying non-wrapped indices
         self.num_det = num_det
         self.batch_norm = batch_norm
         self.by_channel = by_channel
@@ -38,11 +36,22 @@ class VariationalAutoencoder(object):
         network_weights = self._create_weights()
         self.weights = network_weights
 
-        self.nonlinear_loc_nowrap = tf.sigmoid    # activation for non-wrapped location params
-        self.nonlinear_loc_wrap = tf.sigmoid      # activation for wrapped location params
-        self.nonlinear_scale_nowrap = tf.identity # activation for non-wrapped scale params
-        self.nonlinear_scale_wrap = tf.nn.relu    # activation for wrapped scale params  
-        self.nonlinearity = tf.nn.relu            # activation between hidden layers
+        self.wrap_mask = wrap_mask                  # mask identifying wrapped indices
+        self.nowrap_mask = nowrap_mask              # mask identifying non-wrapped indices
+        self.m1_mask = m1_mask                      # the mask identifying the m1 parameter
+        self.m2_mask = m2_mask                      # the mask identifying the m2 parameter
+        self.sky_mask = sky_mask                    # the mask identifying the sky (RA,dec) parameters
+        self.nonlinear_loc_nowrap = tf.sigmoid      # activation for non-wrapped location params
+        self.nonlinear_loc_wrap = tf.sigmoid        # activation for wrapped location params
+        self.nonlinear_loc_m1 = tf.sigmoid          # activation for mass params
+        self.nonlinear_loc_m2 = tf.sigmoid          # activation for mass params
+        self.nonlinear_loc_sky = tf.identity        # activation for sky params
+        self.nonlinear_scale_nowrap = tf.identity   # activation for non-wrapped scale params
+        self.nonlinear_scale_wrap = tf.nn.relu      # activation for wrapped scale params
+        self.nonlinear_scale_m1 = tf.nn.relu        # activation for mass params
+        self.nonlinear_scale_m2 = tf.nn.relu        # activation for mass params  
+        self.nonlinear_scale_sky = tf.nn.relu       # activation for sky params
+        self.nonlinearity = tf.nn.relu              # activation between hidden layers
 
     def calc_reconstruction(self, z, y):
         with tf.name_scope("VICI_decoder"):
@@ -51,7 +60,7 @@ class VariationalAutoencoder(object):
             if self.n_conv is not None:
                 if self.by_channel == True:
     #                conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], 1])
-                    conv_pool = tf.reshape(y, shape=[-1, 1, y.shape[1], self.num_det])
+                    conv_pool = tf.reshape(y, shape=[-1, 1, self.n_input2, self.num_det])
                     for i in range(self.n_conv):            
                         weight_name = 'w_conv_' + str(i)
                         bias_name = 'b_conv_' + str(i)
@@ -88,25 +97,25 @@ class VariationalAutoencoder(object):
             for i in range(self.n_hlayers):
                 weight_name = 'w_hidden_' + str(i)
                 bias_name = 'b_hidden' + str(i)
+                bnorm_name = 'bn_hidden' + str(i)
                 hidden_pre = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_decoder'][weight_name]), self.weights['VICI_decoder'][bias_name])
                 hidden_post = self.nonlinearity(hidden_pre)
-                if self.batch_norm == True:
-                    hidden_batchNorm = tf.nn.batch_normalization(hidden_post,tf.Variable(tf.zeros([hidden_post.shape[1]], dtype=tf.float32)),tf.Variable(tf.ones([hidden_post.shape[1]], dtype=tf.float32)),None,None,0.000001)
-                    hidden_dropout = tf.layers.dropout(hidden_batchNorm,rate=self.drate)
-                else:
-                    hidden_dropout = tf.layers.dropout(hidden_post,rate=self.drate)
+                hidden_batchnorm = tf.nn.batch_normalization(hidden_post,tf.Variable(tf.zeros([self.n_weights[i]], dtype=tf.float32)),tf.Variable(tf.ones([self.n_weights[i]], dtype=tf.float32)),None,None,1e-6,name=bnorm_name)
+                hidden_dropout = tf.layers.dropout(hidden_batchnorm,rate=self.drate)
             loc_all = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_decoder']['w_loc']), self.weights['VICI_decoder']['b_loc'])
             scale_all = tf.add(tf.matmul(hidden_dropout, self.weights['VICI_decoder']['w_scale']), self.weights['VICI_decoder']['b_scale'])
-
             # split up the output into non-wrapped and wrapped params and apply appropriate activation
-            loc_nowrap = self.nonlinear_loc_nowrap(tf.boolean_mask(loc_all,self.nowrap_mask,axis=1))
-            scale_nowrap = self.nonlinear_scale_nowrap(tf.boolean_mask(scale_all,self.nowrap_mask,axis=1))
-            if np.sum(self.wrap_mask)>0:
-                loc_wrap = self.nonlinear_loc_wrap(tf.boolean_mask(loc_all,self.wrap_mask,axis=1))
-                scale_wrap = -1.0*self.nonlinear_scale_wrap(tf.boolean_mask(scale_all,self.wrap_mask,axis=1))
-                return loc_nowrap, scale_nowrap, loc_wrap, scale_wrap
-            else:
-                return loc_nowrap, scale_nowrap
+            loc_nowrap = self.nonlinear_loc_nowrap(tf.boolean_mask(loc_all,self.nowrap_mask + [False],axis=1))   # add an extra null element to the mask
+            scale_nowrap = self.nonlinear_scale_nowrap(tf.boolean_mask(scale_all,self.nowrap_mask[:-1],axis=1))  # ignore last element because scale_all is 1 shorter
+            loc_m1 = self.nonlinear_loc_m1(tf.boolean_mask(loc_all,self.m1_mask + [False],axis=1))             # add an extra null element to the mask
+            scale_m1 = -1.0*self.nonlinear_scale_m1(tf.boolean_mask(scale_all,self.m1_mask[:-1],axis=1))      # ignore last element because scale_all is 1 shorter
+            loc_m2 = self.nonlinear_loc_m2(tf.boolean_mask(loc_all,self.m2_mask + [False],axis=1))            # add an extra null element to the mask
+            scale_m2 = -1.0*self.nonlinear_scale_m2(tf.boolean_mask(scale_all,self.m2_mask[:-1],axis=1))    # ignore last element because scale_all is 1 shorter
+            loc_wrap = self.nonlinear_loc_wrap(tf.boolean_mask(loc_all,self.wrap_mask + [False],axis=1))    # add an extra null element to the mask 
+            scale_wrap = -1.0*self.nonlinear_scale_wrap(tf.boolean_mask(scale_all,self.wrap_mask[:-1],axis=1))  # ignore last element because scale_all is 1 shorter
+            loc_sky = self.nonlinear_loc_sky(tf.boolean_mask(loc_all,self.sky_mask + [True],axis=1))        # add an extra element to the mask for the 3rd sky parameter
+            scale_sky = -1.0*self.nonlinear_scale_sky(tf.boolean_mask(scale_all,self.sky_mask[:-1],axis=1))    # ignore last element because scale_all is 1 shorter
+            return loc_nowrap, scale_nowrap, loc_wrap, scale_wrap, loc_m1, scale_m1, loc_m2, scale_m2, loc_sky, scale_sky
 
     def _create_weights(self):
         all_weights = collections.OrderedDict()
@@ -138,19 +147,20 @@ class VariationalAutoencoder(object):
                     tf.summary.histogram(bias_name, all_weights['VICI_decoder'][bias_name])
                     dummy = self.n_filters[i]
 
-                total_pool_stride_sum = 0
-                for j in range(len(self.maxpool)):
-                    if self.maxpool[j] != 1 and self.pool_strides[j] != 1:
-                        total_pool_stride_sum += 1
-                    else:
-                        if self.maxpool[j] != 1:
-                            total_pool_stride_sum += 1
-                        if self.pool_strides[j] != 1:
-                            total_pool_stride_sum += 1
-                    if self.conv_strides[j] != 1:
-                        total_pool_stride_sum += 1
+#                total_pool_stride_sum = 0
+#                for j in range(len(self.maxpool)):
+#                    if self.maxpool[j] != 1 and self.pool_strides[j] != 1:
+#                        total_pool_stride_sum += 1
+#                    else:
+#                        if self.maxpool[j] != 1:
+#                            total_pool_stride_sum += 1
+#                        if self.pool_strides[j] != 1:
+#                            total_pool_stride_sum += 1
+#                    if self.conv_strides[j] != 1:
+#                        total_pool_stride_sum += 1
                 if self.by_channel == True:
-                    fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[i]/(2**total_pool_stride_sum))
+#                    fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[i]/(2**total_pool_stride_sum))
+                    fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[-1]/(np.prod(self.maxpool)))
                 else:
                     fc_input_size = self.n_input1 + int(self.n_input2*self.n_filters[i]/(2**total_pool_stride_sum)*2)
             else:
@@ -164,15 +174,14 @@ class VariationalAutoencoder(object):
                 tf.summary.histogram(weight_name, all_weights['VICI_decoder'][weight_name])
                 tf.summary.histogram(bias_name, all_weights['VICI_decoder'][bias_name])
                 fc_input_size = self.n_weights[i]
-            all_weights['VICI_decoder']['w_loc'] = tf.Variable(vae_utils.xavier_init(self.n_weights[-1], self.n_output),dtype=tf.float32)
-            all_weights['VICI_decoder']['b_loc'] = tf.Variable(tf.zeros([self.n_output], dtype=tf.float32), dtype=tf.float32)
+            all_weights['VICI_decoder']['w_loc'] = tf.Variable(vae_utils.xavier_init(self.n_weights[-1], self.n_output+1),dtype=tf.float32)  # +1 for extra sky param
+            all_weights['VICI_decoder']['b_loc'] = tf.Variable(tf.zeros([self.n_output+1], dtype=tf.float32), dtype=tf.float32) # +1 for extra sky param
             tf.summary.histogram('w_loc', all_weights['VICI_decoder']['w_loc'])
             tf.summary.histogram('b_loc', all_weights['VICI_decoder']['b_loc'])
-            all_weights['VICI_decoder']['w_scale'] = tf.Variable(vae_utils.xavier_init(self.n_weights[-1], self.n_output),dtype=tf.float32)
-            all_weights['VICI_decoder']['b_scale'] = tf.Variable(tf.zeros([self.n_output], dtype=tf.float32), dtype=tf.float32)
+            all_weights['VICI_decoder']['w_scale'] = tf.Variable(vae_utils.xavier_init(self.n_weights[-1], self.n_output-1),dtype=tf.float32) # # -1 for common concentration par in VMF dist
+            all_weights['VICI_decoder']['b_scale'] = tf.Variable(tf.zeros([self.n_output-1], dtype=tf.float32), dtype=tf.float32)  # -1 for common concentration par in VMF dist
             tf.summary.histogram('w_scale', all_weights['VICI_decoder']['w_scale'])
             tf.summary.histogram('b_scale', all_weights['VICI_decoder']['b_scale'])
             
-            all_weights['prior_param'] = collections.OrderedDict()
-        
+            all_weights['prior_param'] = collections.OrderedDict() 
         return all_weights

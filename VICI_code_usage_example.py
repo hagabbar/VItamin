@@ -108,7 +108,7 @@ def get_params():
     ndata = 256                    # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase',
                  'theta_jn','psi','ra','dec'] # parameters to randomize
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run182' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run186' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
     bilby_results_label = 'all_4_samplers' # label given to bilby results directory
     r = 2                               # number (to the power of 2) of test samples to use for testing
     pe_test_num = 256                   # total number of test samples available to use in directory
@@ -117,8 +117,8 @@ def get_params():
     tset_split = int(1e3)               # number of training samples in each training data file
     save_interval = int(5e4)            # number of iterations to save model and plot validation results corner plots
     ref_geocent_time=1126259642.5       # reference gps time (not advised to change this)
-    load_chunk_size = 1e6               # Number of training samples to load in at a time.
-    batch_size = 128                     # Number training samples shown to neural network per iteration
+    load_chunk_size = 1e4               # Number of training samples to load in at a time.
+    batch_size = 256                     # Number training samples shown to neural network per iteration
     params = dict(
         make_corner_plots = True,        # if True, make corner plots
         make_kl_plot = False,           # If True, go through kl plotting function
@@ -160,30 +160,30 @@ def get_params():
         
         # FYI, each item in lists below correspond to each layer in networks (i.e. first item first layer)
         # pool size and pool stride should be same number in each layer
-        n_filters_r1 = [33, 33, 33, 33], # number of convolutional filters to use in r1 network
-        n_filters_r2 = [33, 33, 33, 33],  # number of convolutional filters to use in r2 network
-        n_filters_q = [33, 33, 33, 33],   # number of convolutional filters to use in q network
-        filter_size_r1 = [3,3,3,3],#[5, 8, 11, 10],#[3,3,3,3],      # size of convolutional fitlers in r1 network
-        filter_size_r2 = [3,3,3,3],#[5, 8, 11, 10],#[3,3,3,3],      # size of convolutional filters in r2 network
-        filter_size_q =  [3,3,3,3],#[5, 8, 11, 10],#[3,3,3,3],       # size of convolutional filters in q network
-        drate = 0.5,                     # dropout rate to use in fully-connected layers
-        maxpool_r1 = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],          # size of maxpooling to use in r1 network
-        conv_strides_r1 = [1,1,1,1],      # size of convolutional stride to use in r1 network
-        pool_strides_r1 = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],      # size of max pool stride to use in r1 network
-        maxpool_r2 = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],          # size of max pooling to use in r2 network
-        conv_strides_r2 = [1,1,1,1],     # size of convolutional stride in r2 network
-        pool_strides_r2 = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],     # size of max pool stride in r2 network
-        maxpool_q = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],           # size of max pooling to use in q network
-        conv_strides_q = [1,1,1,1],      # size of convolutional stride to use in q network
-        pool_strides_q = [1,2,1,1],#[1, 2, 1, 2],#[1,2,1,1],      # size of max pool stride to use in q network
+        n_filters_r1 = [33, 33, 33, 33,33], # number of convolutional filters to use in r1 network
+        n_filters_r2 = [33, 33, 33],  # number of convolutional filters to use in r2 network
+        n_filters_q = [33, 33, 33],   # number of convolutional filters to use in q network
+        filter_size_r1 = [5, 8, 11, 10, 10],#[5, 8, 11, 10],#[3,3,3,3],      # size of convolutional fitlers in r1 network
+        filter_size_r2 = [5, 8, 11],#[5, 8, 11, 10],#[3,3,3,3],      # size of convolutional filters in r2 network
+        filter_size_q =  [5, 8, 11],#[5, 8, 11, 10],#[3,3,3,3],       # size of convolutional filters in q network
+        drate = 0.2,                     # dropout rate to use in fully-connected layers
+        maxpool_r1 = [1, 2, 1, 2, 1],#[1, 2, 1, 2],#[1,2,1,1],          # size of maxpooling to use in r1 network
+        conv_strides_r1 = [1,1,1,1,1],      # size of convolutional stride to use in r1 network
+        pool_strides_r1 = [1, 2, 1, 2, 1],#[1, 2, 1, 2],#[1,2,1,1],      # size of max pool stride to use in r1 network
+        maxpool_r2 = [1, 2, 1],#[1, 2, 1, 2],#[1,2,1,1],          # size of max pooling to use in r2 network
+        conv_strides_r2 = [1,1,1],     # size of convolutional stride in r2 network
+        pool_strides_r2 = [1, 2, 1],#[1, 2, 1, 2],#[1,2,1,1],     # size of max pool stride in r2 network
+        maxpool_q = [1, 2, 1],#[1, 2, 1, 2],#[1,2,1,1],           # size of max pooling to use in q network
+        conv_strides_q = [1,1,1],      # size of convolutional stride to use in q network
+        pool_strides_q = [1, 2, 1],#[1, 2, 1, 2],#[1,2,1,1],      # size of max pool stride to use in q network
         ramp_start = 1e4,                # starting iteration of KL divergence ramp (if using)
         ramp_end = 1e5,                  # ending iteration of KL divergence ramp (if using)
         save_interval=save_interval,           # interval at which to save inference model weights
         plot_interval=save_interval,           # interval over which validation results plotting is done
         z_dimension=10,#100,#57,                    # number of latent space dimensions of model 
         n_weights_r1 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the r1 model (inverse reconstruction)
-        n_weights_r2 = [n_fc,n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the r2 model (inverse reconstruction)
-        n_weights_q = [n_fc,n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the q model (inverse reconstruction)
+        n_weights_r2 = [n_fc,n_fc],             # number of dimensions of the intermediate layers of encoders and decoders in the r2 model (inverse reconstruction)
+        n_weights_q = [n_fc,n_fc],              # number of dimensions of the intermediate layers of encoders and decoders in the q model (inverse reconstruction)
         duration = 1.0,                             # length of training/validation/test sample time series in seconds (haven't tried using at any other value than 1s)
         r = r,                                      # the grid dimension for the output tests (i.e. r**2 == total number of testing samples used)
         rand_pars=rand_pars,              # which source parameters to randomize
@@ -192,7 +192,6 @@ def get_params():
         ref_geocent_time=ref_geocent_time,            # reference gps time
         training_data_seed=43,                        # tensorflow training random seed number
         testing_data_seed=44,                         # tensorflow testing random seed number
-        wrap_pars=['phase','psi','ra'],               # Parameters to apply Von Mises wrapping on (not advised to change) 
         boost_pars=['ra','dec'],
         gauss_pars=['luminosity_distance','geocent_time','theta_jn'],        # parameters that require a truncated gaussian 
         vonmise_pars=['phase','psi'],                                        # parameters that get wrapped on the 1D parameter 

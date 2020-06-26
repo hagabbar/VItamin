@@ -134,6 +134,7 @@ class VariationalAutoencoder(object):
                     tf.summary.histogram(bias_name, all_weights['VICI_encoder'][bias_name])
                     dummy = self.n_filters[i]
 
+                """
                 total_pool_stride_sum = 0
                 for j in range(len(self.maxpool)):
                     if self.maxpool[j] != 1 and self.pool_strides[j] != 1:
@@ -145,8 +146,9 @@ class VariationalAutoencoder(object):
                             total_pool_stride_sum += 1
                     if self.conv_strides[j] != 1:
                         total_pool_stride_sum += 1
+                """
                 if self.by_channel == True:
-                    fc_input_size = int(self.n_input*self.n_filters[i]/(2**total_pool_stride_sum))
+                    fc_input_size = int(self.n_input*self.n_filters[-1]/(np.prod(self.maxpool))) 
                 else:
                     fc_input_size = int((self.n_input*self.n_filters[i]/(2**total_pool_stride_sum)*2))
             else:
