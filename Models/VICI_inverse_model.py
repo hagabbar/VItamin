@@ -177,7 +177,8 @@ def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
     for i,k in enumerate(data_temp['rand_pars']):
         par_min = k.decode('utf-8') + '_min'
         par_max = k.decode('utf-8') + '_max'
-
+        if par_min == 'psi_min':
+            data['x_data'][:,i] = np.remainder(data['x_data'][:,i],np.pi)
         data['x_data'][:,i]=(data['x_data'][:,i] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
     x_data = data['x_data']
     y_data = data['y_data_noisefree']
@@ -426,6 +427,8 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                           loc=2.0*np.pi*(tf.reshape(r2_xzy_mean_vonmise,[-1,vonmise_len])-0.5),   # remap 0>1 mean onto -pi->pi range
                           concentration=con)
             reconstr_loss_vonmise = von_mises.log_prob(2.0*np.pi*(tf.reshape(tf.boolean_mask(x_ph,vonmise_mask,axis=1),[-1,vonmise_len]) - 0.5))   # 2pi is the von mises input range
+            
+            reconstr_loss_vonmise = reconstr_loss_vonmise[:,0] + reconstr_loss_vonmise[:,1]
 
             # computing Gaussian likelihood for von mises parameters to be faded away with the ramp
             gauss_vonmises = tfp.distributions.MultivariateNormalDiag(
@@ -532,7 +535,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         else:
             rmp = 1.0              
 
-        # train the network    
+        # train the network 
         session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, ramp:rmp}) 
  
         # train to minimise the cost function

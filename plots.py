@@ -246,7 +246,7 @@ class make_plots:
                 VI_pred_all = []
                 for i in range(params['r']*params['r']):
                     # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-                    VI_pred, _, _, dt,_  = model.run(params, np.expand_dims(sig_test[i],axis=0), np.shape(par_test)[1],
+                    VI_pred, dt, _  = model.run(params, np.expand_dims(sig_test[i],axis=0), np.shape(par_test)[1],
                                                              y_normscale,
                                                              "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                     VI_pred_all.append(VI_pred)
@@ -310,6 +310,8 @@ class make_plots:
                      p = q + '_post'
                      par_min = q + '_min'
                      par_max = q + '_max'
+                     if p == 'psi_post':
+                         data_temp[p] = np.remainder(data_temp[p],np.pi)
                      if sampler == 'emcee1':
                          data_temp[p] = emcee_pruned_samples[:,q_idx]
                      else:
@@ -345,82 +347,6 @@ class make_plots:
             dt = np.array([np.min(dt),np.max(dt),np.median(dt)])
 
             return XS_all, dt
-            """
-            # Define variables
-            pos_test = []
-            samples = np.zeros((params['r']*params['r'],params['n_samples'],params['ndata']+1))
-            cnt=0
-            test_set_dir = params['kl_set_dir'] + '_' + sampler
-
-            # Load test set
-            timet=[]
-            default_n_samps = params['n_samples']
-            for i in range(params['r']):
-                for j in range(params['r']):
-                    # TODO: remove this bandaged phase file calc
-                    f = h5py.File('%s/test_samp_%d.h5py' % (test_set_dir,cnt), 'r+')
-
-                    # select samples from posterior randomly
-                    phase = (f['phase_post'][:] - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
-
-                    if params['do_mc_eta_conversion']:
-                        m1 = f['mass_1_post'][:]
-                        m2 = f['mass_2_post'][:]
-                        eta = (m1*m2)/(m1+m2)**2
-                        mc = np.sum([m1,m2], axis=0)*eta**(3.0/5.0)
-                    else:
-                        m1 = (f['mass_1_post'][:] - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
-                        m2 = (f['mass_2_post'][:] - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
-                    t0 = (f['geocent_time_post'][:] - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
-                    dist=(f['luminosity_distance_post'][:] - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
-                    #theta_jn=f['theta_jn_post'][:][shuffling]
-                    timet.append(np.array(f['runtime']))
-                    if params['do_mc_eta_conversion']:
-                        f_new=np.array([mc,phase,t0,eta]).T
-                    else:
-                        f_new=np.array([m1,phase,t0,m2,dist]).T
-                    f_new=f_new[:params['n_samples'],:]
-          
-                    # resize array if less than 5000 samples
-                    if f_new.shape[0] < default_n_samps:
-                        default_n_samps = f_new.shape[0]
-                        samples = np.delete(samples,np.arange(default_n_samps,samples.shape[1]),1) 
-                    
-                    samples[cnt,:default_n_samps,:]=f_new[:default_n_samps,:]
-
-                    # get true scalar parameters
-                    if params['do_mc_eta_conversion']:
-                        m1 = np.array(f['mass_1'])
-                        m2 = np.array(f['mass_2'])
-                        eta = (m1*m2)/(m1+m2)**2
-                        mc = np.sum([m1,m2])*eta**(3.0/5.0)
-                        pos_test.append([mc,np.array(f['phase']),(np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2]),eta])
-                    else:
-                        m1 = (np.array(f['mass_1']) - (params['prior_min'][0])) / (params['prior_max'][0] - params['prior_min'][0])
-                        m2 = (np.array(f['mass_2']) - (params['prior_min'][3])) / (params['prior_max'][3] - params['prior_min'][3])
-                        t0 = (np.array(f['geocent_time']) - (params['prior_min'][2])) / (params['prior_max'][2] - params['prior_min'][2])
-                        dist = (np.array(f['luminosity_distance']) - (params['prior_min'][4])) / (params['prior_max'][4] - params['prior_min'][4])
-                        phase = (np.array(f['phase']) - (params['prior_min'][1])) / (params['prior_max'][1] - params['prior_min'][1])
-                        pos_test.append([m1,phase,t0,m2,dist])
-                    cnt += 1
-                    f.close()
-
-            pos_test = np.array(pos_test)
-            # save time per sample
-            timet = np.array(timet)
-            timet = np.array([np.min(timet),np.max(timet),np.median(timet)])
-
-            # rescale all samples to be from 0 to 1
-            samples
-
-            new_samples = []
-            for i in range(samples.shape[0]):
-                new_samples.append(samples[i].T)
-            #samples = samples.reshape(samples.shape[0],samples.shape[2],samples.shape[1])
-            samples = np.array(new_samples)
-            """
-
-            return samples, timet
 
         def confidence_bd(samp_array):
             """
@@ -649,7 +575,7 @@ class make_plots:
                     y = sig_test[cnt,:].reshape(1,sig_test.shape[1])
                  # The trained inverse model weights can then be used to infer a probability density of solutions 
 #given new measurements
-                x, _, _, dt,_  = model.run(self.params, y, np.shape(par_test)[1],
+                x, dt, _  = model.run(self.params, y, np.shape(par_test)[1],
                                                      normscales,
                                                      "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])
 
@@ -1061,9 +987,9 @@ class make_plots:
         else:
             # TODO: uncomment this
             #hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
-            hf = h5py.File('second_sub_plottind_data/plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
+            hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
      
-        """
+        """ 
         # 4 pannel KL approach
         fig_kl, axis_kl = plt.subplots(2,2,figsize=(6,6),sharey=True,sharex=True)
         for k in range(len(usesamps)-1):
@@ -1154,10 +1080,11 @@ class make_plots:
         plt.close(fig_kl)
         hf.close()
         return
-        """ 
+        """
         
         tot_kl_grey = np.array([])
         fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
+        time_dict = {}
         # single plot KL approach 
         for i in range(len(usesamps)):
             for j in range(tmp_idx):
@@ -1170,20 +1097,20 @@ class make_plots:
                     # currently not doing KL of approaches with themselves, so skip here
                     continue
                     if self.params['load_plot_data'] == False:
-                        set1,time1 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
-                        set2,time2 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
+                        set1,time_dict[sampler1] = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1)
+                        set2,time_dict[sampler2] = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
                 else:
                     sampler1, sampler2 = samplers[i]+'1', samplers[::-1][j]+'1'
                    
                     if self.params['load_plot_data'] == False:
-                        set1,time1 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1,vitamin_pred_made=vi_pred_made)
-                        set2,time2 = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2,vitamin_pred_made=vi_pred_made)
+                        set1,time_dict[sampler1] = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1,vitamin_pred_made=vi_pred_made)
+                        set2,time_dict[sampler2] = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2,vitamin_pred_made=vi_pred_made)
 
                         # check if vitamin test posteriors were generated for the first time
                         if sampler1 == 'vitamin1' and vi_pred_made == None:
-                            vi_pred_made = [set1,time1]
+                            vi_pred_made = [set1,time_dict[sampler1]]
                         elif sampler2 == 'vitamin1' and vi_pred_made == None:
-                            vi_pred_made = [set2,time2]
+                            vi_pred_made = [set2,time_dict[sampler2]]
 
                 if self.params['load_plot_data'] == True:
                     tot_kl = np.array(hf['%s-%s' % (sampler1,sampler2)])
@@ -1198,9 +1125,6 @@ class make_plots:
                             indi_kl[r,:] = compute_kl(set1[r],set2[r],[sampler1,sampler2],one_D=True)
                             print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
                     for r in range(self.params['r']**2):
-                        #if snrs_test[r,0] < 8.0:
-                        #    continue
-                        #else:
                         tot_kl.append(compute_kl(set1[r],set2[r],[sampler1,sampler2]))
                         print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
                     tot_kl = np.array(tot_kl)
@@ -1210,33 +1134,11 @@ class make_plots:
                     # Save results to h5py file
                     hf.create_dataset('%s-%s' % (sampler1,sampler2), data=tot_kl)
                
-#                logbins = np.histogram_bin_edges(tot_kl,bins='fd') 
-                print(tot_kl)
                 logbins = np.logspace(-3,2.5,50)
                 logbins_indi = np.logspace(-3,3,50)
                 #logbins = 50
 
                 if samplers[i] == 'vitamin' or samplers[::-1][j] == 'vitamin':
-#                    logbins = 25
-#                    logbins = np.logspace(-1,2.5,50)
-                    
-                    # plot x parameter values as a function of posterior kl
-#                    plt.close()
-#                    plt.scatter(tot_kl[:],np.array(snrs_test)[:tot_kl.shape[0],0],s=1.0)
-#                    plt.ylabel('SNR')
-#                    plt.xlabel('KL')
-#                    plt.savefig('%s/latest_%s/kl_vs_SNR' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
-#                    plt.close()
-#                    exit()
-                    
-#                    for m in range(self.pos_test.shape[1]):
-#                        plt.scatter(tot_kl[:],self.pos_test[:,m],s=1.0)
-#                        plt.ylabel('Parameter %d' % m)
-#                        plt.xlabel('KL')
-#                        plt.savefig('%s/latest_%s/kl_vs_x_%d' % (self.params['plot_dir'],self.params['run_label'],m),dpi=360)
-#                        plt.close()
-#                    exit()
-                    #tot_kl /= 10.0
                     # print 10 worst and 10 best kl
                     print(tot_kl.argsort()[-15:][::-1])
                     print(np.sort(tot_kl)[-15:][::-1])
@@ -1292,7 +1194,7 @@ class make_plots:
 
             tmp_idx -= 1
             if self.params['load_plot_data'] == False:
-                runtime[sampler1] = time1
+                runtime[sampler1] = time_dict[sampler1]
 
         # plot non indi bayesian kls
         axis_kl.hist(tot_kl_grey,bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\textrm{other samplers vs. other samplers}$',zorder=1)
@@ -1302,11 +1204,6 @@ class make_plots:
         if self.params['load_plot_data'] == False:
 #            # Print sampler runtimes
             for i in range(len(usesamps)):
-#                if self.params['load_plot_data'] == True:
-#                    hf[]
-#                    print('%s sampler runtimes: %s' % (samplers[usesamps[i]]+'1',str(runetime)))
-#                else:
-                    # Save runtime information
                 hf.create_dataset('%s_runtime' % (samplers[i]), data=np.array(runtime[samplers[i]+'1']))
                 print('%s sampler runtimes: %s' % (samplers[i]+'1',str(runtime[samplers[i]+'1'])))
 
@@ -1326,7 +1223,7 @@ class make_plots:
         axis_kl.set_yscale('log')
         axis_kl.grid(False)
         fig_kl.canvas.draw()
-        fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
+#        fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig_kl)
 
         if self.params['make_indi_kl'] == True:

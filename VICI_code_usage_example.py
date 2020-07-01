@@ -91,7 +91,7 @@ bounds = {'mass_1_min':35.0, 'mass_1_max':80.0,
         'luminosity_distance_min':1000.0, 'luminosity_distance_max':3000.0}
 
 # define which gpu to use during training
-gpu_num = str(1)                                            # first GPU used by default
+gpu_num = str(0)                                            # first GPU used by default
 os.environ["CUDA_VISIBLE_DEVICES"]=gpu_num
 
 # Let GPU consumption grow as needed
@@ -108,9 +108,9 @@ def get_params():
     ndata = 256                    # length of input to NN == fs * num_detectors
     rand_pars = ['mass_1','mass_2','luminosity_distance','geocent_time','phase',
                  'theta_jn','psi','ra','dec'] # parameters to randomize
-    run_label = 'multi-modal_%ddet_%dpar_%dHz_run186' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
+    run_label = 'multi-modal_%ddet_%dpar_%dHz_run188' % (len(fixed_vals['det']),len(rand_pars),ndata) # label of run
     bilby_results_label = 'all_4_samplers' # label given to bilby results directory
-    r = 5                               # number (to the power of 2) of test samples to use for testing
+    r = 15                               # number (to the power of 2) of test samples to use for testing
     pe_test_num = 256                   # total number of test samples available to use in directory
     tot_dataset_size = int(1e7)         # total number of training samples available to use
 
@@ -125,9 +125,9 @@ def get_params():
         make_indi_kl=False,             # If True, generate individual KL plots
         make_pp_plot = False,            # If True, go through pp plotting function
         make_loss_plot = False,          # If True, generate loss plot from previous plot data
-        Make_sky_plot=False,             # If True, generate sky plots on corner plots
+        Make_sky_plot=True,             # If True, generate sky plots on corner plots
         gpu_num=gpu_num,                # gpu number run is running on
-        resume_training=True,          # if True, resume training of a model from saved checkpoint
+        resume_training=False,          # if True, resume training of a model from saved checkpoint
         ndata = ndata,                  # sampling frequency * duration
         run_label=run_label,            # label for run
         bilby_results_label=bilby_results_label, # label given to results for bilby posteriors
@@ -198,14 +198,14 @@ def get_params():
         sky_pars=['ra','dec'],                                               # sky parameters
         weighted_pars=None,#['ra','dec','geocent_time'],                     # set to None if not using, parameters to weight during training
         weighted_pars_factor=1,                       # Factor by which to weight parameters if `weighted_pars` is not None.
-        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'],
+        inf_pars=['mass_1','mass_2','luminosity_distance','geocent_time','theta_jn','ra','dec'], # psi phase before ra and dec
         train_set_dir='/home/hunter.gabbard/CBC/VItamin/training_sets_second_sub_%ddet_%dpar_%dHz/tset_tot-%d_split-%d' % (len(fixed_vals['det']),len(rand_pars),ndata,tot_dataset_size,tset_split), #location of training set
         test_set_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test_waveforms' % bilby_results_label, # lovation of test set directory waveforms
         pe_dir='/home/hunter.gabbard/CBC/VItamin/condor_runs_second_paper_sub/%s/test' % bilby_results_label, # location of test set directory Bayesian PE samples
         # attempt_to_fix_astropy_bug is default directory
         KL_cycles = 1,                                                         # number of cycles to repeat for the KL approximation
-        load_plot_data=False,                                                  # Plotting data which has already been generated
-        samplers=['vitamin','dynesty','ptemcee'],#,'cpnest','emcee'],          # samplers to use when plotting (vitamin is ML approach) dynesty,ptemcee,cpnest,emcee
+        load_plot_data=True,                                                  # Plotting data which has already been generated
+        samplers=['vitamin','dynesty','ptemcee'],#,'ptemcee'],#,'cpnest','emcee'],          # samplers to use when plotting (vitamin is ML approach) dynesty,ptemcee,cpnest,emcee
 
         doPE = True,                          # if True then do bilby PE when generating new testing samples (not advised to change this)
     )
@@ -380,10 +380,12 @@ def load_data(input_dir,inf_pars,load_condor=False):
     data['y_data_noisy'] = np.concatenate(np.array(data['y_data_noisy']), axis=0)
     
 
-    # Normalise the source parameters
+    # Normalise the source parameters np.remainder(blah,np.pi)
     for i,k in enumerate(data_temp['rand_pars']):
         par_min = k.decode('utf-8') + '_min'
         par_max = k.decode('utf-8') + '_max'
+        if par_min == 'psi_min':
+            data['x_data'][:,i]=np.remainder(data['x_data'][:,i],np.pi)
         data['x_data'][:,i]=(data['x_data'][:,i] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
     x_data = data['x_data']
     y_data = data['y_data_noisefree']
@@ -404,7 +406,6 @@ def load_data(input_dir,inf_pars,load_condor=False):
             if k==m:
                 idx.append(i)
     x_data = x_data[:,idx]
-
 
     return x_data, y_data, y_data_noisy, y_normscale, snrs
 
@@ -711,6 +712,8 @@ if args.train:
              par_min = q + '_min'
              par_max = q + '_max'
              data_temp[p] = h5py.File(filename, 'r')[p][:]
+             if p == 'psi_post':
+                 data_temp[p] = np.remainder(data_temp[p],np.pi)
              if p == 'geocent_time_post':
                  data_temp[p] = data_temp[p] - params['ref_geocent_time']
              data_temp[p] = (data_temp[p] - bounds[par_min]) / (bounds[par_max] - bounds[par_min])
@@ -885,6 +888,9 @@ if args.test:
                  p = q + '_post'
                  par_min = q + '_min'
                  par_max = q + '_max'
+                 if p == 'psi_post':
+                     data_temp[p] = np.remainder(data_temp[p],np.pi)
+
                  if samp_idx == 'emcee':
                      data_temp[p] = emcee_pruned_samples[:,q_idx]
                  else:
@@ -963,10 +969,10 @@ if args.test:
     # Iterate over total number of testing samples
     for i in range(params['r']*params['r']):
 
-#        if i == 6 or i == 47 or i == 64 or i == 73 or i == 74 or i == 137 or i == 140 or i == 154 or i == 158 : # 154
-#            pass
-#        else:
-#            continue
+        if i == 221: #or i == 47 or i == 64 or i == 73 or i == 74 or i == 137 or i == 140 or i == 154 or i == 158 : # 154
+            pass
+        else:
+            continue
 
         # If True, continue through and make corner plots
         if params['make_corner_plots'] == False:
@@ -1056,11 +1062,12 @@ if args.test:
             sky_color_cycle=['blue','green','purple','orange']
             sky_color_map_cycle=['Blues','Greens','Purples','Oranges']
             for samp_idx,samp in enumerate(params['samplers'][1:]):
+                bilby_pred = samp_posteriors[samp+'1'][i]
                 if samp_idx == 0:
-                    ax_sky = plot_sky(bilby_pred[:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx])
+                    ax_sky = plot_sky(bilby_pred[:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx],trueloc=truths[-2:])
                 else:
-                    ax_sky = plot_sky(bilby_pred[:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx], ax=ax_sky)
-            ax_sky = plot_sky(VI_pred[:,-2:],filled=True,ax=ax_sky,trueloc=truths[-2:])
+                    ax_sky = plot_sky(bilby_pred[:,-2:],filled=False,cmap=sky_color_map_cycle[samp_idx],col=sky_color_cycle[samp_idx], trueloc=truths[-2:], ax=ax_sky)
+            ax_sky = plot_sky(VI_pred[:,-2:],filled=True,trueloc=truths[-2:],ax=ax_sky)
 
 
         left, bottom, width, height = [0.34, 0.82, 0.3, 0.17]
@@ -1094,7 +1101,7 @@ if args.test:
 
         # Store ML predictions for later plotting use
         VI_pred_all.append(VI_pred)
-        #exit()
+        exit()
 
     VI_pred_all = np.array(VI_pred_all)
 

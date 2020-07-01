@@ -38,7 +38,8 @@ def plot_sky(pts,contour=True,filled=False,ax=None,trueloc=None,cmap='Reds',col=
     ny = np.cos(pts[:,1])*np.sin(pts[:,0])
     nz = np.sin(pts[:,1])
     mean_n = [np.mean(nx),np.mean(ny),np.mean(nz)]
-    bestloc = [np.remainder(np.arctan2(mean_n[1],mean_n[0]),2.0*np.pi),np.arctan2(mean_n[2],np.sqrt(mean_n[0]**2 + mean_n[1]**2))]
+#    bestloc = [np.remainder(np.arctan2(mean_n[1],mean_n[0]),2.0*np.pi),np.arctan2(mean_n[2],np.sqrt(mean_n[0]**2 + mean_n[1]**2))]
+    bestloc = [trueloc[0],trueloc[1]]
 
     if ax is None:
         map = Basemap(projection='ortho',lon_0=-bestloc[0]*180/np.pi,lat_0=bestloc[1]*180/np.pi,resolution=None,celestial=True)
