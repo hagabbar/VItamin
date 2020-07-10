@@ -1,50 +1,8 @@
 ################################################################################################################
 #
-# --Variational Inference for Computational Imaging (VICI) Inverse Problem--
+# --Variational Inference for gravitational wave parameter estimation--
 # 
 # This model takes as input measured signals and infers target images/objects.
-# There are two functions: 'train' and 'run'.
-# 
-# -train-
-# takes as inputs a set of training target images/objects and a set of associated low fidelity signal predictions
-# (e.g. from simulations). It then uses a forward model pre-trained with 'VICI_forward_model.train' and generates
-# observations. With the generated observations, it learns an model to infer an approximation to the posterior of 
-# images/objects given an observation. 
-#
-# INPUTS:
-# params - list of parameters (see example for the necessary parameters).
-# x_data - 2D array of training images/objects, where different samples are along dimension 0 and
-#          values (e.g. pixel values) are along dimension 1.
-# y_data_h - 2D array of training high fidelity observations, where different samples are along 
-#            dimension 0 and values are along dimension 1. dimension 0 must be the same as that of
-#             x_data (same number of samples as high fidelity observations).
-# y_data_l - 2D array of training low fidelity observations, where different samples are along 
-#            dimension 0 and values are along dimension 1. dimension 0 must be the same as that of
-#             x_data (same number of samples as low fidelity observations).
-# save_dir - directory in which to save the weights of the trained model.
-#          
-# OUTPUTS: 
-# COST_PLOT - a vector containing the values of the cost function evaluated over a training subset
-#             at intervals specified by the parameter 'report_interval'.
-# KL_PLOT - a vector containing the values of the KL divergence evaluated over a training subset
-#           at intervals specified by the parameter 'report_interval'.
-#
-# -run-
-# loads the wights trained with 'train', takes as inputs a set of observed signals and returns samples 
-# from the approximate posterior, an empirical mean and an empirical standard deviation.
-# 
-# INPUTS:
-# params - list of parameters (see example for the necessary parameters).
-# y_data_test - 2D array of observations, where different samples are along dimension
-#               0 and values are along dimension 1.
-# siz_x_data - dimensionality of target images/objects.
-# load_dir - directory from which to load the weights of a trained model (trained with 'train').
-#
-# OUTPUTS:
-# xm - 2D array of approximate posterior empirical means, where different samples are along dimension 0.
-# xsx - 2D array of approximate posterior empirical stds, where different samples are along dimension 0.    
-# XS - 3D array of draws from the approximate posterior, where different samples (reconstructions from
-# different signals) are along dimension 0 and different draws from the same posterior are along dimension 2.
 #
 ################################################################################################################
 
@@ -64,7 +22,6 @@ from Neural_Networks import VICI_VAE_encoder
 from Neural_Networks import VICI_reduction
 from Neural_Networks import batch_manager
 from Models import VICI_inverse_model
-from data import chris_data
 import plots
 import matplotlib
 matplotlib.use('Agg')
@@ -127,7 +84,6 @@ def get_wrap_index(params):
     return wrap_mask, nowrap_mask, idx_mask
 
 def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
-#    tf.compat.v1.enable_eager_execution() 
 
     # load generated samples back in
     train_files = []
@@ -243,14 +199,11 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
 
     # USEFUL SIZES
     xsh = np.shape(x_data)
-#    ysh1b = np.shape(y_data)[1]
-#    ysh = np.int(np.round(ysh1b/8))
    
     ysh = np.shape(y_data)[1]
     n_convsteps = params['n_convsteps']
     z_dimension = params['z_dimension']
     bs = params['batch_size']
-#    filt_siz = params['filter_size']
     n_weights_r1 = params['n_weights_r1']
     n_weights_r2 = params['n_weights_r2']
     n_weights_q = params['n_weights_q']
@@ -325,16 +278,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                                                      n_filters=n_filters_q, filter_size=filter_size_q, maxpool=maxpool_q) 
         tf.set_random_seed(np.random.randint(0,10))
 
-        # reduce the dimensionality of y using convolutional neural network
-#        y_ph = conv_dr.dimensionanily_reduction(y_ph)
-
-          
-#        ramp = (tf.log(tf.dtypes.cast(idx,dtype=tf.float32)) - tf.log(ramp_start))/(tf.log(ramp_end)-tf.log(ramp_start))
-#        ramp = tf.minimum(tf.math.maximum(0.0,ramp),1.0)
-        
-#        if params['ramp'] == False:
-#            ramp = 1.0
- 
         # reduce the y data size
         y_conv = y_ph
 
@@ -342,10 +285,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # run inverse autoencoder to generate mean and logvar of z given y data - these are the parameters for r1(z|y)
         r1_loc, r1_scale, r1_weight = r1_zy._calc_z_mean_and_sigma(y_conv)
         temp_var_r1 = SMALL_CONSTANT + tf.exp(r1_scale)
-#        r1_scale = tf.sqrt(SMALL_CONSTANT + tf.exp(r1_scale))
-        # get l1 loss term
-#        l1_loss_weight = ramp*1e-3*tf.reduce_sum(tf.math.abs(r1_weight),1)
-#        r1_weight = ramp*tf.squeeze(r1_weight)
 
         
         # define the r1(z|y) mixture model
@@ -363,7 +302,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         q_zxy_mean, q_zxy_log_sig_sq = q_zxy._calc_z_mean_and_sigma(x_ph,y_conv)
 
         # DRAW FROM q(z|x,y)
-#        q_zxy_samp = q_zxy._sample_from_gaussian_dist(bs_ph, z_dimension, q_zxy_mean, tf.log(SMALL_CONSTANT + tf.exp(q_zxy_log_sig_sq)))
         temp_var_q = SMALL_CONSTANT + tf.exp(q_zxy_log_sig_sq)
         mvn_q = tfp.distributions.MultivariateNormalDiag(
                           loc=q_zxy_mean,
@@ -371,12 +309,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         q_zxy_samp = mvn_q.sample()  
        
         # GET r2(x|z,y)
-#        reconstruction_xzy = r2_xzy.calc_reconstruction(q_zxy_samp,y_conv)
-#        r2_xzy_mean_nowrap = reconstruction_xzy[0]
-#        r2_xzy_log_sig_sq_nowrap = reconstruction_xzy[1]
-#        if np.sum(wrap_mask)>0:
-#            r2_xzy_mean_wrap = reconstruction_xzy[2]
-#            r2_xzy_log_sig_sq_wrap = reconstruction_xzy[3]
         eps = tf.random.normal([bs_ph, params['ndata'], num_det], 0, 1., dtype=tf.float32)
         y_ph_ramp = tf.add(tf.multiply(ramp,y_conv), tf.multiply((1.0-ramp), eps))
         reconstruction_xzy = r2_xzy.calc_reconstruction(q_zxy_samp,y_ph_ramp)
@@ -496,10 +428,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
     load_chunk_it = 1
     for i in range(params['num_iterations']):
 
-        # skip all iterations prior to 50000
-#        if i < 50000:
-#            continue
-
         next_indices = indices_generator.next_indices()
 
         # if load chunks true, load in data by chunks
@@ -540,9 +468,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         # train the network 
         session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, ramp:rmp}) 
  
-        # train to minimise the cost function
-#        session.run(minimize, feed_dict={bs_ph:bs, x_ph:next_x_data, y_ph:next_y_data, idx:i})
-
         # if we are in a report iteration extract cost function values
         if i % params['report_interval'] == 0 and i > 0:
 
@@ -616,263 +541,14 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
         if params['hyperparam_optim'] == True and i == params['hyperparam_optim_stop']:
             save_path = saver.save(session,save_dir)
 
-            # compute KL divergence over test set
-#            VI_pred_hyperparam_all = None
-#            plotter = plots.make_plots(params,posterior_truth_test,VI_pred_hyperparam_all,x_data_test)
-#            KL_result = plotter.gen_kl_plots(VICI_inverse_model,y_data_test,x_data_test,y_normscale,bounds,snrs_test)
-#            del plotter
-#            return KL_result, session, saver, save_dir
             return np.array(plotdata)[-1,2], session, saver, save_dir
 
         if i % params['plot_interval'] == 0 and i>0:
-
-            # use the testing data for some plots
-            for j in range(params['r']*params['r']):
-
-                """
-                # only make these plots for fully-connected network
-                if params['reduce'] == True or params['n_conv'] != None:
-                    # make spcific data for plots that contains a training data sample with lots of different noise  
-                    x_data_zplot = np.tile(x_data_test[j,:],(params['n_samples'],1))
-                    y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1,1))
-                    y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],params['ndata'],len(fixed_vals['det'])))  
-                else:
-                    # make spcific data for plots that contains a training data sample with lots of different noise
-                    x_data_zplot = np.tile(x_data_test[j,:],(params['n_samples'],1))
-                    y_data_zplot = np.tile(y_data_test[j,:],(params['n_samples'],1))
-                    y_data_zplot += np.random.normal(0,1,size=(params['n_samples'],(params['ndata']*len(fixed_vals['det']))))
-                y_data_zplot /= y_normscale  # required for fast convergence                
-                """
-                # run a training pass and extract parameters (do it multiple times for ease of reading)
-                # get q(z) data
-#                q_z_plot_data, q_z_log_sig_sq_data = session.run([q_zxy_mean,q_zxy_log_sig_sq], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-          
-                # get r1(z) data
-#                r1_z_locs, r1_z_scales, r1_samp, r1_z_weights_plot_data = session.run([r1_loc,r1_scale,r1_zy_samp,r1_weight], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-                
-                # get r2(x) data
-#                r2_loc, r2_scale = session.run([r2_xzy_mean, r2_xzy_scale], feed_dict={bs_ph:params['n_samples'], x_ph:x_data_zplot, y_ph:y_data_zplot, idx:i})
-
-                """ 
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(q_z_plot_data, #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/qz_mean_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/qz_mean_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))           
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(q_z_log_sig_sq_data, #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/qz_log_sig_sq_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/qz_log_sig_sq_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    col = ['blue','red','green']
-                    ran = [[np.min(r1_z_locs[:,:,c]),np.max(r1_z_locs[:,:,c])] for c in range(params['z_dimension'])]
-                    # Make coraer plot of latent space samples from the 1 distribution
-                    figure = corner.corner(r1_z_locs[:,0,:], #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],color=col[0],range=ran)
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    for c in range(1,params['n_modes']):
-                        corner.corner(r1_z_locs[:,c,:],fig=figure,color=col[c],range=ran)
-                    plt.savefig('%s/r1z_mean_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r1z_mean_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    col = ['blue','red','green']
-                    ran = [[np.min(r1_z_scales[:,:,c]),np.max(r1_z_scales[:,:,c])] for c in range(params['z_dimension'])]
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(r1_z_scales[:,0,:], #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],color=col[0],range=ran)
-                       #range=[[0,1]]*np.shape(x_data_test)[1],
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    for c in range(1,params['n_modes']):
-                        corner.corner(r1_z_scales[:,c,:],fig=figure,color=col[c],range=ran)
-                    plt.savefig('%s/r1z_log_sig_sq_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r1z_log_sig_sq_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(q_samp, #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/qz_samp_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/qz_samp_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(r1_samp, #labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/r1z_samp_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r1z_samp_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
-
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(r2_loc, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
-                       #range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                       truths=x_data_zplot[j,:])
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/r2x_mean_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r2x_mean_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j)) 
-                    plt.close()
-                except:
-                    pass
- 
-                try:
-                    # Make corner plot of latent space samples from the q distribution
-                    figure = corner.corner(r2_scale, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84])
-                       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                       #truths=x_data_test[j,:],
-                       #show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/r2x_log_sig_sq_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/r2x_log_sig_sq_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
- 
-                #try:
-                #    # Make corner plot of latent space samples from the q distribution
-                #    figure = corner.corner(r2_mean_testpath, #labels=params['inf_pars'],
-                #       quantiles=[0.16, 0.5, 0.84],
-                #       range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                #       truths=x_data_zplot[j,:])
-                #       #show_titles=True, title_kwargs={"fontsize": 12})
-                #    plt.savefig('%s/r2x_mean_testpath_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                #    plt.savefig('%s/latest_%s/r2x_mean_testpath_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                #    plt.close()
-                #except:
-                #    pass
-
-                #try:
-                #    # Make corner plot of latent space samples from the q distribution
-                #    figure = corner.corner(r2_log_sig_sq_testpath, #labels=params['inf_pars'],
-                #       quantiles=[0.16, 0.5, 0.84])
-                #       #range=[[-2,2]]*np.shape(x_data_test)[1])
-                #       #truths=x_data_test[j,:],
-                #       #show_titles=True, title_kwargs={"fontsize": 12})
-                #    plt.savefig('%s/r2x_log_sig_sq_testpath_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                #    plt.savefig('%s/latest_%s/r2x_log_sig_sq_testpath_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                #    plt.close()
-                #except:
-                #    pass
-
-                #try:
-                #    # Make corner plot of latent space samples from the q distribution
-                #    figure = corner.corner(r2_samp_testpath, #labels=params['inf_pars'],
-                #       quantiles=[0.16, 0.5, 0.84],
-                #       range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                #       truths=x_data_zplot[j,:])
-                #       #show_titles=True, title_kwargs={"fontsize": 12})
-                #    plt.savefig('%s/r2x_samp_testpath_%s_train%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                #    plt.savefig('%s/latest_%s/r2x_samp_testpath_%s_train%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                #    plt.close()
-                #except:
-                #    pass
-
-                # plot the AB histogram
-                density_flag = False
-                plt.figure()
-                for c in range(params['n_modes']):
-                    plt.hist(r1_z_weights_plot_data[:,c],25,alpha=0.5,density=density_flag)
-                plt.xlabel('iteration')
-                plt.ylabel('KL')
-                #plt.legend()
-                plt.savefig('%s/mixweights_%s_train%d_%d_linear.png' % (params['plot_dir'],params['run_label'],j,i))
-                plt.savefig('%s/latest_%s/mixweights_%s_train%d_linear.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                plt.close()
-                """
-                
 
             n_mode_weight_copy = 100 # must be a multiple of 50
             # just run the network on the test data
             for j in range(params['r']*params['r']):
 
-                """ 
-                # Make single waveform w/multiple noise real mode weight histogram
-                mode_weights_all = []
-                for n in range(0,n_mode_weight_copy,50):
-                    y_data_mode_test = np.tile(y_data_test_noisefree[j],(50,1)) + np.random.normal(0,1,size=(50,int(params['ndata']*len(fixed_vals['det']))))
-
-                    if params['reduce'] == True or params['n_conv'] != None:
-                            _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([50,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
-                                                         y_normscale,
-                                                         "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
-                    else:
-                        _, _, _, _, mode_weights  = VICI_inverse_model.run(params, y_data_mode_test.reshape([1,-1]), np.shape(x_data_test)[1],
-                                                 y_normscale,
-                                                 "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
-                    print('Generated mode weights for noise realization %d/%d' % (n+50,n_mode_weight_copy))
-                    mode_weights_all.append([mode_weights])
-
-                mode_weights_all = np.array(mode_weights_all)
-                mode_weights_all = mode_weights_all.reshape((mode_weights_all.shape[0]*mode_weights_all.shape[2],mode_weights_all.shape[3]))
-
-                # plot the weights mult noise histogram
-                try:
-                    density_flag = False
-                    plt.figure()
-                    for c in range(params['n_modes']):
-                        plt.hist(mode_weights_all[:,c],25,alpha=0.5,density=density_flag)
-                    plt.xlabel('iteration')
-                    plt.ylabel('KL')
-                    #plt.legend()
-                    plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_linear_%d.png' % (params['plot_dir'],params['run_label'],i,j))
-                    plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_linear_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close('all')
-                except:
-                    pass
-
-                # plot the weights mult noise histogram
-                try:
-                    plt.figure()
-                    for c in range(params['n_modes']):
-                        plt.hist(mode_weights_all[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
-                    plt.xlabel('Mixture weight')
-                    plt.ylabel('p(w)')
-                    plt.legend()
-                    plt.savefig('%s/mixweights_%s_MultNoiseSingleWave_%d_log.png' % (params['plot_dir'],params['run_label'],i))
-                    plt.savefig('%s/latest_%s/mixweights_%s_MultNoiseSingleWave_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                    plt.close('all')
-                except:
-                    pass
-                print('Made multiple noise real mode plots')
-                """
                 # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
                 if params['reduce'] == True or params['n_filters_r1'] != None:
                     XS, dt, _  = VICI_inverse_model.run(params, y_data_test[j].reshape([1,y_data_test.shape[1],y_data_test.shape[2]]), np.shape(x_data_test)[1],
@@ -883,11 +559,7 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                                                  y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
-                # Generate final results plots
-#                plotter = plots.make_plots(params,posterior_truth_test,np.expand_dims(XS, axis=0),np.expand_dims(truth_test[j],axis=0))
-
                 # Make corner plots
-#                plotter.make_corner_plot(y_data_test_noisefree[j,:params['ndata']],y_data_test[j,:params['ndata']],bounds,j,i,sampler='dynesty1')
                 # Get corner parnames to use in plotting labels
                 parnames = []
                 for k_idx,k in enumerate(params['rand_pars']):
@@ -906,129 +578,16 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                        color='tab:blue',truths=x_data_test[j,:],
                        show_titles=True)
                 # compute weights, otherwise the 1d histograms will be different scales, could remove this
-                #weights = np.ones(len(XS)) * (len(posterior_truth_test[j]) / len(XS))
                 corner.corner(XS,**defaults_kwargs,labels=parnames,
                        color='tab:red',
                        fill_contours=True,
-                       show_titles=True, fig=figure)#, weights=weights)
+                       show_titles=True, fig=figure)
 
-                """
-                left, bottom, width, height = [0.6, 0.69, 0.3, 0.19]
-                ax2 = figure.add_axes([left, bottom, width, height])
-
-                # plot waveform in upper-right hand corner
-                ax2.plot(np.linspace(0,1,params['ndata']),y_data_test_noisefree[j,:params['ndata']],color='cyan',zorder=50)  
-                #snr = 'No SNR info'
-                snr = snrs_test[j,0]
-                if params['reduce'] == True or params['n_conv'] != None:
-                    ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[j,:params['ndata'],0],color='darkblue',label=str(snr))
-                else:
-                    ax2.plot(np.linspace(0,1,params['ndata']),y_data_test[j,:params['ndata']],color='darkblue',label=str(snr))
-                ax2.set_xlabel(r"$\textrm{time (seconds)}$",fontsize=11)
-                ax2.yaxis.set_visible(False)
-                ax2.tick_params(axis="x", labelsize=11)
-                ax2.tick_params(axis="y", labelsize=11)
-                ax2.set_ylim([-6,6])
-                ax2.grid(False)
-                ax2.margins(x=0,y=0)
-                ax2.legend()
-                """
 
                 plt.savefig('%s/corner_plot_%s_%d-%d.png' % (params['plot_dir'],params['run_label'],i,j))
                 plt.savefig('%s/latest_%s/corner_plot_%s_%d.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
                 plt.close('all')
                 print('Made corner plot %d' % j)
-
-
-                """
-                try:
-                    
-                    # Make Chris corner plot of VItamin posterior samples
-                    figure = corner.corner(XS, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
-                       range=[[0.0,1.0]]*np.shape(x_data_test)[1],
-                       truths=x_data_test[j,:],
-                       show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/loc_output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/loc_output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                except:
-                    pass
- 
-                try:
-                    # Make corner plot of VItamin posterior scale params
-                    figure = corner.corner(scale, labels=params['inf_pars'],
-                       quantiles=[0.16, 0.5, 0.84],
-                       #range=[[-0.1,1.1]]*np.shape(x_data_test)[1],
-                       #truths=x_data_test[j,:],
-                       show_titles=True, title_kwargs={"fontsize": 12})
-                    plt.savefig('%s/scale_output_%s_test%d_%d.png' % (params['plot_dir'],params['run_label'],j,i))
-                    plt.savefig('%s/latest_%s/scale_output_%s_test%d_latest.png' % (params['plot_dir'],params['run_label'],params['run_label'],j))
-                    plt.close()
-                    
-                except Exception as e:
-                    print(e)
-                    exit()
-                    exit()
-                    exi(t)
-                    pass 
-                """
-
-            """
-            # Make loss plot
-            try:
-                plt.figure()
-                xvec = params['report_interval']*np.arange(np.array(plotdata).shape[0])
-                plt.semilogx(xvec,np.array(plotdata)[:,0],label='recon')
-                plt.semilogx(xvec,np.array(plotdata)[:,1],label='KL')
-                plt.semilogx(xvec,np.array(plotdata)[:,2],label='total')
-                plt.semilogx(xvec,np.array(plotdata)[:,3],label='recon_val')
-                plt.semilogx(xvec,np.array(plotdata)[:,4],label='KL_val')
-                plt.semilogx(xvec,np.array(plotdata)[:,5],label='total_val')
-                #plt.ylim([-15,12])
-                plt.xlabel('iteration')
-                plt.ylabel('cost')
-                plt.legend()
-                plt.savefig('%s/latest_%s/cost_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                plt.ylim([np.min(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,0]), np.max(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,1])])
-                plt.savefig('%s/latest_%s/cost_zoom_%s.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                plt.close('all')
-            except:
-                pass            
-            """
-
-            """        
-            # plot the weights batch histogram
-            try:
-                density_flag = False
-                plt.figure()
-                for c in range(params['n_modes']):
-                    plt.hist(AB_batch[:,c],25,alpha=0.5,density=density_flag)
-                plt.xlabel('iteration')
-                plt.ylabel('KL')
-                #plt.legend()
-                plt.savefig('%s/mixweights_%s_batch_%d_linear.png' % (params['plot_dir'],params['run_label'],i))
-                plt.savefig('%s/latest_%s/mixweights_%s_batch_linear.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                plt.close()
-            except:
-                pass
-
-            # plot the weights batch histogram
-
-            try:
-                plt.figure()
-                for c in range(params['n_modes']):
-                    plt.hist(AB_batch[:,c],25,density=density_flag,alpha=0.5,label='component %d' % c)
-                plt.xlabel('Mixture weight')
-                plt.ylabel('p(w)')
-                plt.legend()
-                plt.savefig('%s/mixweights_%s_batch_%d_log.png' % (params['plot_dir'],params['run_label'],i))
-                plt.savefig('%s/latest_%s/mixweights_%s_batch_log.png' % (params['plot_dir'],params['run_label'],params['run_label']))
-                plt.close()
-            except:
-                pass
-            """
-            
 
     return            
 
@@ -1095,7 +654,6 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
     sky_mask, sky_idx_mask, sky_len = get_param_index(params['inf_pars'],params['sky_pars'])
     ra_mask, ra_idx_mask, ra_len = get_param_index(params['inf_pars'],['ra'])
     dec_mask, dec_idx_mask, dec_len = get_param_index(params['inf_pars'],['dec'])
-    #dist_mask, dist_idx_mask, dist_len = get_wrap_index(params['inf_pars'],'luminosity_distance')
     m1_mask, m1_idx_mask, m1_len = get_param_index(params['inf_pars'],['mass_1'])
     m2_mask, m2_idx_mask, m2_len = get_param_index(params['inf_pars'],['mass_2'])
     idx_mask = np.argsort(gauss_idx_mask + vonmise_idx_mask + m1_idx_mask + m2_idx_mask + sky_idx_mask) # + dist_idx_mask)
@@ -1113,7 +671,6 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         y_ph = tf.placeholder(dtype=tf.float32, shape=[None, params['ndata'], num_det], name="y_ph")
 
         # LOAD VICI NEURAL NETWORKS
-        #r2_conv = VICI_reduction.VariationalAutoencoder('VICI_reduction',ysh1, filter_size, n_filters, n_convsteps)
         r2_xzy = VICI_decoder.VariationalAutoencoder('VICI_decoder', vonmise_mask, gauss_mask, m1_mask, m2_mask, sky_mask, n_input1=z_dimension, 
                                                      n_input2=params['ndata'], n_output=xsh1, n_channels=num_det, n_weights=n_weights_r2, 
                                                      drate=drate, n_filters=n_filters_r2, 
@@ -1231,315 +788,3 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
 
     return xs, (run_endt - run_startt), mode_weights
 
-def resume_training(params, x_data, y_data_l, siz_high_res, save_dir, train_files,normscales,y_data_train_noisefree,y_normscale):    
-
-    x_data = x_data
-    y_data_train_l = y_data_l
-    
-    # USEFUL SIZES
-    xsh = np.shape(x_data)
-    yshl1 = np.shape(y_data_l)[1]
-    ysh1 = siz_high_res
-    
-    #z_dimension_fm = params['z_dimensions_fw']
-    #n_weights_fm = params['n_weights_fw']
-    
-    z_dimension = params['z_dimension']
-    bs = params['batch_size']
-    n_weights = params['n_weights']
-    lam = 1
-    
-    # Allow GPU growth 
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-
-    graph = tf.Graph()
-    session = tf.Session(graph=graph,config=config)
-    with graph.as_default():
-        tf.set_random_seed(np.random.randint(0,10))
-        
-        # PLACE HOLDERS
-        x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph")
-        bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph") # batch size placeholder
-        yt_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="yt_ph")
-        
-        # LOAD FORWARD MODEL NEURAL NETWORKS
-        #DEC_XYlZtoYh = OELBO_decoder_difference.VariationalAutoencoder("OELBO_decoder", ysh1, z_dimension_fm+yshl1+xsh[1], n_weights_fm) # p(Yh|X,Yl,Z)
-        #ENC_XYltoZ = OELBO_encoder.VariationalAutoencoder("OELBO_encoder", yshl1+xsh[1], z_dimension_fm, n_weights_fm) # p(Z|X,Yl)
-        #ENC_XYhYltoZ = VAE_encoder.VariationalAutoencoder("vae_encoder", xsh[1]+ysh1+yshl1, z_dimension_fm, n_weights_fm) # q(Z|X,Yl,Yh)
-        
-        # LOAD VICI NEURAL NETWORKS
-        autoencoder = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh[1], z_dimension+ysh1, n_weights)
-        autoencoder_ENC = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights)
-        autoencoder_VAE = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh1, z_dimension, n_weights)
-        
-        # DEFINE MULTI-FIDELITY FORWARD MODEL
-        #####################################################################################################################
-        
-        # NORMALISE INPUTS
-        yl_ph_n = tf_normalise_dataset(yt_ph)
-        x_ph_n = tf_normalise_dataset(x_ph)
-        #yl_ph_n = yt_ph
-        #x_ph_n = x_ph
-        
-        # GET p(Z|X,Yl)
-        #zxyl_mean,zxyl_log_sig_sq = ENC_XYltoZ._calc_z_mean_and_sigma(tf.concat([x_ph_n,yl_ph_n],1))
-        #rxyl_samp = ENC_XYhYltoZ._sample_from_gaussian_dist(tf.shape(x_ph_n)[0], z_dimension_fm, zxyl_mean, tf.log(tf.exp(zxyl_log_sig_sq)+SMALL_CONSTANT))
-        
-        # GET p(Yh|X,Yl,Z) FROM SAMPLES Z ~ p(Z|X,Yl)
-        #reconstruction_yh = DEC_XYlZtoYh.calc_reconstruction(tf.concat([x_ph_n,yl_ph_n,rxyl_samp],1))
-        #yh_diff = reconstruction_yh[0]
-        #yh_mean = yl_ph_n+yh_diff
-        #yh_log_sig_sq = reconstruction_yh[1]
-        #y = ENC_XYhYltoZ._sample_from_gaussian_dist(tf.shape(yt_ph)[0], tf.shape(yt_ph)[1], yh_mean, yh_log_sig_sq)
-        
-        # DRAW SYNTHETIC Ys TRAINING DATA
-#        _, y = OM.forward_model(x_ph_amp,x_ph_ph)
-        
-        ##########################################################################################################################################
-        
-        # GET r(z|y)
-        #y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="y_ph")
-        #y_ph_n = tf_normalise_dataset(y_ph)
-        #y_ph_n = y_ph
-        zy_mean,zy_log_sig_sq = autoencoder_ENC._calc_z_mean_and_sigma(yl_ph_n)
-        
-        # DRAW FROM r(z|y)
-        rzy_samp = autoencoder_VAE._sample_from_gaussian_dist(bs_ph, z_dimension, zy_mean, zy_log_sig_sq)
-        
-        # GET r(x|z,y) from r(z|y) samples
-        rzy_samp_y = tf.concat([rzy_samp,yl_ph_n],1)
-        reconstruction_xzy = autoencoder.calc_reconstruction(rzy_samp_y)
-        x_mean = reconstruction_xzy[0]
-        x_log_sig_sq = reconstruction_xzy[1]
-        
-        # KL(r(z|y)||p(z))
-        latent_loss = -0.5 * tf.reduce_sum(1 + zy_log_sig_sq - tf.square(zy_mean) - tf.exp(zy_log_sig_sq), 1)
-        KL = tf.reduce_mean(latent_loss)
-        
-        # GET q(z|x,y)
-        xy_ph = tf.concat([x_ph_n,yl_ph_n],1)
-        zx_mean,zx_log_sig_sq = autoencoder_VAE._calc_z_mean_and_sigma(xy_ph)
-        
-        # DRAW FROM q(z|x,y)
-        qzx_samp = autoencoder_VAE._sample_from_gaussian_dist(bs_ph, z_dimension, zx_mean, zx_log_sig_sq)
-        
-        # GET r(x|z,y)
-        qzx_samp_y = tf.concat([qzx_samp,yl_ph_n],1)
-        reconstruction_xzx = autoencoder.calc_reconstruction(qzx_samp_y)
-        x_mean_vae = reconstruction_xzx[0]
-        x_log_sig_sq_vae = reconstruction_xzx[1]
-        
-        # COST FROM RECONSTRUCTION
-        normalising_factor_x_vae = - 0.5 * tf.log(SMALL_CONSTANT+tf.exp(x_log_sig_sq_vae)) - 0.5 * np.log(2 * np.pi)
-        square_diff_between_mu_and_x_vae = tf.square(x_mean_vae - x_ph_n)
-        inside_exp_x_vae = -0.5 * tf.div(square_diff_between_mu_and_x_vae,SMALL_CONSTANT+tf.exp(x_log_sig_sq_vae))
-        reconstr_loss_x_vae = -tf.reduce_sum(normalising_factor_x_vae + inside_exp_x_vae, 1) # Take sum along axis 1
-        cost_R_vae = tf.reduce_mean(reconstr_loss_x_vae) # Take mean along the diagonal
-        
-        # KL(q(z|x,y)||r(z|y))
-        v_mean = zy_mean #2
-        aux_mean = zx_mean #1
-        v_log_sig_sq = tf.log(tf.exp(zy_log_sig_sq)+SMALL_CONSTANT) #2
-        aux_log_sig_sq = tf.log(tf.exp(zx_log_sig_sq)+SMALL_CONSTANT) #1
-        v_log_sig = tf.log(tf.sqrt(tf.exp(v_log_sig_sq))) #2
-        aux_log_sig = tf.log(tf.sqrt(tf.exp(aux_log_sig_sq))) #1
-        cost_VAE_a = v_log_sig-aux_log_sig+tf.divide(tf.exp(aux_log_sig_sq)+tf.square(aux_mean-v_mean),2*tf.exp(v_log_sig_sq))-0.5
-        cost_VAE_b = tf.reduce_sum(cost_VAE_a,1)
-        KL_vae = tf.reduce_mean(cost_VAE_b)
-        
-        # THE VICI COST FUNCTION
-        lam_ph = tf.placeholder(dtype=tf.float32, name="lam_ph")
-        COST_VAE = KL_vae+cost_R_vae
-        COST = COST_VAE
-        
-        # VARIABLES LISTS
-        var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
-        var_list_ELBO = [var for var in tf.trainable_variables() if var.name.startswith("ELBO")]
-        
-        # DEFINE OPTIMISER (using ADAM here)
-        optimizer = tf.train.AdamOptimizer(params['initial_training_rate']) 
-        minimize = optimizer.minimize(COST,var_list = var_list_VICI)
-        
-        # DRAW FROM q(x|y)
-        qx_samp = autoencoder_ENC._sample_from_gaussian_dist(bs_ph, xsh[1], x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
-        
-        # INITIALISE AND RUN SESSION
-#        init = tf.variables_initializer(var_list_VICI)
-        init = tf.initialize_all_variables()
-        session.run(init)
-        #saver_ELBO = tf.train.Saver(var_list_ELBO)
-        #saver_ELBO.restore(session,load_dir)
-        saver = tf.train.Saver(var_list_VICI)
-        saver.restore(session,save_dir)
-    
-    KL_PLOT = np.zeros(np.int(np.round(params['num_iterations']/params['report_interval'])+1)) # vector to store test OELBO values
-    COST_PLOT = np.zeros(np.int(np.round(params['num_iterations']/params['report_interval'])+1)) # vector to store test VAE ELBO values
-    
-    print('Training Inference Model...')    
-    # START OPTIMISATION OF OELBO
-    indices_generator = batch_manager.SequentialIndexer(params['batch_size'], xsh[0])
-    ni = -1
-    test_n = 100
-    for i in range(params['num_iterations']):
-        
-        next_indices = indices_generator.next_indices()
-
-        # Make 25 noise realizations
-        if params['do_extra_noise']:
-            x_data_train_l = x_data[next_indices,:]
-            y_data_train_l = y_data_train_noisefree[next_indices,:] + np.random.normal(0,1,size=(params['batch_size'],params['ndata']))
-            y_data_train_l /= y_normscale[0]
-            #print('generated {} elements of new training data noise'.format(params['batch_size']))
-
-            session.run(minimize, feed_dict={bs_ph:bs, x_ph:x_data_train_l, lam_ph:lam, yt_ph:y_data_train_l}) # minimising cost function
-        else:       
-            #yn = session.run(y, feed_dict={bs_ph:bs, x_ph:x_data[next_indices, :], yt_ph:y_data_train_l[next_indices, :]})
-            #session.run(minimize, feed_dict={bs_ph:bs, x_ph:x_data[next_indices, :],  y_ph:yn, lam_ph:lam, yt_ph:y_data_train_l[next_indices, :]}) # minimising cost function
-            session.run(minimize, feed_dict={bs_ph:bs, x_ph:x_data[next_indices, :], lam_ph:lam, yt_ph:y_data_train_l[next_indices, :]}) # minimising cost function
-        
-        if i % params['report_interval'] == 0:
-                ni = ni+1
-                
-                #ynt = session.run(y, feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], yt_ph:y_data_train_l[0:test_n,:]})
-                #cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], y_ph:ynt, lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
-                cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:test_n, x_ph:x_data[0:test_n,:], lam_ph:lam, yt_ph:y_data_train_l[0:test_n,:]})
-                KL_PLOT[ni] = KL_VAE
-                COST_PLOT[ni] = -cost_value_vae
-
-                # plot losses
-                plotter.make_loss_plot(COST_PLOT[:ni+1],KL_PLOT[:ni+1],params['report_interval'],fwd=False)
-                
-                if params['print_values']==True:
-                    print('--------------------------------------------------------------')
-                    print('Iteration:',i)
-                    print('Training Set ELBO:',-cost_value_vae)
-                    print('KL Divergence:',KL_VAE)
-       
-        if i % params['plot_interval'] == 0 and i>0:
-            # The trained inverse model weights can then be used to infer a probability density of solutions given new measurements
-            _, _, XS, _  = VICI_inverse_model.run(params, y_data_test_h, np.shape(x_data_train)[1], "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
-
-            # Convert XS back to unnormalized version
-            if params['do_normscale']:
-                for m in range(params['ndim_x']):
-                    XS[:,m,:] = XS[:,m,:]*normscales[m]
-
-            # Make KL plot
-            plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
-
-            # Make corner plots
-            plotter.make_corner_plot(sampler='dynesty1')
-
-            # Make KL plot
-            plotter.gen_kl_plots(VICI_inverse_model,y_data_test_h,x_data_train,normscales)
-
-            # Make pp plot
-#            plotter.plot_pp(VICI_inverse_model,y_data_train_l,x_data_train,0,normscales)
-            
-
-        if i % params['save_interval'] == 0:
-             
-            save_path = saver.save(session,save_dir)
-                
-                
-    return COST_PLOT, KL_PLOT, train_files
-
-def compute_ELBO(params, x_data, y_data_h, load_dir):
-    
-    # USEFUL SIZES
-    xsh = np.shape(x_data)
-    ysh1 = np.shape(y_data_h)[1]
-    
-    z_dimension = params['z_dimension']
-    n_weights = params['n_weights']
-    lam = 1
-    
-    graph = tf.Graph()
-    session = tf.Session(graph=graph)
-    with graph.as_default():
-        tf.set_random_seed(np.random.randint(0,10))
-        
-        # PLACE HOLDERS
-        x_ph = tf.placeholder(dtype=tf.float32, shape=[None, xsh[1]], name="x_ph")
-        bs_ph = tf.placeholder(dtype=tf.int64, name="bs_ph") # batch size placeholder
-        
-        # LOAD VICI NEURAL NETWORKS
-        autoencoder = VICI_decoder.VariationalAutoencoder("VICI_decoder", xsh[1], z_dimension+ysh1, n_weights)
-        autoencoder_ENC = VICI_encoder.VariationalAutoencoder("VICI_encoder", ysh1, z_dimension, n_weights)
-        autoencoder_VAE = VICI_VAE_encoder.VariationalAutoencoder("VICI_VAE_encoder", xsh[1]+ysh1, z_dimension, n_weights)
-        
-        # GET r(z|y)
-        y_ph = tf.placeholder(dtype=tf.float32, shape=[None, ysh1], name="y_ph")
-        y_ph_n = tf_normalise_dataset(y_ph)
-        x_ph_n = tf_normalise_dataset(x_ph)
-        #y_ph_n = y_ph
-        #x_ph_n = x_ph
-        zy_mean,zy_log_sig_sq = autoencoder_ENC._calc_z_mean_and_sigma(y_ph_n)
-        
-        # DRAW FROM r(z|y)
-        rzy_samp = autoencoder_VAE._sample_from_gaussian_dist(bs_ph, z_dimension, zy_mean, zy_log_sig_sq)
-        
-        # GET r(x|z,y) from r(z|y) samples
-        rzy_samp_y = tf.concat([rzy_samp,y_ph_n],1)
-        reconstruction_xzy = autoencoder.calc_reconstruction(rzy_samp_y)
-        x_mean = reconstruction_xzy[0]
-        x_log_sig_sq = reconstruction_xzy[1]
-        
-        # KL(r(z|y)||p(z))
-        latent_loss = -0.5 * tf.reduce_sum(1 + zy_log_sig_sq - tf.square(zy_mean) - tf.exp(zy_log_sig_sq), 1)
-        KL = tf.reduce_mean(latent_loss)
-        
-        # GET q(z|x,y)
-        xy_ph = tf.concat([x_ph_n,y_ph_n],1)
-        zx_mean,zx_log_sig_sq = autoencoder_VAE._calc_z_mean_and_sigma(xy_ph)
-        
-        # DRAW FROM q(z|x,y)
-        qzx_samp = autoencoder_VAE._sample_from_gaussian_dist(bs_ph, z_dimension, zx_mean, zx_log_sig_sq)
-        
-        # GET r(x|z,y)
-        qzx_samp_y = tf.concat([qzx_samp,y_ph_n],1)
-        reconstruction_xzx = autoencoder.calc_reconstruction(qzx_samp_y)
-        x_mean_vae = reconstruction_xzx[0]
-        x_log_sig_sq_vae = reconstruction_xzx[1]
-        
-        # COST FROM RECONSTRUCTION
-        normalising_factor_x_vae = - 0.5 * tf.log(SMALL_CONSTANT+tf.exp(x_log_sig_sq_vae)) - 0.5 * np.log(2 * np.pi)
-        square_diff_between_mu_and_x_vae = tf.square(x_mean_vae - x_ph_n)
-        inside_exp_x_vae = -0.5 * tf.div(square_diff_between_mu_and_x_vae,SMALL_CONSTANT+tf.exp(x_log_sig_sq_vae))
-        reconstr_loss_x_vae = -tf.reduce_sum(normalising_factor_x_vae + inside_exp_x_vae, 1)
-        cost_R_vae = tf.reduce_mean(reconstr_loss_x_vae)
-        
-        # KL(q(z|x,y)||r(z|y))
-        v_mean = zy_mean #2
-        aux_mean = zx_mean #1
-        v_log_sig_sq = tf.log(tf.exp(zy_log_sig_sq)+SMALL_CONSTANT) #2
-        aux_log_sig_sq = tf.log(tf.exp(zx_log_sig_sq)+SMALL_CONSTANT) #1
-        v_log_sig = tf.log(tf.sqrt(tf.exp(v_log_sig_sq))) #2
-        aux_log_sig = tf.log(tf.sqrt(tf.exp(aux_log_sig_sq))) #1
-        cost_VAE_a = v_log_sig-aux_log_sig+tf.divide(tf.exp(aux_log_sig_sq)+tf.square(aux_mean-v_mean),2*tf.exp(v_log_sig_sq))-0.5
-        cost_VAE_b = tf.reduce_sum(cost_VAE_a,1)
-        KL_vae = tf.reduce_mean(cost_VAE_b)
-        
-        # THE VICI COST FUNCTION
-        lam_ph = tf.placeholder(dtype=tf.float32, name="lam_ph")
-        COST_VAE = KL_vae+cost_R_vae
-        
-        # VARIABLES LISTS
-        var_list_VICI = [var for var in tf.trainable_variables() if var.name.startswith("VICI")]
-        
-        # DRAW FROM q(x|y)
-        #qx_samp = autoencoder_ENC._sample_from_gaussian_dist(bs_ph, xsh[1], x_mean, SMALL_CONSTANT + tf.log(tf.exp(x_log_sig_sq)))
-        
-        # INITIALISE AND RUN SESSION
-        init = tf.initialize_all_variables()
-        session.run(init)
-        saver_VICI = tf.train.Saver(var_list_VICI)
-        saver_VICI.restore(session,load_dir)
-                
-    ynt = y_data_h
-    cost_value_vae, KL_VAE = session.run([COST_VAE, KL_vae], feed_dict={bs_ph:xsh[0], x_ph:x_data, y_ph:ynt, lam_ph:lam})
-    ELBO = -cost_value_vae
-    KL_DIV = KL_VAE
-                
-    return ELBO, KL_DIV
