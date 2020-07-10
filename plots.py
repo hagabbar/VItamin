@@ -328,7 +328,8 @@ class make_plots:
                     XS[:,j] = d
                     j += 1
 
-                rand_idx_posterior = np.random.choice(np.linspace(0,XS.shape[0]-1,dtype=np.int),self.params['n_samples']) 
+                #rand_idx_posterior = np.random.choice(np.linspace(0,XS.shape[0]-1,dtype=np.int),self.params['n_samples'])
+                #rand_idx_posterior = np.random.choice(np.linspace(0,10000,dtype=np.int),self.params['n_samples']) 
                 if i_idx == 0:
                     #XS_all = np.expand_dims(XS[rand_idx_posterior,:], axis=0)
                     XS_all = np.expand_dims(XS[:self.params['n_samples'],:], axis=0)
@@ -535,9 +536,116 @@ class make_plots:
 
         return r
 
+    def plot_bilby_pp(self,model,sig_test,par_test,i_epoch,normscales,pos_test,bounds):
+        """ Function to make a pp plot using built-in bilby functionality
+        """
+        from bilby.core.prior import Uniform
+
+        Npp = int(self.params['r']*self.params['r']) # number of test GW waveforms to use to calculate PP plot
+        ndim_y = self.params['ndata']
+#        priors = {f"x{jj}": Uniform(0, 1, f"x{jj}") for jj in range(len(self.params['inf_pars'])*len(self.params['samplers']))}       
+        priors = {f"x{jj}": Uniform(0, 1, f"x{jj}") for jj in range(len(self.params['inf_pars']))}
+        samplers = self.params['samplers']
+        CB_color_cycle=['r-','b-','g-','c-','m-']
+        lines = np.array([np.repeat(CB_color_cycle[jj],len(self.params['inf_pars'])) for jj in range(len(CB_color_cycle))]).flatten()
+
+        results = []
+
+        """
+        sampler_posteriors = {}
+        # Get every other sampler results
+        for i in range(len(self.params['samplers'])):
+            if samplers[i] == 'vitamin': continue
+
+            # load bilby sampler samples
+            samples,time = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=samplers[i]+'1') 
+            if samples.shape[0] == self.params['r']**2:
+                samples = samples[:,:,-self.params['n_samples']:]
+            else:
+                samples = samples[:self.params['n_samples'],:]
+            #sampler_posteriors[samplers[i]] = samples
+        """       
+
+        # All in one plot approach
+        for cnt in range(Npp):
+            posterior = dict()
+            injections = dict()
+
+            #x = samples[cnt].T
+
+            
+            # Get Vitamin results
+            y = sig_test[cnt,:].reshape(1,sig_test.shape[1],sig_test.shape[2])
+
+            x, dt, _  = model.run(self.params, y, np.shape(par_test)[1],
+                                                     normscales,
+                                                     "inverse_model_dir_%s/inverse_model.ckpt" % self.params['run_label'])       
+            # Apply mask
+            x = x.T
+            sampset_1 = x
+            del_cnt = 0
+            # iterate over each sample   during inference training
+            for i in range(sampset_1.shape[1]):
+                # iterate over each parameter
+                for k,q in enumerate(self.params['inf_pars']):
+                    # if sample out of range, delete the sample                                              the y data (size changes by factor of  n_filter/(2**n_redsteps) )
+                    if sampset_1[k,i] < 0.0 or sampset_1[k,i] > 1.0:
+                        x = np.delete(x,del_cnt,axis=1)
+                        del_cnt-=1
+                        break
+                    # check m1 > m2
+                    elif q == 'mass_1' or q == 'mass_2':
+                        m1_idx = np.argwhere(self.params['inf_pars']=='mass_1')
+                        m2_idx = np.argwhere(self.params['inf_pars']=='mass_2')
+                        if sampset_1[m1_idx,i] < sampset_1[m2_idx,i]:
+                            x = np.delete(x,del_cnt,axis=1)
+                            del_cnt-=1
+                            break
+                del_cnt+=1
+            
+
+            """
+            # Get every other sampler results
+            for i in range(len(self.params['samplers'])):
+                if samplers[i] == 'vitamin': continue
+
+                samples = sampler_posteriors[samplers[i]]
+
+                x = np.vstack((x,np.transpose(samples[cnt])))
+            """
+
+            dummy_idx = 0
+            #scalar_truths = np.array([pos_test[cnt] for jj in range(len(self.params['samplers']))]).flatten()
+            scalar_truths = pos_test[cnt]
+            for key, prior in priors.items():
+                posterior[key] = x[dummy_idx,:]
+                injections[key] = scalar_truths[dummy_idx]
+                dummy_idx+=1
+
+            posterior = pd.DataFrame(dict(posterior))
+            result = bilby.result.Result(
+                label="test",
+                injection_parameters=injections,
+                posterior=posterior,
+                search_parameter_keys=injections.keys(),
+                priors=priors)
+            results.append(result)
+
+            print()
+            print("Calculated vitamin pp result %d" % cnt)
+            print()
+
+        fig, pvals_bilby = bilby.result.make_pp_plot(results, filename=f"/home/hunter.gabbard/public_html/bilby_generated_pp.png",
+                              confidence_interval=0.9,title=False,color='red',legend_fontsize=6.0)
+        print()
+        print('Made bilby pp plot')
+        print()
+
+        return
+
     def plot_pp(self,model,sig_test,par_test,i_epoch,normscales,pos_test,bounds):
         """
-        make p-p plots
+        make p-p plots using in-house methods
         
         ##########
         Parameters
@@ -616,11 +724,12 @@ class make_plots:
             pp = hf['vitamin_pp_data']
             print('Loaded VItamin pp curves')
 
+        
         confidence_pp = np.zeros((len(self.params['samplers'])-1,int(self.params['r']**2)+2))
         # plot the pp plot
         for j in range(len(self.params['inf_pars'])):        
             if j == 0:
-                axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp[:,j]),'-',color='red',linewidth=1,zorder=50,label=r'$\textrm{VItamin}$',alpha=0.5)
+                axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp[:,j]),'-',color='red',linewidth=1,zorder=50,label=r'$\textrm{%s}$' % self.params['figure_sampler_names'][0],alpha=0.5)
             else:
                 axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp[:,j]),'-',color='red',linewidth=1,zorder=50,alpha=0.5)
 
@@ -655,7 +764,7 @@ class make_plots:
                 
                 # plot bilby sampler results
                 if j == 0:
-                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],linewidth=1,label=r'$\textrm{%s}$' % samplers[i],alpha=0.5)
+                    axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],linewidth=1,label=r'$\textrm{%s}$' % self.params['figure_sampler_names'][i],alpha=0.5)
                 else:
                     axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),np.sort(pp_bilby),'-',color=CB_color_cycle[i-1],linewidth=1,alpha=0.5)
 
@@ -671,6 +780,9 @@ class make_plots:
         #x_values = np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0)
         x_values = np.linspace(0, 1, 1001)
         N = int(self.params['r']**2)
+
+        """
+        # Add credibility interals
         for ci,j in zip(confidence,range(len(confidence))):
             edge_of_bound = (1. - ci) / 2.
             lower = scipy.stats.binom.ppf(1 - edge_of_bound, N, x_values) / N
@@ -680,11 +792,6 @@ class make_plots:
             lower[0] = 0
             upper[0] = 0
             axis.fill_between(x_values, lower, upper, facecolor=conf_color_wheel[j],alpha=0.5)
-        """
-        for j in range(len(confidence)):
-            axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),confidence_bound[j,0,:],color='gray')
-            axis.plot(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0),confidence_bound[j,1,:],color='gray')
-            axis.fill_between(np.arange((self.params['r']**2)+2)/((self.params['r']**2)+1.0), confidence_bound[j,0,:], confidence_bound[j,1,:], facecolor=conf_color_wheel[j], alpha=0.5)
         """
         axis.set_xlim([0,1])
         axis.set_ylim([0,1])
@@ -698,49 +805,11 @@ class make_plots:
         leg = axis.legend(loc='lower right', fontsize=14)
         for l in leg.legendHandles:
             l.set_alpha(1.0)
+        plt.tight_layout()
         fig.savefig('%s/pp_plot_%04d.png' % (self.params['plot_dir'],i_epoch),dpi=360)
         fig.savefig('%s/latest_%s/latest_pp_plot.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig)
         # TODO add this back in
-        hf.close()
-        return
-
-    def make_loss_plot(self,loss,kl,cad,fwd=True):
-        """
-        plots the forward losses
-        """
-        matplotlib.rc('text', usetex=True)
-        fig, axes = plt.subplots(1,figsize=(5,5))
-        if self.params['load_plot_data'] == True:
-            hf = h5py.File('plotting_data_%s/loss_plot_data.h5' % self.params['run_label'], 'r')
-            loss = np.array(hf['loss'])
-            kl = np.array(hf['kl'])
-            ivec = np.array(hf['ivec'])
-        else:
-            hf = h5py.File('plotting_data_%s/loss_plot_data.h5' % self.params['run_label'], 'w')
-        N = loss.size
-        ivec = cad*np.arange(N)
-        axes.semilogx(ivec,loss,alpha=0.8,linewidth=1.0)
-        axes.semilogx(ivec,kl,alpha=0.8,linewidth=1.0)
-        axes.semilogx(ivec,kl+loss,alpha=0.8,linewidth=1.0)
-        axes.grid()
-        axes.set_xlabel(r'$\textrm{iteration}$',fontsize=14)
-        axes.set_ylabel(r'$\textrm{cost}$',fontsize=14)
-        axes.set_xlim([100,cad*N])
-        axes.legend((r'$\textrm{cost 1 (L)}$',r'$\textrm{cost 2 (KL)}$',r'$\textrm{total cost}$'), loc='lower left',fontsize=14)
-        axes.tick_params(axis="x", labelsize=14)
-        axes.tick_params(axis="y", labelsize=14)
-        plt.grid(True, which="both")
-        des = 'fwd' if fwd==True else 'inv'
-        plt.savefig('%s/latest/%s_losses_log.png' % (self.params['plot_dir'][0],des),dpi=360)
-#        axes.set_xscale('linear')
-#        plt.savefig('%s/latest/%s_losses_linear.png' % (self.params['plot_dir'][0],des),dpi=360)
-        plt.close()
-
-        if self.params['load_plot_data'] == False:
-            hf.create_dataset('loss', data=loss)
-            hf.create_dataset('kl', data=kl)
-            hf.create_dataset('ivec', data=ivec)
         hf.close()
         return
 
@@ -755,16 +824,18 @@ class make_plots:
         # Make loss plot
         plt.figure()
         xvec = self.params['report_interval']*np.arange(np.array(plotdata).shape[0])
-        plt.semilogx(xvec,np.array(plotdata)[:,0],label=r'$\mathrm{Recon}$',color='blue',alpha=0.5)
+        plt.semilogx(xvec,np.array(plotdata)[:,0],label=r'$\mathrm{Recon}(L)$',color='blue',alpha=0.5)
         plt.semilogx(xvec,np.array(plotdata)[:,1],label=r'$\mathrm{KL}$',color='orange',alpha=0.5)
-        plt.semilogx(xvec,np.array(plotdata)[:,2],label=r'$\mathrm{Total}$',color='green',alpha=0.5)
+        plt.semilogx(xvec,np.array(plotdata)[:,2],label=r'$\mathrm{Total}(H)$',color='green',alpha=0.5)
         plt.semilogx(xvec,np.array(plotdata)[:,3],color='blue',linestyle='dotted')
         plt.semilogx(xvec,np.array(plotdata)[:,4],color='orange',linestyle='dotted')
         plt.semilogx(xvec,np.array(plotdata)[:,5],color='green',linestyle='dotted')
+        plt.xlim([3e3,np.max(xvec)])
         plt.ylim([-25,15])
         plt.xlabel(r'$\mathrm{Iteration}$')
         plt.ylabel(r'$\mathrm{Cost}$')
         plt.legend()
+        plt.tight_layout()
         plt.savefig('%s/latest_%s/cost_%s.png' % (self.params['plot_dir'],self.params['run_label'],self.params['run_label']),dpi=360)
         plt.ylim([np.min(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,0]), np.max(np.array(plotdata)[-int(0.9*np.array(plotdata).shape[0]):,1])])
         plt.savefig('%s/latest_%s/cost_zoom_%s.png' % (self.params['plot_dir'],self.params['run_label'],self.params['run_label']),dpi=360)
@@ -930,31 +1001,40 @@ class make_plots:
 
                 return kl_result_all
             else:
+                
                 kl_result = []
                 set1 = set1.T
                 set2 = set2.T
                 for kl_idx in range(10):
                     rand_idx_kl = np.random.choice(np.linspace(0,set1.shape[0]-1,dtype=np.int),size=100)
-                    kl_result.append(estimate(set1[rand_idx_kl,:],set2[rand_idx_kl,:]) + estimate(set2[rand_idx_kl,:],set1[rand_idx_kl,:]))
+                    rand_idx_kl_2 = np.random.choice(np.linspace(0,set2.shape[0]-1,dtype=np.int),size=100)
+                    kl_result.append(estimate(set1[rand_idx_kl,:],set2[rand_idx_kl_2,:]) + estimate(set2[rand_idx_kl_2,:],set1[rand_idx_kl,:]))
                 kl_result = np.mean(kl_result)
-
-#                p = gaussian_kde(set1,bw_method=my_kde_bandwidth)#'scott') # 7.5e0 works best ... don't know why. Hope it's not over-smoothing results.
-#                q = gaussian_kde(set2,bw_method=my_kde_bandwidth)#'scott')#'silverman') # 7.5e0 works best ... don't know why.
-#                log_diff = np.log((p(set1)+SMALL_CONSTANT)/(q(set1)+SMALL_CONSTANT))
-                # Compute KL, but ignore values equal to infinity
-#                kl_result = (1.0/float(set1.shape[1])) * np.sum(log_diff)
-
-                # compute symetric kl
-#                anti_log_diff = np.log((q(set2)+SMALL_CONSTANT)/(p(set2)+SMALL_CONSTANT))
-#                anti_kl_result = (1.0/float(set1.shape[1])) * np.sum(anti_log_diff)
-#                kl_result = kl_result + anti_kl_result
-            
                 return kl_result
-   
+
+                """
+                # TODO: comment this out when not doing dynesty kl with itself. Use above expression instead.
+                kl_result_mean = []
+                kl_result_std = []
+                set1 = set1.T
+                set2 = set2.T
+                for kl_idx in range(10):
+                    rand_idx_kl = np.random.choice(np.linspace(0,set1.shape[0]-1,dtype=np.int),size=100)
+                    rand_idx_kl_2 = np.random.choice(np.linspace(0,set2.shape[0]-1,dtype=np.int),size=100)
+                    new_kl = estimate(set1[rand_idx_kl,:],set2[rand_idx_kl_2,:]) + estimate(set2[rand_idx_kl_2,:],set1[rand_idx_kl,:])
+                    kl_result_mean.append(new_kl)
+                    kl_result_std.append(new_kl**2)
+                kl_result_mean = np.mean(kl_result_mean)
+                kl_result_std = np.sqrt(np.mean(kl_result_std))
+ 
+                return kl_result_std, kl_result_mean
+                """   
+
         # Define variables 
         params = self.params
         usesamps = params['samplers']
         samplers = params['samplers']
+        fig_samplers = params['figure_sampler_names']
         indi_fig_kl, ((ax1, ax2, ax3), (ax4, ax5, ax6), (ax7, ax8, ax9)) = plt.subplots(3,3,figsize=(6,6))  
         indi_axis_kl = [ax1,ax2,ax3,ax4,ax5,ax6,ax7,ax8,ax9]
       
@@ -972,6 +1052,7 @@ class make_plots:
         label_idx = 0
         vi_pred_made = None
 
+        
         if params['load_plot_data'] == False:
             # Create dataset to save KL divergence results for later plotting
             try:
@@ -988,10 +1069,11 @@ class make_plots:
             # TODO: uncomment this
             #hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
             hf = h5py.File('plotting_data_%s/KL_plot_data.h5' % params['run_label'], 'r')
-     
-        """ 
+        
+
+            
         # 4 pannel KL approach
-        fig_kl, axis_kl = plt.subplots(2,2,figsize=(6,6),sharey=True,sharex=True)
+        fig_kl, axis_kl = plt.subplots(2,2,figsize=(8,6),sharey=True,sharex=True)
         for k in range(len(usesamps)-1):
             print_cnt = 0
             label_idx = 0
@@ -1023,7 +1105,7 @@ class make_plots:
 #                        print(np.sort(tot_kl)[-15:][::-1])
 #                        print(tot_kl.argsort()[:15][:])
 #                        print(np.sort(tot_kl)[:15][:])
-                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\mathrm{%s \ vs. \ %s}$' % (samplers[i],samplers[::-1][j]),zorder=2)
+                        axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,alpha=0.5,histtype='stepfilled',density=True,color=CB_color_cycle[print_cnt],label=r'$\mathrm{%s \ vs. \ %s}$' % (fig_samplers[i],fig_samplers[::-1][j]),zorder=2)
                         axis_kl[kl_idx_1,kl_idx_2].hist(tot_kl,bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor=CB_color_cycle[print_cnt],zorder=10)
                     # record non-colored hists
                     elif samplers[i] != 'vitamin' and samplers[::-1][j] != 'vitamin':
@@ -1041,7 +1123,7 @@ class make_plots:
                 tmp_idx-=1
 
             # Plot non-colored histograms
-            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\mathrm{%s \ vs. \ other \ samplers}$' % samplers[1:][k],zorder=1)
+            axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,alpha=0.8,histtype='stepfilled',density=True,color='grey',label=r'$\mathrm{%s \ vs. \ other \ samplers}$' % fig_samplers[1:][k],zorder=1)
             axis_kl[kl_idx_1,kl_idx_2].hist(np.array(tot_kl_grey).squeeze(),bins=logbins,histtype='step',density=True,facecolor='None',ls='-',lw=2,edgecolor='grey',zorder=1)
 
             # plot KL histograms
@@ -1050,7 +1132,7 @@ class make_plots:
             if kl_idx_2 == 0:
                 axis_kl[kl_idx_1,kl_idx_2].set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
            # axis_kl[kl_idx_1,kl_idx_2].tick_params(axis="both", labelsize=12, direction='out')
-            leg = axis_kl[kl_idx_1,kl_idx_2].legend(loc='upper left',  fontsize=4) #'medium')
+            leg = axis_kl[kl_idx_1,kl_idx_2].legend(loc='upper left',  fontsize=6) #'medium')
             for l in leg.legendHandles:
                 l.set_alpha(1.0)
 
@@ -1075,13 +1157,79 @@ class make_plots:
         # Save figure
         fig_kl.canvas.draw()
         #plt.minorticks_on()
-        #plt.tight_layout()
+        plt.tight_layout()
         fig_kl.savefig('%s/latest_%s/hist-kl.png' % (self.params['plot_dir'],self.params['run_label']),dpi=360)
         plt.close(fig_kl)
         hf.close()
         return
-        """
         
+        """
+        # Compute dynesty with itself once
+        sampler1 = 'dynesty1'
+        sampler2 = 'dynesty1'
+        logbins = np.logspace(-3,2.5,50)
+        time_dict = {}
+
+        set1,time_dict[sampler1] = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler1) 
+#        set2,time_dict[sampler2] = self.load_test_set(model,sig_test,par_test,normscales,bounds,sampler=sampler2)
+        set2 = np.copy(set1)
+        tot_kl_std = []
+        tot_kl_mean = []
+        for r in range(self.params['r']**2):
+            std_kl, mean_kl = compute_kl(set1[r],set2[r],[sampler1,sampler2])
+            tot_kl_std.append(std_kl)
+            tot_kl_mean.append(mean_kl)
+            print(tot_kl_std[r])
+            print('Completed KL for set %s-%s and test sample %s' % (sampler1,sampler2,str(r)))
+        tot_kl_std = np.array(tot_kl_std)
+        tot_kl_mean = np.array(tot_kl_mean)
+
+        # linear plot
+        fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
+        axis_kl.hist(tot_kl_std,bins=50,histtype='stepfilled',density=True,color='grey')
+        axis_kl.set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
+        axis_kl.set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
+        axis_kl.tick_params(axis="x", labelsize=14)
+        axis_kl.tick_params(axis="y", labelsize=14)
+        leg = axis_kl.legend(loc='upper right', fontsize=10) #'medium')
+        for l in leg.legendHandles:
+            l.set_alpha(1.0)
+
+        axis_kl.set_xlim(left=1e-2,right=1)
+        axis_kl.grid(False)
+        fig_kl.canvas.draw()
+        fig_kl.savefig('/home/hunter.gabbard/public_html/CBC/VItamin/dynesty_with_itself_linear.png')
+        plt.close()
+
+        # log plot
+        fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
+        axis_kl.hist(tot_kl_std,bins=logbins,histtype='stepfilled',density=True,color='grey')
+        axis_kl.set_xlabel(r'$\mathrm{KL-Statistic}$',fontsize=14)
+        axis_kl.set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
+        axis_kl.tick_params(axis="x", labelsize=14)
+        axis_kl.tick_params(axis="y", labelsize=14)
+        leg = axis_kl.legend(loc='upper right', fontsize=10) #'medium')
+        for l in leg.legendHandles:
+            l.set_alpha(1.0)
+
+        axis_kl.set_xlim(left=1e-2,right=1)
+        axis_kl.set_xscale('log')
+        axis_kl.set_yscale('log')
+        axis_kl.grid(False)
+        fig_kl.canvas.draw()
+        fig_kl.savefig('/home/hunter.gabbard/public_html/CBC/VItamin/dynesty_with_itself_log.png')
+        plt.close()
+
+        print()
+        print('Mean std KL is below:')
+        print(np.mean(tot_kl_std))
+        print()
+        print('Mean KL is below: ')
+        print(np.mean(tot_kl_mean))
+        print('Finished computing KL with itself')
+        exit()
+        """
+
         tot_kl_grey = np.array([])
         fig_kl, axis_kl = plt.subplots(1,1,figsize=(6,6))
         time_dict = {}
@@ -1230,12 +1378,8 @@ class make_plots:
             # save indi kl histogram
             for u in range(len(self.params['inf_pars'])):
                 indi_axis_kl[u].set_xlabel(r'$\mathrm{%s}$' % self.params['inf_pars'][u],fontsize=5)
-#            indi_axis_kl[u].set_ylabel(r'$p(\mathrm{KL})$',fontsize=14)
                 indi_axis_kl[u].tick_params(axis="x", labelsize=5)
                 indi_axis_kl[u].tick_params(axis="y", labelsize=5)
-#            leg = indi_axis_kl[u].legend(loc='upper right', fontsize=14) #'medium')
-#            for l in leg.legendHandles:
-#                l.set_alpha(1.0)
 
                 indi_axis_kl[u].set_xlim(left=1e-3)
                 indi_axis_kl[u].set_xscale('log')

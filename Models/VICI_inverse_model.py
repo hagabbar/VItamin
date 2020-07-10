@@ -163,12 +163,14 @@ def load_chunk(input_dir,inf_pars,params,bounds,fixed_vals,load_condor=False):
 
     # extract the prior bounds
     bounds = {}
-    bounds = {}
     for k in data_temp['rand_pars']:
         par_min = k.decode('utf-8') + '_min'
         par_max = k.decode('utf-8') + '_max'
         bounds[par_max] = h5py.File(dataLocations[0]+'/'+filename, 'r')[par_max][...].item()
         bounds[par_min] = h5py.File(dataLocations[0]+'/'+filename, 'r')[par_min][...].item()
+        if par_min == 'psi_min':
+            bounds[par_max] = np.pi
+            bounds[par_min] = 0.0
     data['x_data'] = np.concatenate(np.array(data['x_data']), axis=0).squeeze()
     data['y_data_noisefree'] = np.concatenate(np.array(data['y_data_noisefree']), axis=0)
 
@@ -881,7 +883,6 @@ def train(params, x_data, y_data, x_data_test, y_data_test, y_data_test_noisefre
                                                  y_normscale, 
                                                  "inverse_model_dir_%s/inverse_model.ckpt" % params['run_label'])
                 print('Runtime to generate {} samples = {} sec'.format(params['n_samples'],dt))            
-               
                 # Generate final results plots
 #                plotter = plots.make_plots(params,posterior_truth_test,np.expand_dims(XS, axis=0),np.expand_dims(truth_test[j],axis=0))
 
@@ -1216,13 +1217,17 @@ def run(params, y_data_test, siz_x_data, y_normscale, load_dir):
         saver_VICI.restore(session,load_dir)
 
     # ESTIMATE TEST SET RECONSTRUCTION PER-PIXEL APPROXIMATE MARGINAL LIKELIHOOD and draw from q(x|y)
-    ns = params['n_samples'] # number of samples to save per reconstruction
+    ns = params['n_samples'] # number of samples to save per reconstruction 
 
     y_data_test_exp = np.tile(y_data_test,(ns,1))/y_normscale
     y_data_test_exp = y_data_test_exp.reshape(-1,params['ndata'],num_det)
     run_startt = time.time()
     xs, mode_weights = session.run([r2_xzy_samp,r1_weight],feed_dict={bs_ph:ns,y_ph:y_data_test_exp})
-    run_endt = time.time()        
+    run_endt = time.time()
+
+#    run_startt = time.time()
+#    xs, mode_weights = session.run([r2_xzy_samp,r1_weight],feed_dict={bs_ph:ns,y_ph:y_data_test_exp})
+#    run_endt = time.time()
 
     return xs, (run_endt - run_startt), mode_weights
 
