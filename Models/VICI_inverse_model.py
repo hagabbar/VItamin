@@ -19,7 +19,6 @@ import h5py
 from Neural_Networks import VICI_decoder
 from Neural_Networks import VICI_encoder
 from Neural_Networks import VICI_VAE_encoder
-from Neural_Networks import VICI_reduction
 from Neural_Networks import batch_manager
 from Models import VICI_inverse_model
 import plots
