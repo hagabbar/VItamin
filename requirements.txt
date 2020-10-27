@@ -14,7 +14,7 @@ chardet==3.0.4
 cloudpickle==1.2.2
 corner==2.0.1
 cpnest==0.9.9
-cryptography==2.7
+cryptography==3.2
 cycler==0.10.0
 Cython==0.29.15
 decorator==4.4.0
